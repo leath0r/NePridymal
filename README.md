@@ -12,7 +12,7 @@
 Напиши [@BotFather](https://t.me/BotFather) → `/newbot` → придумай имя → скопируй **токен** (`123456789:AA...`).
 
 ### 2. Скачай игру
-`git clone https://github.com/<твой-ник>/NePridymal.git` — или на странице репозитория **Code → Download ZIP** и распакуй.
+`git clone https://github.com/leath0r/NePridymal.git` — или на странице репозитория **Code → Download ZIP** и распакуй.
 
 ### 3. Запусти
 
