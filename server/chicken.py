@@ -1,6 +1,6 @@
 """«Курица» (Chicken Road): курица перебегает дорогу полоса за полосой. Каждая полоса — шанс попасть под машину
 по сложности; множитель растёт с каждым шагом, забрать можно в любой момент. Возврат игроку — EDGE (в акцию 99%)."""
-from settings import conf
+from settings import conf, tuned
 import json
 
 from fastapi import Depends, Request
@@ -27,7 +27,7 @@ def mult(mode, k):
     """Множитель после k пройденных полос: каждая полоса честно оплачивает свой риск, преимущество казино — EDGE."""
     if not k:
         return 1.0
-    m = edge(EDGE)
+    m = edge(tuned("games.chicken_edge", EDGE))
     for i in range(k):
         m /= 1 - risk(mode, i)
     # на первых полосах «Лёгкого» честный множитель < 1 — выглядит как минус; минимум +1% за полосу (возврат всё равно < 100%)

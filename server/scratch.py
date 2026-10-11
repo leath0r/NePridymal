@@ -2,6 +2,8 @@
 стирание на клиенте — только анимация. Возврат ≈ 95%, выигрыш примерно в каждой третьей карте."""
 import random
 
+from settings import tuned
+
 from fastapi import Depends, Request
 
 from app import R, add_xp, app, auth, bal, db, edge, err, event, tx
@@ -29,7 +31,7 @@ def _grid(win_sym):
 
 
 def _roll():
-    k = edge(0.94, 0.96) / 0.95          # в акцию чуть щедрее: шансы выигрышей растут пропорционально
+    k = edge(tuned("games.scratch_rtp", 0.94), 0.96) / 0.95          # в акцию чуть щедрее: шансы выигрышей растут пропорционально
     r = random.random()
     for x, p, sym in PRIZES:
         if r < p * k:

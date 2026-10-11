@@ -18,7 +18,7 @@ const admKv = (k, v) => `<div class="row kv"><div class="grow"><div class="s">${
 
 function openAdmin() {
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["bc", "Рассылка"], ["log", "Журнал"]]
+    <div class="seg" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["bc", "Рассылка"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -77,6 +77,17 @@ async function admRender(el = topSheet()) {
         <b>⭐ ${short(u.stars)}</b></div>`).join("") || `<div class="hint" style="padding:14px">Никого не нашли</div>`}</div>`;
     const i = body.querySelector("#adm-q"); let t;
     i.oninput = () => { clearTimeout(t); t = setTimeout(() => { ADM.qs = i.value; admRender(el).then(() => { const n = el.querySelector("#adm-q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); }, 400); };
+  } else if (ADM.tab === "odds") {
+    const d = await api("admin/odds"), pc = v => +(v * 100).toFixed(2);
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px;font-size:12.5px">Возврат игроку на дистанции: 96% — из каждых ⭐ 100 ставок игрокам возвращается ⭐ 96, казино оставляет 4%. Меньше число — казино зарабатывает больше. Действует сразу, без перезапуска. Разрешено ${pc(d.lo)}–${pc(d.hi)}%.</p>
+      <div class="box">${d.list.map(g => `<div class="row adm-odd"><div class="grow"><div class="t">${esc(g.title)}${g.changed ? ` <span class="tw" style="font-size:11px">изменено</span>` : ""}</div>
+        <div class="s">по умолчанию ${pc(g.default)}% · казино за 7 дн: ${g.house7 >= 0 ? "+" : "−"}⭐ ${short(Math.abs(g.house7))} · ${fmt(g.rounds7)} игр</div></div>
+        ${d.canEdit ? `<input class="adm-oi" inputmode="decimal" data-k="${g.key}" value="${pc(g.value)}"><span class="adm-op">%</span>
+          <button class="btn sm gold" data-act="adm-odds" data-k="${g.key}">${ic("check")}</button>
+          ${g.changed ? `<button class="btn sm ghost" data-act="adm-odds-rs" data-k="${g.key}" data-n="${esc(g.title)}">${ic("refresh")}</button>` : ""}` : `<b>${pc(g.value)}%</b>`}</div>`).join("")}</div>
+      ${d.canEdit ? "" : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Менять шансы может только владелец</div>`}
+      <div class="disc">Прибыль казино за 7 дней сильно зависит от удачи: один крупный выигрыш может перекрыть день. Судить о шансах лучше по нескольким дням. Рулетка (97,3%), блэкджек и кейсы здесь не настраиваются: кейсы — в settings.toml.</div>`;
+    starify(body);
   } else if (ADM.tab === "bc") {
     const st = await api("admin/broadcast");
     body.innerHTML = `<textarea id="adm-bc" rows="5" placeholder="Текст сообщения всем игрокам"></textarea>
@@ -184,6 +195,15 @@ Object.assign(ACT, {
     const s = topSheet();
     await post(`admin/user/${el.dataset.id}/keys`, { cid: s.querySelector("#ak-cid").value, n: Math.max(1, +s.querySelector("#ak-n").value || 1) });
     H.ok(); toast("Ключи выданы", "ok"); closeSheet(); CASES = [];
+  },
+  "adm-odds": async el => {
+    const inp = topSheet().querySelector(`.adm-oi[data-k="${el.dataset.k}"]`), v = parseFloat(inp.value.replace(",", "."));
+    if (!(v > 0)) return toast("Введи число, например 95");
+    await post("admin/odds", { key: el.dataset.k, value: v / 100 }); H.ok(); toast("Сохранено", "ok"); await loadMe(); admRender();
+  },
+  "adm-odds-rs": async el => {
+    if (!await confirmM("Сбросить?", `${esc(el.dataset.n)}: вернуть значение по умолчанию из settings.toml.`, "Сбросить")) return;
+    await post("admin/odds", { key: el.dataset.k, value: null }); H.ok(); toast("Сброшено", "ok"); await loadMe(); admRender();
   },
   "adm-tab": el => { ADM.tab = el.dataset.v; H.sel(); const s = topSheet(); s.querySelectorAll("#adm-seg button").forEach(b => b.classList.toggle("on", b === el)); s.querySelector("#adm-body").innerHTML = emptyHTML("hourglass", "Загружаем…"); admRender(s); },
   "adm-sort": el => { ADM.sort = el.dataset.v; H.sel(); admRender(); },

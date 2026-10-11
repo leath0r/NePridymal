@@ -1,5 +1,5 @@
 """«Пёсики» — слот 5×3 на 20 линий: собаки, вайлд-будка с множителем, лапки-скаттеры → фриспины с липкими вайлдами."""
-from settings import conf
+from settings import _LIVE, conf
 import random
 
 ROWS, REELS = 3, 5
@@ -70,10 +70,19 @@ def _eval(g, wm, line_bet):
             else:
                 break
         if n >= 3:
-            pay = PAY[first][n - 3] * SCALE * mult * line_bet
+            pay = PAY[first][n - 3] * scale() * mult * line_bet
             total += pay
             wins.append({"line": li, "n": n, "sym": first, "mult": mult, "pay": pay})
     return wins, total
+
+
+RTP_PER_SCALE = 2.43   # возврат ≈ SCALE × 2,43 (симуляция)
+
+
+def scale():
+    """Текущий множитель выплат: правка из админки задаёт возврат (games.dogs_rtp), иначе SCALE из settings.toml."""
+    v = _LIVE.get("games.dogs_rtp")
+    return v / RTP_PER_SCALE if v else SCALE
 
 
 def spin(bet):

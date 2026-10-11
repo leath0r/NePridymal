@@ -3,6 +3,8 @@
 Весь полёт считается на сервере сразу, клиент только анимирует. Шанс посадки подобран под RTP ≈ 97%."""
 import random
 
+from settings import tuned
+
 from fastapi import Depends, Request
 
 from app import R, add_xp, app, auth, check_bet, db, edge, err, event, tx, bal
@@ -31,7 +33,7 @@ def fly():
 
 
 def land_chance():
-    return LAND_BASE * edge(0.96) / 0.97   # RTP ≈ 96% (в акцию 98%)
+    return LAND_BASE * edge(tuned("games.avia_rtp", 0.96)) / 0.97   # RTP ≈ 96% (в акцию 98%)
 
 
 @app.post(R + "/avia")

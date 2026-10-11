@@ -1,5 +1,5 @@
 """Краш-дуэль 1 на 1, «Больше/меньше» (Hi-Lo) и крафт подарков."""
-from settings import conf
+from settings import conf, tuned
 import json
 import math
 import random
@@ -156,8 +156,8 @@ HL_MAX = 1000.0
 def hl_odds(card):
     """card 1..13 (двойка..туз). «Выше или так же» и «ниже или так же»: вероятность и множитель."""
     ph, pl = (14 - card) / 13, card / 13
-    return {"hi": {"p": ph, "m": round(edge(HL_EDGE) / ph, 2) if ph < 1 else None},
-            "lo": {"p": pl, "m": round(edge(HL_EDGE) / pl, 2) if pl < 1 else None}}
+    return {"hi": {"p": ph, "m": round(edge(tuned("games.hilo_edge", HL_EDGE)) / ph, 2) if ph < 1 else None},
+            "lo": {"p": pl, "m": round(edge(tuned("games.hilo_edge", HL_EDGE)) / pl, 2) if pl < 1 else None}}
 
 
 def hl_out(h):
@@ -219,7 +219,7 @@ async def hilo_guess(req: Request, uid=Depends(auth)):
             db.execute("DELETE FROM hilo WHERE user=?", (uid,))
             event(uid, "hilo", -h["bet"])
             return {"active": False, "res": "lose", "card": c, "suit": s, "hist": hist, "bet": h["bet"], "stars": bal(uid)}
-        mult = round(h["mult"] * edge(HL_EDGE) / o["p"], 4)
+        mult = round(h["mult"] * edge(tuned("games.hilo_edge", HL_EDGE)) / o["p"], 4)
         if mult >= HL_MAX:
             pay = _hl_pay(uid, h, HL_MAX)
             return {"active": False, "res": "max", "card": c, "suit": s, "hist": hist, "pay": pay, "mult": HL_MAX, "stars": bal(uid)}

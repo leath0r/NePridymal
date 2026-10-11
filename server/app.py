@@ -2,7 +2,7 @@
 
 FastAPI + SQLite. Внутри же: игровой цикл краша и long polling бота.
 """
-from settings import conf
+from settings import conf, tuned
 import asyncio
 import hashlib
 import hmac
@@ -509,7 +509,7 @@ def crash_mult(t):
 
 def gen_crash():
     r = random.random()
-    return max(1.0, min(10000.0, math.floor(edge(CRASH_EDGE, 0.98) * 100 / (1 - r)) / 100))  # 3% преимущество казино (в акцию 2%)
+    return max(1.0, min(10000.0, math.floor(edge(tuned("games.crash_edge", CRASH_EDGE), 0.98) * 100 / (1 - r)) / 100))  # 3% преимущество казино (в акцию 2%)
 
 
 def _cashout(uid, b, m):
@@ -637,7 +637,7 @@ def me(uid=Depends(auth)):
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
             "sparks": __import__("sparks").sparks_waiting(uid),
             "gamesOff": __import__("gates").games_state(),
-            "edges": {"x": edge(EDGE), "mines": edge(MINES_EDGE), "upg": edge(UPG_EDGE, 0.93)},   # фронт показывает иксы кубика/лимбо/мин по этим же коэффициентам
+            "edges": {"x": edge(tuned("games.edge", EDGE)), "mines": edge(tuned("games.mines_edge", MINES_EDGE)), "upg": edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)},   # фронт показывает иксы кубика/лимбо/мин по этим же коэффициентам
             "inbox": q1("SELECT COUNT(*) n FROM inbox WHERE user=? AND id>?", uid, u["inbox_read"] if "inbox_read" in u.keys() else 0)["n"], **counters(uid), "clanChat": CLAN_UNREAD(uid) if CLAN_UNREAD else 0, "cashback": __import__("retain").cashback_preview(uid)}
 
 
@@ -1110,7 +1110,7 @@ def upgrade_targets(gid: str = "", col: str = "", qs: str = "", kmin: float = 1.
     res = [t for t in upg_all() if kmin * v <= t[3] <= kmax * v and (not col or t[0] == col)
            and (not qs or qs in t[0].lower() or qs in t[1].lower())]
     cols = sorted({t[0] for t in upg_all() if t[3] >= 0.2 * v})
-    items = [{**upg_card(*t), "chance": round(min(UPG_MAX, v / t[3] * edge(UPG_EDGE, 0.93)) * 100, 2)} for t in res[:300]]
+    items = [{**upg_card(*t), "chance": round(min(UPG_MAX, v / t[3] * edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)) * 100, 2)} for t in res[:300]]
     return {"items": items, "total": len(res), "cols": cols, "stake": v}
 
 
@@ -1136,7 +1136,7 @@ async def upgrade(req: Request, uid=Depends(auth)):
         sv, tv = sum(g["value"] for g in gifts), sum(t[3] for t in targets)
         if tv < 1.2 * sv:
             err("цель должна быть дороже ставки хотя бы в 1.2 раза")
-        chance = min(UPG_MAX, sv / tv * edge(UPG_EDGE, 0.93))
+        chance = min(UPG_MAX, sv / tv * edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93))
         win = random.random() < chance
         for g in gids:
             db.execute("DELETE FROM gifts WHERE id=?", (g,))
@@ -1163,7 +1163,7 @@ MINES_EDGE = conf("games.mines_edge", 0.96)
 
 
 def mines_mult(n, k):
-    m = edge(MINES_EDGE)
+    m = edge(tuned("games.mines_edge", MINES_EDGE))
     for i in range(k):
         m *= (25 - i) / (25 - n - i)
     return m if k else 1.0
@@ -1249,9 +1249,18 @@ def mines_cashout(uid=Depends(auth)):
 WHEEL = [0, 1.5, 0, 2, 0, 1.2, 0, 3, 0, 1.5, 0, 0.5, 0, 5, 0, 1.5, 0, 2, 0, 0.5]
 
 
+WHEEL_RTP = 0.935
+
+
+def wheel_segs():
+    """Секторы с учётом возврата из админки: множители масштабируются пропорционально."""
+    k = tuned("games.wheel_rtp", WHEEL_RTP) / WHEEL_RTP
+    return WHEEL if k == 1 else [round(x * k, 2) for x in WHEEL]
+
+
 @app.get(R + "/wheel")
 def wheel_info(uid=Depends(auth)):
-    return {"segments": WHEEL}
+    return {"segments": wheel_segs()}
 
 
 @app.post(R + "/wheel")
@@ -1259,12 +1268,13 @@ async def wheel_spin(req: Request, uid=Depends(auth)):
     bet = int((await req.json()).get("bet", 0))
     with tx():
         check_bet(uid, bet)
-        idx = random.randrange(len(WHEEL))
-        pay = int(bet * WHEEL[idx])
+        segs = wheel_segs()
+        idx = random.randrange(len(segs))
+        pay = int(bet * segs[idx])
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
         event(uid, "wheel", pay - bet)
         lvl = add_xp(uid, max(1, bet // 20))
-    return {"idx": idx, "mult": WHEEL[idx], "pay": pay, "stars": bal(uid), "levelup": lvl}
+    return {"idx": idx, "mult": segs[idx], "pay": pay, "stars": bal(uid), "levelup": lvl}
 
 
 # --- обменник: подарок → другой подарок той же ценности (комиссия до 15%) ---
@@ -1511,7 +1521,7 @@ async def dice(req: Request, uid=Depends(auth)):
     chance = (100 - target) if over else target
     if chance > 95:   # при шансе выше 95% выигрыш был бы ≤ ставки
         err("шанс не больше 95%")
-    mult = round(edge(EDGE) * 100 / chance, 4)
+    mult = round(edge(tuned("games.edge", EDGE)) * 100 / chance, 4)
     roll = random.randrange(10000) / 100
     win = roll > target if over else roll < target
     pay = int(bet * mult) if win else 0
@@ -1525,7 +1535,7 @@ async def limbo(req: Request, uid=Depends(auth)):
     bet, target = int(b.get("bet", 0)), round(float(b.get("target", 2)), 2)
     if not 1.01 <= target <= 1000:
         err("цель от 1.01x до 1000x")
-    r = max(1.0, min(10000.0, math.floor(edge(EDGE) * 100 / (1 - random.random())) / 100))
+    r = max(1.0, min(10000.0, math.floor(edge(tuned("games.edge", EDGE)) * 100 / (1 - random.random())) / 100))
     win = r >= target
     pay = int(bet * target) if win else 0
     return {"result": r, "win": win, **_bet_tx(uid, bet, "limbo", pay)}
@@ -1592,7 +1602,7 @@ TOWER_MODES = {"easy": 4, "mid": 3, "hard": 2}   # плиток на этаже,
 
 def tower_mult(mode, k):
     w = TOWER_MODES[mode]
-    return (edge(EDGE) * (w / (w - 1)) ** k) if k else 1.0
+    return (edge(tuned("games.edge", EDGE)) * (w / (w - 1)) ** k) if k else 1.0
 
 
 def tower_state(r, reveal=False):
@@ -1673,20 +1683,29 @@ _S3 = [4, 8, 15, 30, 80, 500]      # три одинаковых
 _S2 = [.5, .7, 1, 1.5, 3, 10]      # ровно два одинаковых
 
 
-def _slot_tables():
+def _slot_tables(target=0.94):
     tw = sum(SLOT_W)
     p = [w / tw for w in SLOT_W]
     rtp = sum(pi ** 3 * a + 3 * pi ** 2 * (1 - pi) * c for pi, a, c in zip(p, _S3, _S2))
-    s = 0.94 / rtp
+    s = target / rtp
     return [round(a * s, 1) if a * s < 10 else round(a * s) for a in _S3], [round(c * s, 2) for c in _S2]
 
 
-SLOT3, SLOT2 = _slot_tables()
+_SLOT_C = {}
+
+
+def slot_tables():
+    """(три, два) под текущий возврат: settings.toml [games] slots_rtp или правка из админки."""
+    rtp = tuned("games.slots_rtp", 0.94)
+    if rtp not in _SLOT_C:
+        _SLOT_C[rtp] = _slot_tables(rtp)
+    return _SLOT_C[rtp]
 
 
 @app.get(R + "/slots")
 def slots_info(uid=Depends(auth)):
-    return {"syms": SLOT_SYMS, "three": SLOT3, "two": SLOT2}
+    s3, s2 = slot_tables()
+    return {"syms": SLOT_SYMS, "three": s3, "two": s2}
 
 
 @app.post(R + "/slots")
@@ -1694,6 +1713,7 @@ async def slots(req: Request, uid=Depends(auth)):
     body = await req.json()
     bet, n = int(body.get("bet", 0)), max(1, min(5, int(body.get("n", 1))))
     spins, total = [], 0
+    SLOT3, SLOT2 = slot_tables()
     for _ in range(n):   # n автоматов крутятся одновременно, ставка на каждый
         reels = random.choices(range(len(SLOT_SYMS)), weights=SLOT_W, k=3)
         cnt = {x: reels.count(x) for x in reels}
@@ -1733,7 +1753,7 @@ import dogs as DOGS  # noqa: E402
 @app.get(R + "/dogs")
 def dogs_info(uid=Depends(auth)):
     return {"dogs": DOGS.DOGS, "low": DOGS.LOW, "lines": DOGS.LINES, "free": DOGS.FREE_SPINS, "freeBy": DOGS.FREE_BY_SCAT, "buy": DOGS.BUY_PRICE,
-            "pay": [[round(p * DOGS.SCALE / DOGS.NL, 2) for p in row] for row in DOGS.PAY]}
+            "pay": [[round(p * DOGS.scale() / DOGS.NL, 2) for p in row] for row in DOGS.PAY]}
 
 
 @app.post(R + "/dogs")
@@ -2164,6 +2184,7 @@ import admin  # noqa: E402,F401 — админ-панель (только ADMIN_
 import gates  # noqa: E402,F401 — админ закрывает/скрывает игры
 import actlog  # noqa: E402,F401 — подробный журнал действий игроков (logs.db)
 import retain  # noqa: E402,F401 — кэшбэк недели и «возвращайся»
+import odds  # noqa: E402,F401 — админка «Шансы»: возврат по играм на лету
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------

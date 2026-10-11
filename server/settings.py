@@ -35,3 +35,12 @@ def conf(key, default):
     except (TypeError, ValueError):
         print(f"settings: неверное значение {key} = {v!r} — беру {default!r}", flush=True)
         return default
+
+
+_LIVE = {}   # правки шансов из админки (вкладка «Шансы», хранятся в базе) — важнее файла, действуют сразу
+
+
+def tuned(key, default):
+    """Как conf, но с учётом правки из админки. Читать в момент раунда, а не при запуске."""
+    v = _LIVE.get(key)
+    return conf(key, default) if v is None else v
