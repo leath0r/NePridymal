@@ -54,7 +54,8 @@ def _grid(bonus=False, sticky=None):
     return g, wm
 
 
-def _eval(g, wm, line_bet):
+def _eval(g, wm, line_bet, sc=None):
+    sc = SCALE if sc is None else sc
     wins, total = [], 0.0
     for li, line in enumerate(LINES):
         first = g[0][line[0]]
@@ -70,7 +71,7 @@ def _eval(g, wm, line_bet):
             else:
                 break
         if n >= 3:
-            pay = PAY[first][n - 3] * scale() * mult * line_bet
+            pay = PAY[first][n - 3] * sc * mult * line_bet
             total += pay
             wins.append({"line": li, "n": n, "sym": first, "mult": mult, "pay": pay})
     return wins, total
@@ -79,17 +80,30 @@ def _eval(g, wm, line_bet):
 RTP_PER_SCALE = 2.43   # возврат ≈ SCALE × 2,43 (симуляция)
 
 
-def scale():
-    """Текущий множитель выплат: правка из админки задаёт возврат (games.dogs_rtp), иначе SCALE из settings.toml."""
+# доли возврата при SCALE = 1 (симуляция 400k спинов): обычные спины 1,742, фриспины 0,719; купленный бонус ≈ 97%
+NB, BB, BUY_RTP = 1.742, 0.719, 0.97
+
+
+def tune():
+    """(масштаб выплат, множитель фриспинов, множитель купленного бонуса) по возврату из админки (games.dogs_rtp).
+    Ниже обычного — урезаем все выплаты равномерно. Выше — обычные спины как были, а вся прибавка уходит в бонуски:
+    чем выше процент, тем жирнее фриспины."""
     v = _LIVE.get("games.dogs_rtp")
-    return v / RTP_PER_SCALE if v else SCALE
+    if not v or v <= SCALE * RTP_PER_SCALE:
+        return (v / RTP_PER_SCALE if v else SCALE), 1.0, 1.0
+    return SCALE, (v - SCALE * NB) / (SCALE * BB), v / BUY_RTP
+
+
+def scale():
+    return tune()[0]
 
 
 def spin(bet):
     """Полный раунд: базовый спин + (если 3+ лапки) фриспины. Возвращает кадры для анимации."""
     lb = bet / NL
+    sc, fb, _ = tune()
     g, wm = _grid()
-    wins, total = _eval(g, wm, lb)
+    wins, total = _eval(g, wm, lb, sc)
     frames = [{"grid": g, "wilds": _wl(wm), "wins": _wr(wins), "pay": int(total)}]
     scat = sum(1 for r in range(REELS) for c in range(ROWS) if g[r][c] == S)
     bonus_total = 0.0
@@ -100,7 +114,7 @@ def spin(bet):
             g2, wm2 = _grid(True, sticky)
             for k, m in wm2.items():
                 sticky.setdefault(k, m)
-            w2, t2 = _eval(g2, wm2, lb)
+            w2, t2 = _eval(g2, wm2, lb * fb, sc)
             bonus_total += t2
             frames.append({"grid": g2, "wilds": _wl(wm2), "wins": _wr(w2), "pay": int(t2), "free": True, "left": left})
     pay = min(int(total + bonus_total), bet * MAX_WIN)
@@ -110,6 +124,7 @@ def spin(bet):
 def bonus_round(bet, scat):
     """Купленный бонус: стартовый экран с ровно scat лапками (3 или 4) → фриспины. Кадры — как у обычного спина."""
     lb = bet / NL
+    sc, _, fb = tune()
     g, wm = _grid()
     for r in range(REELS):   # убираем случайные лапки и раскладываем нужное количество на барабаны 1, 3, 5
         for c in range(ROWS):
@@ -124,7 +139,7 @@ def bonus_round(bet, scat):
         if (r, c) in wm:
             del wm[(r, c)]
         g[r][c] = S
-    wins, total = _eval(g, wm, lb)
+    wins, total = _eval(g, wm, lb, sc)
     frames = [{"grid": g, "wilds": _wl(wm), "wins": _wr(wins), "pay": int(total)}]
     sticky, left, bonus_total = {}, FREE_BY_SCAT[scat], 0.0
     while left > 0:
@@ -132,7 +147,7 @@ def bonus_round(bet, scat):
         g2, wm2 = _grid(True, sticky)
         for k, m in wm2.items():
             sticky.setdefault(k, m)
-        w2, t2 = _eval(g2, wm2, lb)
+        w2, t2 = _eval(g2, wm2, lb * fb, sc)
         bonus_total += t2
         frames.append({"grid": g2, "wilds": _wl(wm2), "wins": _wr(w2), "pay": int(t2), "free": True, "left": left})
     pay = min(int(total + bonus_total), bet * MAX_WIN)
