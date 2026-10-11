@@ -105,7 +105,7 @@ async function admRender(el = topSheet()) {
 async function openAdmUser(id) {
   const el = openSheet(emptyHTML("hourglass", "Загружаем…"));
   const draw = async () => {
-    const u = await api("admin/user/" + id);
+    const [u, cs] = await Promise.all([api("admin/user/" + id), api(`admin/user/${id}/cosm`)]);
     replaceSheet(el, `<div style="display:flex;align-items:center;gap:12px;margin:4px 0 12px">${avaHTML(u, 48)}<div class="grow"><b style="font-size:19px">${esc(u.name)}</b>
         <div class="hint" style="font-size:13px">${u.username ? "@" + esc(u.username) + " · " : ""}id ${u.id}${u.banned ? ` · <span class="tl">заблокирован</span>` : ""}</div></div></div>
       <div class="box">${admKv("Баланс", `<b>⭐ ${fmt(u.stars)}</b>`)}${admKv("Подарков", `<b>${fmt(u.gifts)} · ⭐ ${fmt(u.giftsValue)}</b>`)}
@@ -120,6 +120,9 @@ async function openAdmUser(id) {
         : u.isAdmin ? `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">${u.isOwner ? "Владелец" : "Администратор"}</div>` : ""}
       <button class="btn ghost sm" style="width:100%;margin-top:8px" data-act="profile" data-id="${u.id}">Открыть профиль</button>
       ${u.log.length ? `<div class="sec-t">Действия админа</div><div class="box">${u.log.map(x => admKv(`${esc(x.action)} ${esc(x.detail || "")}`, `<span class="hint" style="font-size:12px">${admDate(x.ts)}</span>`)).join("")}</div>` : ""}
+      <div class="sec-t">Оформление · ${cs.list.length}</div>
+      <div class="box">${cs.list.map(c => `<div class="row"><div class="grow"><div class="t">${esc(c.title)}</div><div class="s">${c.kind === "frame" ? "рамка" : "ник"} · до ${admDate(c.until)} · ⭐ ${fmt(c.price)}</div></div>
+        <button class="btn sm red" data-act="adm-cosm-rm" data-id="${u.id}" data-i="${c.item}" data-n="${esc(c.title)}" data-p="${c.price}">Забрать</button></div>`).join("") || `<div class="hint" style="padding:14px">Ничего не куплено</div>`}</div>
       <div class="sec-t">Подарки · ${u.giftList.length}</div>
       <div class="box">${u.giftList.map(g => `<div class="row"><img class="spi" style="width:36px;height:36px;margin:0" src="${A.model(g.col, g.model, 64)}" alt="">
         <div class="grow"><div class="t">${esc(g.col)} <small class="hint">#${fmt(g.num)}</small></div><div class="s">${esc(g.model)} · ⭐ ${fmt(g.value)}${g.price != null ? " · на маркете" : ""}</div></div>
@@ -184,6 +187,21 @@ Object.assign(ACT, {
     if (!await confirmM("Забрать подарок?", `${esc(el.dataset.n)} будет удалён у игрока насовсем. Действие попадёт в журнал.`, "Забрать")) return;
     await post(`admin/user/${el.dataset.id}/gift/${el.dataset.g}/remove`); H.ok(); toast("Подарок забран", "ok");
     topSheet()._redraw && topSheet()._redraw();
+  },
+  "adm-cosm-rm": async el => {
+    const d = el.dataset, el2 = openSheet(`<h2 class="gtitle">Забрать «${esc(d.n)}»?</h2>
+      <p class="hint" style="text-align:center;margin:0 0 14px">Вещь пропадёт у игрока. Действие попадёт в журнал.</p>
+      <button class="btn gold" data-act="adm-cosm-go" data-r="1">Забрать и вернуть ⭐ ${fmt(+d.p)}</button>
+      <button class="btn ghost" data-act="adm-cosm-go" data-r="0" style="margin-top:8px">Забрать без возврата</button>`);
+    el2._c = { id: d.id, item: d.i };
+    starify(el2);
+  },
+  "adm-cosm-go": async el => {
+    const c = topSheet()._c;
+    const r = await post(`admin/user/${c.id}/cosm/${c.item}/remove`, { refund: el.dataset.r === "1" }); H.ok();
+    toast(r.refund ? `Забрано, вернули ⭐ ${fmt(r.refund)}` : "Забрано", "ok"); closeSheet();
+    if (+c.id === ME.id) loadMe();
+    topSheet() && topSheet()._redraw && topSheet()._redraw();
   },
   "ag-col": el => admGiftCol(el.dataset.v),
   "ag-back": () => { const uid = topSheet()._uid; closeSheet(); openAdmGift(uid); },

@@ -368,3 +368,35 @@ def event_get(aid=Depends(admin)):
     from app import EVENTS, event_public
     r = q1("SELECT v FROM kv WHERE k='event'")
     return {"mode": r["v"] if r else "auto", "active": event_public(), "events": [{"id": e["id"], "title": e["title"], "from": e["from"], "to": e["to"]} for e in EVENTS]}
+
+
+# ---------------- оформление игрока: забрать рамку/ник (с возвратом звёзд или без) ----------------
+@app.get(R + "/admin/user/{tid}/cosm")
+def cosm_list(tid: int, aid=Depends(admin)):
+    import style as ST
+    return {"list": [{"item": r["item"], "kind": ST.ITEMS[r["item"]][0], "title": ST.ITEMS[r["item"]][1], "until": r["until"],
+                      "price": ST.price_for(tid, ST.ITEMS[r["item"]][2])}
+                     for r in q("SELECT item, until FROM cosm WHERE user=? AND until>? ORDER BY until DESC", tid, now()) if r["item"] in ST.ITEMS]}
+
+
+@app.post(R + "/admin/user/{tid}/cosm/{item}/remove")
+async def cosm_remove(tid: int, item: str, req: Request, aid=Depends(admin)):
+    import style as ST
+    refund = bool((await req.json()).get("refund"))
+    if item not in ST.ITEMS:
+        err("нет такого товара")
+    kind, title, price = ST.ITEMS[item]
+    col = "p_frame" if kind == "frame" else "p_nick"
+    with tx():
+        if not q1("SELECT 1 FROM cosm WHERE user=? AND item=?", tid, item):
+            err("у игрока этого нет")
+        amt = ST.price_for(tid, price) if refund else 0
+        db.execute("DELETE FROM cosm WHERE user=? AND item=?", (tid, item))
+        db.execute(f"UPDATE users SET {col}='', {col}_until=0 WHERE id=? AND {col}=?", (tid, item))
+        if amt:
+            db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amt, tid))
+            event(tid, "admin", amt)
+        log(aid, "cosm", tid, f"забрал «{title}»" + (f", вернул ⭐ {amt}" if amt else " без возврата"))
+    if amt:
+        notify(tid, f"↩️ Покупку «{esc(title)}» отменили — ⭐ {amt:,} вернулись на баланс.".replace(",", " "))
+    return {"ok": True, "refund": amt}
