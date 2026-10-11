@@ -80,8 +80,9 @@ async function admRender(el = topSheet()) {
   } else if (ADM.tab === "odds") {
     const d = await api("admin/odds"), pc = v => +(v * 100).toFixed(2);
     body.innerHTML = `<p class="hint" style="margin:0 0 10px;font-size:12.5px">Возврат игроку на дистанции: 96% — из каждых ⭐ 100 ставок игрокам возвращается ⭐ 96, казино оставляет 4%. Меньше число — казино зарабатывает больше. Действует сразу, без перезапуска. Разрешено ${pc(d.lo)}–${pc(d.hi)}%.</p>
+      ${d.promo ? `<div class="box" style="padding:10px 12px;margin-bottom:10px;font-size:12.5px;border:1px solid var(--gold,#e8b34b)"><b>Идёт акция «Щедрые выходные».</b> Пока она идёт, часть игр отдаёт не меньше 98% (апгрейд 93%, скретч 96%), и значения ниже не действуют. Чтобы твои цифры работали, выключи акцию на вкладке «Обзор» (режим «Выключить»).</div>` : ""}
       <div class="box">${d.list.map(g => `<div class="row adm-odd"><div class="grow"><div class="t">${esc(g.title)}${g.changed ? ` <span class="tw" style="font-size:11px">изменено</span>` : ""}</div>
-        <div class="s">по умолчанию ${pc(g.default)}% · казино за 7 дн: ${g.house7 >= 0 ? "+" : "−"}⭐ ${short(Math.abs(g.house7))} · ${fmt(g.rounds7)} игр</div></div>
+        ${g.effective !== g.value ? `<div class="s tl">сейчас действует ${pc(g.effective)}% — из-за акции</div>` : ""}<div class="s">по умолчанию ${pc(g.default)}% · казино за 7 дн: ${g.house7 >= 0 ? "+" : "−"}⭐ ${short(Math.abs(g.house7))} · ${fmt(g.rounds7)} игр</div></div>
         ${d.canEdit ? `<input class="adm-oi" inputmode="decimal" data-k="${g.key}" value="${pc(g.value)}"><span class="adm-op">%</span>
           <button class="btn sm gold" data-act="adm-odds" data-k="${g.key}">${ic("check")}</button>
           ${g.changed ? `<button class="btn sm ghost" data-act="adm-odds-rs" data-k="${g.key}" data-n="${esc(g.title)}">${ic("refresh")}</button>` : ""}` : `<b>${pc(g.value)}%</b>`}</div>`).join("")}</div>

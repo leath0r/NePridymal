@@ -169,9 +169,9 @@ function openDice() {
   $("#dc-amt").addEventListener("input", dcDraw);
   dcDraw();
 }
-// шанс не больше 95% — иначе «выигрыш» меньше ставки; ползунок подтягиваем
+// шанс не больше 95% (и не выше, чем даёт множитель от x1,01 при текущем возврате) — иначе «выигрыш» меньше ставки; ползунок подтягиваем
 function dcClamp() {
-  const lim = DC.over ? [5, 98] : [2, 95], r = $("#dc-t");
+  const m = Math.min(95, Math.floor(gEdge("x") * 100 / 1.01)), lim = DC.over ? [100 - m, 98] : [2, m], r = $("#dc-t");
   DC.target = Math.min(lim[1], Math.max(lim[0], DC.target));
   if (r && +r.value !== DC.target) r.value = DC.target;
 }

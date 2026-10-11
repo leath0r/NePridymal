@@ -1522,6 +1522,8 @@ async def dice(req: Request, uid=Depends(auth)):
     if chance > 95:   # при шансе выше 95% выигрыш был бы ≤ ставки
         err("шанс не больше 95%")
     mult = round(edge(tuned("games.edge", EDGE)) * 100 / chance, 4)
+    if mult < 1.01:   # при низком возврате высокий шанс давал бы выплату меньше ставки
+        err(f"шанс не больше {int(edge(tuned('games.edge', EDGE)) * 100 / 1.01)}%")
     roll = random.randrange(10000) / 100
     win = roll > target if over else roll < target
     pay = int(bet * mult) if win else 0

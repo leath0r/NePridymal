@@ -7,7 +7,7 @@ import time
 from fastapi import Depends, Request
 
 import settings
-from app import R, app, db, err, kv_get, q, tx
+from app import R, app, db, edge, err, kv_get, promo, q, tx
 
 # ключ → (название, какие события в журнале, значение по умолчанию из settings.toml)
 GAMES = [
@@ -24,6 +24,9 @@ GAMES = [
     ("games.upgrade_edge", "Апгрейд", ("upgrade",), lambda: settings.conf("games.upgrade_edge", 0.92)),
 ]
 KEYS = {g[0]: g for g in GAMES}
+# в акцию «Щедрые выходные» эти игры отдают не меньше указанного (см. edge() в коде игр)
+PROMO_FLOOR = {"games.edge": 0.98, "games.crash_edge": 0.98, "games.mines_edge": 0.98, "games.chicken_edge": 0.98,
+               "games.hilo_edge": 0.98, "games.avia_rtp": 0.98, "games.upgrade_edge": 0.93, "games.scratch_rtp": 0.96}
 LO, HI = 0.80, 0.99   # выше 99% — казино почти ничего не зарабатывает, ниже 80% — игроки разбегутся
 
 
@@ -49,9 +52,11 @@ def _routes():
         out = []
         for key, title, kinds, dflt in GAMES:
             d = dflt()
-            out.append({"key": key, "title": title, "value": settings._LIVE.get(key, d), "default": d, "changed": key in settings._LIVE,
+            v = settings._LIVE.get(key, d)
+            eff = edge(v, PROMO_FLOOR[key]) if key in PROMO_FLOOR else v
+            out.append({"key": key, "title": title, "value": v, "default": d, "changed": key in settings._LIVE, "effective": eff,
                         "house7": sum(house.get(k, (0, 0))[0] for k in kinds), "rounds7": sum(house.get(k, (0, 0))[1] for k in kinds)})
-        return {"list": out, "canEdit": aid in OWNERS, "lo": LO, "hi": HI}
+        return {"list": out, "canEdit": aid in OWNERS, "lo": LO, "hi": HI, "promo": bool(promo())}
 
     @app.post(R + "/admin/odds")
     async def odds_set(req: Request, aid=Depends(admin)):
