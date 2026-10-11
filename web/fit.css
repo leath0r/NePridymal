@@ -1,0 +1,125 @@
+/* ============================================================
+   fit.css — ничего не вылезает и не накладывается на узких экранах (320–360px). Подключается последним.
+   ============================================================ */
+/* страница и шторки не прокручиваются вбок, даже если что-то шире экрана */
+main{overflow-x:clip}
+.sheet{overflow-x:hidden}
+img,video,canvas{max-width:100%}
+/* ячейки сеток могут сжиматься (иначе длинное число распирает колонку и наезжает на соседнюю) */
+.achs>*,
+.adm-cg>*,
+.adm-sales>*,
+.al-grid>*,
+.bh-nav>*,
+.bizg>*,
+.bkh-stats>*,
+.bks-foot>*,
+.bks-top>*,
+.bnr-pick>*,
+.bt-pick>*,
+.ca-sell>*,
+.cases>*,
+.clb-acts>*,
+.clb-top>*,
+.clembs>*,
+.cr-odds>*,
+.cr-pot>*,
+.cxmvs>*,
+.dash2>*,
+.dgbuy>*,
+.dginfo>*,
+.dgpt>*,
+.dgreels>*,
+.dgwrap.n4>*,
+.die>*,
+.dstats>*,
+.epins>*,
+.fp-g>*,
+.fp-risk>*,
+.fx-btns>*,
+.fx-info>*,
+.fx-levs>*,
+.fx-stats>*,
+.ggrid.two>*,
+.ggrid>*,
+.ghub>*,
+.gq>*,
+.hl-btns>*,
+.hl-row>*,
+.inv-stats>*,
+.jpbuy>*,
+.jpme>*,
+.jpprize>*,
+.mgrid>*,
+.mk2-grid>*,
+.mk2-tabs>*,
+.mkstats>*,
+.mstat>*,
+.ob-bar>*,
+.ph-k>*,
+.pins>*,
+.pmenu+.pacts>*,
+.pmenu>*,
+.pr-c-cols>*,
+.promo>*,
+.pst>*,
+.pstats div>*,
+.pstats>*,
+.pw-mini>div>*,
+.pworth>*,
+.qb-list>*,
+.rnums>*,
+.sc-grid>*,
+.sc-pay>*,
+.sc-tiers>*,
+.shift-stats>*,
+.showcase>*,
+.sp-tiers>*,
+.sreels>*,
+.st-row>*,
+.stats>*,
+.suits>*,
+.swtop>*,
+.tme-g>*,
+.tt-grid>*,
+.upair>*,
+.vplans>*{min-width:0}
+
+/* строки списков: имя сжимается и переносится, а не выталкивает кнопки за край */
+.row>.grow,.row .grow{min-width:0}
+.row .grow .t,.row .grow .s{overflow-wrap:anywhere}
+.box .row{min-width:0}
+/* числа в узких ячейках — обрезаются многоточием */
+.dstats b,.mkstats b,.pst b,.st-row b,.fx-stats b,.bkh-stats b,.tme-g b,.ih-two b,.mstat b,.dginfo b,.ph-k b,.pw-main>b,.cx-px b,.fp-g b,.fp-pnl b,.fx-px b,.bkme2>b,.bkh-top>div>b,.qsum,.inv-stats b,.pr-c-cols b,.pr-c-cols span{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+/* имена на подиумах/в лентах */
+.podium .nm,.lv-it b,.pr-o-body b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lv-it b{max-width:110px}
+/* окно пополнения: «Telegram Stars» переносится внутри узкой карточки */
+.qb-p .tgp{white-space:normal;text-align:center;justify-content:center;flex-wrap:wrap;line-height:1.2}
+.shop-row{min-width:0}.shop-row .tgp{white-space:normal}
+/* шапка: на узких экранах прячем заголовок (вкладка и так подсвечена снизу), кнопки поменьше */
+header>*{flex-shrink:0}header h1{flex-shrink:1}
+.bal{min-width:0}
+@media (max-width:380px){
+  header{gap:7px}
+  header h1{font-size:0;flex:1}
+  .fr-btn,.bell-btn{width:34px;height:34px}
+  .bal{padding:6px 10px 6px 7px}
+}
+@media (max-width:340px){
+  .bal .num{font-size:14px}
+  .bal .plus{width:18px;height:18px}
+  .bh-nav button{font-size:10.5px}
+  .pmenu button{font-size:10.5px}
+  .qb-p>b{font-size:15px}
+}
+/* строка друга с огоньками: кнопки дуэли/обмена убираются (они есть в профиле) — иначе не влезает */
+.row.sp-row .ibtn{display:none}
+.sp-right{flex:none}
+@media (max-width:360px){.sp-btn{padding:0 8px 0 6px;font-size:11px}.sp-cell{padding:4px 6px 4px 4px}}
+/* листалка на главной и плашки — текст не выталкивает стрелку */
+.stc-t,.inc-t,.jp-t{min-width:0}
+.prib,.evrib{min-width:0}.prib b,.evrib b{overflow:hidden;text-overflow:ellipsis}
+/* таблицы в банке/крипте */
+.cxrow .grow,.cx-nm{min-width:0}
+.cx-nm .t,.cx-nm .s{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
