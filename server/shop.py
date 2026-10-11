@@ -16,7 +16,7 @@ FIRST_X = conf("shop.first_bonus", 1.0)          # первая покупка: 
 FIRST_CAP = conf("shop.first_cap", 250_000)    # …но бонус не больше 250 000
 
 db.executescript("""
-CREATE TABLE IF NOT EXISTS payments(charge TEXT PRIMARY KEY, user INTEGER, xtr INTEGER, stars INTEGER, ts INTEGER);
+CREATE TABLE IF NOT EXISTS payments(charge TEXT PRIMARY KEY, user INTEGER, xtr INTEGER, stars INTEGER, ts INTEGER, kind TEXT DEFAULT 'pack');
 """)
 
 
