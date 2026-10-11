@@ -27,7 +27,7 @@ KEYS = {g[0]: g for g in GAMES}
 # в акцию «Щедрые выходные» эти игры отдают не меньше указанного (см. edge() в коде игр)
 PROMO_FLOOR = {"games.edge": 0.98, "games.crash_edge": 0.98, "games.mines_edge": 0.98, "games.chicken_edge": 0.98,
                "games.hilo_edge": 0.98, "games.avia_rtp": 0.98, "games.upgrade_edge": 0.93, "games.scratch_rtp": 0.96}
-LO, HI = 0.80, 0.99   # выше 99% — казино почти ничего не зарабатывает, ниже 80% — игроки разбегутся
+LO, HI = 0.50, 1.50   # больше 100% — игроки в плюсе на дистанции (владелец решает сам, в админке предупреждение)
 
 
 def _load():

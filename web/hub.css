@@ -203,9 +203,16 @@ html.lite .pr-c-ic img{animation:none}
 .g-lock{position:absolute;inset:auto 8px 8px auto;z-index:3;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9px;font-size:11px;font-weight:800;color:#fff;background:rgba(0,0,0,.6)}
 .g-lock .ic{width:12px;height:12px}
 .adm-g{flex-wrap:wrap;gap:6px}.adm-g .grow{min-width:90px}
-.adm-odd{flex-wrap:wrap;gap:6px}.adm-odd .grow{min-width:150px}
-.adm-oi{width:64px;flex:none;padding:7px 8px;text-align:right;font-weight:700}.adm-op{font-weight:700;opacity:.7}
-.adm-odd .btn.sm{flex:none;padding:7px 9px}.adm-odd .btn.sm svg{margin:0}
+.adm-tabs{flex-wrap:wrap}.adm-tabs button{flex:1 0 22%;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.adm-odd{padding:12px 14px;display:flex;flex-direction:column;gap:3px}.adm-odd+.adm-odd{border-top:1px solid var(--sep)}
+.adm-odd.plus{background:color-mix(in srgb,#ff4d4d 8%,transparent)}
+.adm-oh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.adm-oh b{font-size:15px}
+.adm-tag{font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;background:var(--card2);color:var(--hint)}.adm-tag.red{color:#ff6b6b}
+.adm-os{font-size:12.5px;color:var(--hint);overflow-wrap:anywhere}
+.adm-oc{display:flex;align-items:center;gap:6px;margin-top:6px}
+.adm-oi{width:80px;flex:none;padding:8px 10px;text-align:right;font-weight:700}.adm-op{font-weight:700;color:var(--hint)}
+.adm-oc .btn.sm{flex:none;width:auto;padding:8px 12px}.adm-oc .btn.sm:first-of-type{margin-left:auto}
+.adm-warn{padding:10px 12px;margin-bottom:10px;font-size:12.5px;border-radius:12px;background:color-mix(in srgb,var(--gold,#e8b34b) 14%,var(--card));border:1px solid color-mix(in srgb,var(--gold,#e8b34b) 50%,transparent)}
 .adm-gs{margin:0;flex:none}.adm-gs button{padding:6px 8px;font-size:11.5px}
 /* подарок звёзд другу */
 .gf-open{width:100%;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px}
@@ -220,3 +227,4 @@ html.lite .pr-c-ic img{animation:none}
 .gf-packs{grid-template-columns:repeat(3,1fr);margin-top:0}
 .st-sl[hidden]{display:none!important}
 .pr-reveal>*:not(.pr-r-glow){position:relative}
+#adm-body>.seg{flex-wrap:wrap}#adm-body>.seg button{flex:1 0 30%}

@@ -18,7 +18,7 @@ const admKv = (k, v) => `<div class="row kv"><div class="grow"><div class="s">${
 
 function openAdmin() {
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["bc", "Рассылка"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["bc", "Рассылка"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -79,15 +79,17 @@ async function admRender(el = topSheet()) {
     i.oninput = () => { clearTimeout(t); t = setTimeout(() => { ADM.qs = i.value; admRender(el).then(() => { const n = el.querySelector("#adm-q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); }, 400); };
   } else if (ADM.tab === "odds") {
     const d = await api("admin/odds"), pc = v => +(v * 100).toFixed(2);
-    body.innerHTML = `<p class="hint" style="margin:0 0 10px;font-size:12.5px">Возврат игроку на дистанции: 96% — из каждых ⭐ 100 ставок игрокам возвращается ⭐ 96, казино оставляет 4%. Меньше число — казино зарабатывает больше. Действует сразу, без перезапуска. Разрешено ${pc(d.lo)}–${pc(d.hi)}%.</p>
-      ${d.promo ? `<div class="box" style="padding:10px 12px;margin-bottom:10px;font-size:12.5px;border:1px solid var(--gold,#e8b34b)"><b>Идёт акция «Щедрые выходные».</b> Пока она идёт, часть игр отдаёт не меньше 98% (апгрейд 93%, скретч 96%), и значения ниже не действуют. Чтобы твои цифры работали, выключи акцию на вкладке «Обзор» (режим «Выключить»).</div>` : ""}
-      <div class="box">${d.list.map(g => `<div class="row adm-odd"><div class="grow"><div class="t">${esc(g.title)}${g.changed ? ` <span class="tw" style="font-size:11px">изменено</span>` : ""}</div>
-        ${g.effective !== g.value ? `<div class="s tl">сейчас действует ${pc(g.effective)}% — из-за акции</div>` : ""}<div class="s">по умолчанию ${pc(g.default)}% · казино за 7 дн: ${g.house7 >= 0 ? "+" : "−"}⭐ ${short(Math.abs(g.house7))} · ${fmt(g.rounds7)} игр</div></div>
-        ${d.canEdit ? `<input class="adm-oi" inputmode="decimal" data-k="${g.key}" value="${pc(g.value)}"><span class="adm-op">%</span>
-          <button class="btn sm gold" data-act="adm-odds" data-k="${g.key}">${ic("check")}</button>
-          ${g.changed ? `<button class="btn sm ghost" data-act="adm-odds-rs" data-k="${g.key}" data-n="${esc(g.title)}">${ic("refresh")}</button>` : ""}` : `<b>${pc(g.value)}%</b>`}</div>`).join("")}</div>
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px;font-size:12.5px">Возврат игроку на дистанции: 96% — из каждых ⭐ 100 ставок игрокам возвращается ⭐ 96, казино оставляет 4%. Меньше 100% — казино в плюсе, больше 100% — игроки в плюсе. Действует сразу. Можно ${pc(d.lo)}–${pc(d.hi)}%.</p>
+      ${d.promo ? `<div class="adm-warn"><b>Идёт акция «Щедрые выходные».</b> Пока она идёт, часть игр отдаёт не меньше 98% (апгрейд 93%, скретч 96%), значения ниже не действуют. Выключить — вкладка «Обзор».</div>` : ""}
+      <div class="box">${d.list.map(g => `<div class="adm-odd${g.value > 1 ? " plus" : ""}">
+        <div class="adm-oh"><b>${esc(g.title)}</b>${g.value > 1 ? `<span class="adm-tag red">игроки в плюсе</span>` : g.changed ? `<span class="adm-tag">изменено</span>` : ""}</div>
+        <div class="adm-os">по умолчанию ${pc(g.default)}% · казино за 7 дн: <span class="${g.house7 >= 0 ? "tw" : "tl"}">${g.house7 >= 0 ? "+" : "−"}⭐ ${short(Math.abs(g.house7))}</span> · ${fmt(g.rounds7)} игр</div>
+        ${g.effective !== g.value ? `<div class="adm-os tl">сейчас действует ${pc(g.effective)}% — из-за акции</div>` : ""}
+        ${d.canEdit ? `<div class="adm-oc"><input class="adm-oi" inputmode="decimal" data-k="${g.key}" value="${pc(g.value)}"><span class="adm-op">%</span>
+          <button class="btn sm gold" data-act="adm-odds" data-k="${g.key}">${ic("check")}Сохранить</button>
+          ${g.changed ? `<button class="btn sm ghost" data-act="adm-odds-rs" data-k="${g.key}" data-n="${esc(g.title)}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${pc(g.value)}%</b></div>`}</div>`).join("")}</div>
       ${d.canEdit ? "" : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Менять шансы может только владелец</div>`}
-      <div class="disc">Прибыль казино за 7 дней сильно зависит от удачи: один крупный выигрыш может перекрыть день. Судить о шансах лучше по нескольким дням. Рулетка (97,3%), блэкджек и кейсы здесь не настраиваются: кейсы — в settings.toml.</div>`;
+      <div class="disc">Прибыль казино за 7 дней сильно зависит от удачи: один крупный выигрыш может перекрыть день. Рулетка (97,3%), блэкджек и кейсы здесь не настраиваются: кейсы — в settings.toml.</div>`;
     starify(body);
   } else if (ADM.tab === "bc") {
     const st = await api("admin/broadcast");
@@ -200,6 +202,7 @@ Object.assign(ACT, {
   "adm-odds": async el => {
     const inp = topSheet().querySelector(`.adm-oi[data-k="${el.dataset.k}"]`), v = parseFloat(inp.value.replace(",", "."));
     if (!(v > 0)) return toast("Введи число, например 95");
+    if (v > 100 && !await confirmM("Больше 100%?", `При ${v}% игроки на дистанции выигрывают больше, чем ставят: казино будет терять звёзды на каждой ставке, а самые хитрые смогут фармить звёзды без риска. Точно ставим?`, "Да, ставим")) return;
     await post("admin/odds", { key: el.dataset.k, value: v / 100 }); H.ok(); toast("Сохранено", "ok"); await loadMe(); admRender();
   },
   "adm-odds-rs": async el => {
