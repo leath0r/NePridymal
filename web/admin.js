@@ -139,6 +139,10 @@ async function openAdmUser(id) {
       <div class="box">${admKv("Баланс", `<b>⭐ ${fmt(u.stars)}</b>`)}${admKv("Подарков", `<b>${fmt(u.gifts)} · ⭐ ${fmt(u.giftsValue)}</b>`)}
         ${admKv("Итог в играх 24 ч / всего", `<span>${admSgn(u.pnl24)} / ${admSgn(u.pnlAll)}</span>`)}${admKv("Кейсов открыто", `<b>${fmt(u.opened)}</b>`)}
         ${admKv("Рефералов", `<b>${fmt(u.refs)}</b>`)}${admKv("Регистрация / был", `<b>${admDate(u.created)} / ${admDate(u.seen)}</b>`)}</div>
+      <div class="sec-t">Кто пригласил</div>
+      <div class="box">${u.inviter ? `<div class="row tap" data-act="adm-user" data-id="${u.inviter.id}">${avaHTML(u.inviter, 36)}<div class="grow"><div class="t">${esc(u.inviter.name)}</div>
+        <div class="s">${u.refSrc === "gift" ? "через подарок по ссылке" : "по реферальной ссылке"} · ${u.inviter.username ? "@" + esc(u.inviter.username) + " · " : ""}id ${u.inviter.id}</div></div>${ic("chev")}</div>`
+        : `<div class="hint" style="padding:14px">Без приглашения — вход напрямую</div>`}</div>
       <div class="btns"><button class="btn green sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="1">+ Звёзды</button>
         <button class="btn ghost sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="-1">− Звёзды</button>
         <button class="btn ${u.banned ? "ghost" : "red"} sm" style="flex:1" data-act="adm-ban" data-id="${u.id}" data-v="${u.banned ? 0 : 1}">${u.banned ? "Разбанить" : "Забанить"}</button></div>
@@ -148,6 +152,8 @@ async function openAdmUser(id) {
         : u.isAdmin ? `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">${u.isOwner ? "Владелец" : "Администратор"}</div>` : ""}
       <button class="btn ghost sm" style="width:100%;margin-top:8px" data-act="profile" data-id="${u.id}">Открыть профиль</button>
       ${u.log.length ? `<div class="sec-t">Действия админа</div><div class="box">${u.log.map(x => admKv(`${esc(x.action)} ${esc(x.detail || "")}`, `<span class="hint" style="font-size:12px">${admDate(x.ts)}</span>`)).join("")}</div>` : ""}
+      <div class="sec-t">Приглашённые · ${u.invited.length}</div>
+      <div class="box">${u.invited.map(f => `<div class="row tap" data-act="adm-user" data-id="${f.id}">${avaHTML(f, 32)}<div class="grow"><div class="t">${esc(f.name)}</div><div class="s">в игре с ${admDate(f.created)} · активность ${admDate(f.seen)}</div></div>${ic("chev")}</div>`).join("") || `<div class="hint" style="padding:14px">Приглашённых нет</div>`}</div>
       <div class="sec-t">Друзья · ${fr.ok.length}</div>
       <div class="box">${fr.ok.map(f => frRow(f, "друзья с " + admDate(f.since))).join("") || `<div class="hint" style="padding:14px">Друзей нет</div>`}</div>
       ${fr.in.length || fr.out.length ? `<div class="sec-t">Заявки в друзья</div><div class="box">${fr.in.map(f => frRow(f, "входящая заявка")).join("")}${fr.out.map(f => frRow(f, "исходящая заявка")).join("")}</div>` : ""}

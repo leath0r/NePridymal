@@ -112,7 +112,20 @@ def user(tid: int, aid=Depends(admin)):
             "events": [dict(r) for r in q("SELECT kind, delta, ts FROM events WHERE user=? ORDER BY ts DESC LIMIT 40", tid)],
             "giftList": [gift_out(g) for g in q("SELECT * FROM gifts WHERE owner=? ORDER BY value DESC LIMIT 100", tid)],
             "log": [dict(r) for r in q("SELECT action, detail, ts FROM admin_log WHERE target=? ORDER BY id DESC LIMIT 10", tid)],
-            "isAdmin": tid in ADMINS, "isOwner": tid in OWNERS, "canGrant": aid in OWNERS}
+            "isAdmin": tid in ADMINS, "isOwner": tid in OWNERS, "canGrant": aid in OWNERS, **_ref_info(u)}
+
+
+def _ref_info(u):
+    """Кто пригласил и по какой ссылке: подарок по ссылке тоже засчитывается приглашением (presents.py)."""
+    inviter, src = None, None
+    if u["ref_by"]:
+        r = q1("SELECT * FROM users WHERE id=?", u["ref_by"])
+        inviter = {**user_brief(r), "created": r["created"]} if r else {"id": u["ref_by"], "name": f"id {u['ref_by']}", "username": None, "photo": None}
+        gift = q1("SELECT 1 FROM gift_links WHERE taker=? AND sender=?", u["id"], u["ref_by"])
+        src = "gift" if gift else "ref"
+    invited = [{**user_brief(r), "created": r["created"], "seen": r["seen"]}
+               for r in q("SELECT * FROM users WHERE ref_by=? ORDER BY created DESC LIMIT 100", u["id"])]
+    return {"inviter": inviter, "refSrc": src, "invited": invited}
 
 
 @app.post(R + "/admin/user/{tid}/admin")
