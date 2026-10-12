@@ -43,7 +43,7 @@ async function openLive() {
   const draw = async () => {
     const d = await api("live?full=1").catch(() => null); if (!d || !el.isConnected) return;
     replaceSheet(el, `<h2 class="gtitle">Крупные выигрыши</h2><div class="lv-head"><span class="lv-on"><i></i>${d.online} онлайн</span><span class="hint">выигрыши от ⭐ 3 000 во всех играх</span></div>
-      <div class="box">${d.wins.map(w => `<div class="row lv-row">${avaHTML(w.user, 36)}<div class="grow"><div class="t">${esc(w.user.name)}${w.user.title ? ` <span class="ttl">${esc(w.user.title)}</span>` : ""}</div>
+      <div class="box">${d.wins.map(w => `<div class="row lv-row tap" data-act="profile" data-id="${w.user.id}">${avaHTML(w.user, 36)}<div class="grow"><div class="t">${esc(w.user.name)}${w.user.title ? ` <span class="ttl">${esc(w.user.title)}</span>` : ""}</div>
         <div class="s">${esc(w.game)} · ${clockAgo(w.ts)}</div>
         <div class="lv-reacts">${d.reactsList.map(e => `<button data-act="lv-react" data-id="${w.id}" data-e="${e}" class="${w.mine === e ? "on" : ""}" ${w.user.id === ME.id ? "disabled" : ""}>${e}${w.reacts[e] ? `<b>${w.reacts[e]}</b>` : ""}</button>`).join("")}</div></div>
         <b class="tw">+⭐ ${short(w.amount)}</b></div>`).join("") || `<div class="hint" style="padding:14px">Пока пусто</div>`}</div>`);

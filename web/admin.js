@@ -105,7 +105,8 @@ async function admRender(el = topSheet()) {
 async function openAdmUser(id) {
   const el = openSheet(emptyHTML("hourglass", "Загружаем…"));
   const draw = async () => {
-    const [u, cs] = await Promise.all([api("admin/user/" + id), api(`admin/user/${id}/cosm`)]);
+    const [u, cs, fr] = await Promise.all([api("admin/user/" + id), api(`admin/user/${id}/cosm`), api(`admin/user/${id}/friends`)]);
+    const frRow = (f, s) => `<div class="row tap" data-act="adm-user" data-id="${f.id}">${avaHTML(f, 32)}<div class="grow"><div class="t">${esc(f.name)}</div><div class="s">${s} · был ${admDate(f.seen)}</div></div>${ic("chev")}</div>`;
     replaceSheet(el, `<div style="display:flex;align-items:center;gap:12px;margin:4px 0 12px">${avaHTML(u, 48)}<div class="grow"><b style="font-size:19px">${esc(u.name)}</b>
         <div class="hint" style="font-size:13px">${u.username ? "@" + esc(u.username) + " · " : ""}id ${u.id}${u.banned ? ` · <span class="tl">заблокирован</span>` : ""}</div></div></div>
       <div class="box">${admKv("Баланс", `<b>⭐ ${fmt(u.stars)}</b>`)}${admKv("Подарков", `<b>${fmt(u.gifts)} · ⭐ ${fmt(u.giftsValue)}</b>`)}
@@ -120,6 +121,9 @@ async function openAdmUser(id) {
         : u.isAdmin ? `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">${u.isOwner ? "Владелец" : "Администратор"}</div>` : ""}
       <button class="btn ghost sm" style="width:100%;margin-top:8px" data-act="profile" data-id="${u.id}">Открыть профиль</button>
       ${u.log.length ? `<div class="sec-t">Действия админа</div><div class="box">${u.log.map(x => admKv(`${esc(x.action)} ${esc(x.detail || "")}`, `<span class="hint" style="font-size:12px">${admDate(x.ts)}</span>`)).join("")}</div>` : ""}
+      <div class="sec-t">Друзья · ${fr.ok.length}</div>
+      <div class="box">${fr.ok.map(f => frRow(f, "друзья с " + admDate(f.since))).join("") || `<div class="hint" style="padding:14px">Друзей нет</div>`}</div>
+      ${fr.in.length || fr.out.length ? `<div class="sec-t">Заявки в друзья</div><div class="box">${fr.in.map(f => frRow(f, "входящая заявка")).join("")}${fr.out.map(f => frRow(f, "исходящая заявка")).join("")}</div>` : ""}
       <div class="sec-t">Оформление · ${cs.list.length}</div>
       <div class="box">${cs.list.map(c => `<div class="row"><div class="grow"><div class="t">${esc(c.title)}</div><div class="s">${c.kind === "frame" ? "рамка" : "ник"} · до ${admDate(c.until)} · ⭐ ${fmt(c.price)}</div></div>
         <button class="btn sm red" data-act="adm-cosm-rm" data-id="${u.id}" data-i="${c.item}" data-n="${esc(c.title)}" data-p="${c.price}">Забрать</button></div>`).join("") || `<div class="hint" style="padding:14px">Ничего не куплено</div>`}</div>

@@ -400,3 +400,17 @@ async def cosm_remove(tid: int, item: str, req: Request, aid=Depends(admin)):
     if amt:
         notify(tid, f"↩️ Покупку «{esc(title)}» отменили — ⭐ {amt:,} вернулись на баланс.".replace(",", " "))
     return {"ok": True, "refund": amt}
+
+
+# ---------------- друзья игрока ----------------
+@app.get(R + "/admin/user/{tid}/friends")
+def friends_of(tid: int, aid=Depends(admin)):
+    out = {"ok": [], "in": [], "out": []}
+    for r in q("SELECT * FROM friends WHERE a=? OR b=? ORDER BY ts DESC", tid, tid):
+        other = r["b"] if r["a"] == tid else r["a"]
+        u = q1("SELECT * FROM users WHERE id=?", other)
+        if not u:
+            continue
+        key = "ok" if r["status"] == "ok" else ("out" if r["a"] == tid else "in")   # pending: a — кто позвал
+        out[key].append({**user_brief(u), "since": r["ts"], "seen": u["seen"]})
+    return out
