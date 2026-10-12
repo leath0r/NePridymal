@@ -11,10 +11,10 @@
 .lite .ntag.glow::after,.lite .ctag.glow::after,.lite .clbadge.glow::after{animation:none}
 
 /* клановая рамка аватара (5+ ур.), золотая (10 ур.) */
-.ava.fr-clan,.ava.fr-clang{--frw:calc(2px + max(2px,var(--s)*.06));box-shadow:0 0 0 2px var(--bg);isolation:isolate}
-.ava.fr-clan::before,.ava.fr-clang::before{content:"";position:absolute;inset:calc(-2px - var(--frw));border-radius:50%;z-index:-1;
+.ava.fr-clan,.ava.fr-clang{--frw:calc(1px + max(1px,var(--s)*.025));box-shadow:0 0 0 1.5px var(--bg);isolation:isolate}
+.ava.fr-clan::before,.ava.fr-clang::before{content:"";position:absolute;inset:calc(-1.5px - var(--frw));border-radius:50%;z-index:-1;opacity:.9;
   background:conic-gradient(from 210deg,var(--ca),var(--cb),var(--ca),var(--cb),var(--ca))}
-.ava.fr-clang::before{background:conic-gradient(from var(--fra,0deg),#ffe58a,#ffab2e,#fff3c4,#ffab2e,#ffe58a);animation:frSpin 4s linear infinite;filter:drop-shadow(0 0 5px #ffc93d99)}
+.ava.fr-clang::before{background:conic-gradient(from var(--fra,0deg),#ffe58a,#ffab2e,#fff3c4,#ffab2e,#ffe58a);animation:frSpin 4s linear infinite;filter:drop-shadow(0 0 3px #ffc93d77)}
 .lite .ava.fr-clang::before{animation:none}
 
 /* узор герба на обложке клана (4+ ур.) */
