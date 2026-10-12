@@ -9,52 +9,86 @@ Object.assign(ICONS, {
   qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/>',
 });
 
-const PAY = { info: null, friends: null };
+const PAY = { info: null, friends: null, busy: false, seq: 0 };
+const payTime = ts => new Date(ts * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+function payDay(ts) {
+  const d = new Date(ts * 1000), t = new Date(), y = new Date(Date.now() - 864e5);
+  if (d.toDateString() === t.toDateString()) return "Сегодня";
+  if (d.toDateString() === y.toDateString()) return "Вчера";
+  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+}
 
-// крупный баланс: цифры «набегают» от нуля
+// крупный баланс: цифры «набегают» от нуля, потом поле живое (класс bal-live — обновляется вместе с балансом в шапке)
 function payCount(el, to) {
   if (!el) return;
+  if (window.LITE) { el.textContent = fmt(to); el.classList.add("bal-live"); return; }
   const t0 = performance.now(), d = 700;
-  const step = t => { const k = Math.min(1, (t - t0) / d), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(to * e); if (k < 1) requestAnimationFrame(step); };
+  const step = t => {
+    const k = Math.min(1, (t - t0) / d), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(to * e);
+    if (k < 1) requestAnimationFrame(step); else { el.classList.add("bal-live"); el.textContent = fmt(ME.stars); }
+  };
   requestAnimationFrame(step);
 }
 
-const payRow = x => `<div class="row tap" data-act="pay-to" data-id="${x.user.id}">${avaHTML(x.user, 38)}<div class="grow"><div class="t">${esc(x.user.name)}</div>
-  <div class="s">${x.in ? "Входящий" : "Исходящий"} · ${new Date(x.ts * 1000).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}${x.note ? " · «" + esc(x.note) + "»" : ""}</div></div>
+const payRow = x => `<div class="row tap pay-row" data-act="pay-to" data-id="${x.user.id}">${avaHTML(x.user, 40)}<div class="grow"><div class="t">${esc(x.user.name)}</div>
+  <div class="s">${x.in ? "Входящий" : "Исходящий"} · ${payTime(x.ts)}${x.note ? " · «" + esc(x.note) + "»" : ""}</div></div>
   <b class="pay-d ${x.in ? "in" : ""}">${x.in ? "+" : "−"}${fmt(x.amount)} ⭐</b></div>`;
-const payPeer = u => `<button class="pay-peer" data-act="pay-to" data-id="${u.id}">${avaHTML(u, 48)}<span>${esc(u.name)}</span></button>`;
+function payHistory(list) {
+  if (!list.length) return `<div class="box"><div class="pay-none">${ic("xfer")}<span>Переводов пока не было</span></div></div>`;
+  let out = "", day = "";
+  for (const x of list) {
+    const d = payDay(x.ts);
+    if (d !== day) { out += (day ? "</div>" : "") + `<div class="pay-day">${d}</div><div class="box">`; day = d; }
+    out += payRow(x);
+  }
+  return out + "</div>";
+}
+const payPeer = (u, tag) => `<button class="pay-peer" data-act="pay-to" data-id="${u.id}">${avaHTML(u, 50)}<span>${esc(u.name)}</span>${tag ? `<i>${tag}</i>` : ""}</button>`;
+// недавние получатели/отправители из истории + друзья, без повторов
+function payPeers() {
+  const seen = new Set(), out = [];
+  for (const x of (PAY.info && PAY.info.history) || []) if (!seen.has(x.user.id)) { seen.add(x.user.id); out.push(payPeer(x.user, "недавно")); }
+  for (const u of PAY.friends || []) if (!seen.has(u.id)) { seen.add(u.id); out.push(payPeer(u)); }
+  return out.slice(0, 20).join("") || `<div class="hint pay-empty">Добавь друзей или найди игрока поиском</div>`;
+}
 
-async function openPay() {
+async function openPay(el) {
   H.imp("light");
-  const el = openSheet(emptyHTML("hourglass", "Загружаем…"), "pay-s");
+  if (!el) el = openSheet(emptyHTML("hourglass", "Загружаем…"), "pay-s");
   let r, fr;
-  try { [r, fr] = await Promise.all([api("pay"), api("friends").catch(() => ({ friends: [] }))]); } catch (e) { closeSheet(); return; }
+  try { [r, fr] = await Promise.all([api("pay"), api("friends").catch(() => ({ friends: [] }))]); } catch (e) { if (SHEETS.includes(el)) closeSheet(); return; }
+  if (!el.isConnected) return;
   PAY.info = r; PAY.friends = fr.friends || [];
   setStars(r.stars);
+  const w = r.week || { in: 0, out: 0 };
   replaceSheet(el, `<div class="pay-hero">
-      <div class="pay-hl">${ic("xfer")}Кошелёк</div>
-      <div class="pay-bal"><span class="pay-st">⭐</span><span class="pay-num" id="pay-num">0</span></div>
+      <div class="pay-hl">${ic("xfer")}<span>Кошелёк</span><em>id ${ME.id}</em></div>
+      <div class="pay-bal"><span class="pay-st">⭐</span><span class="pay-num">0</span></div>
       <div class="pay-sub">звёзд на балансе</div>
+      <div class="pay-wk"><span class="in">+${short(w.in)} ⭐<small>получено за 7 дн</small></span><span>−${short(w.out)} ⭐<small>отправлено за 7 дн</small></span></div>
       <div class="pay-acts">
-        <button data-act="pay-scan"><span class="pay-ic">${ic("scan")}</span><b>Сканировать</b></button>
-        <button data-act="pay-recv"><span class="pay-ic">${ic("qr")}</span><b>Получить</b></button>
+        <button data-act="pay-scan"><span class="pay-ic">${ic("scan")}</span><b>Сканировать</b><small>QR друга</small></button>
+        <button data-act="pay-recv"><span class="pay-ic">${ic("qr")}</span><b>Получить</b><small>мой QR</small></button>
       </div></div>
-    <div class="pay-find">${ic("search")}<input id="pay-q" placeholder="Кому перевести: имя или @username" autocomplete="off"></div>
-    <div class="pay-peers" id="pay-peers">${PAY.friends.map(payPeer).join("") || `<div class="hint pay-empty">Добавь друзей или найди игрока поиском</div>`}</div>
+    ${r.on === false ? `<div class="adm-warn">Переводы временно отключены администрацией</div>` : ""}
+    <div class="pay-find">${ic("search")}<input class="pay-q" placeholder="Кому перевести: имя или @username" autocomplete="off"></div>
+    <div class="pay-peers">${payPeers()}</div>
     <div class="sec-t">История переводов</div>
-    <div class="box">${r.history.map(payRow).join("") || `<div class="hint" style="padding:14px">Переводов пока не было</div>`}</div>
-    ${r.on === false ? `<div class="adm-warn" style="margin-top:12px">Переводы временно отключены администрацией</div>` : ""}
+    ${payHistory(r.history)}
     <p class="hint pay-note">Комиссия ${+(r.fee * 100).toFixed(2)}% платит отправитель — получатель получает ровно указанную сумму</p>`);
   starify(el);
-  payCount($("#pay-num"), r.stars);
+  payCount(el.querySelector(".pay-num"), r.stars);
   let t;
-  $("#pay-q").oninput = e => {
+  el.querySelector(".pay-q").oninput = e => {
     clearTimeout(t);
-    const v = e.target.value.trim();
+    const v = e.target.value.trim(), my = ++PAY.seq;
     t = setTimeout(async () => {
-      const list = v.length >= 2 ? await api("users/search?qs=" + enc(v)).catch(() => []) : PAY.friends;
-      const box = $("#pay-peers"); if (!box) return;
-      box.innerHTML = list.map(payPeer).join("") || `<div class="hint pay-empty">${v.length >= 2 ? "Никого не нашли" : "Добавь друзей или найди игрока поиском"}</div>`;
+      const box = el.querySelector(".pay-peers");
+      if (v.length < 2) { box.innerHTML = payPeers(); return; }
+      const list = await api("users/search?qs=" + enc(v)).catch(() => []);
+      if (my !== PAY.seq || !el.isConnected) return;   // пока ждали ответ, запрос уже поменялся
+      box.innerHTML = list.map(u => payPeer(u)).join("") || `<div class="hint pay-empty">Никого не нашли</div>`;
     }, 300);
   };
 }
@@ -65,13 +99,15 @@ function openPayRecv(amt = 0) {
   const link = ME.refLink.replace(/start=.*$/, `start=pay_${ME.id}${amt ? "_" + amt : ""}`);
   let qr = ""; try { qr = qrSVG(link).svg; } catch (e) {}
   const html = `<div class="pay-rc">
-      <div class="pay-rh">${avaHTML(ME, 40)}<div class="grow"><b>${esc(ME.name)}</b><span>${ME.username ? "@" + esc(ME.username) : "id " + ME.id}</span></div></div>
-      <div class="pay-rt">Отсканируй, чтобы перевести мне звёзды</div>
-      <div class="inv-code pay-code">${qr}<span class="inv-logo">${avaHTML(ME, 48)}</span></div>
-      ${amt ? `<div class="pay-ramt"><span class="pay-st">⭐</span>${fmt(amt)}</div>` : ""}
-      <div class="pay-rbtns"><button class="btn ghost sm" data-act="pay-amt" data-v="${amt}">${ic("edit")}${amt ? "Изменить сумму" : "Указать сумму"}</button>
-        ${amt ? `<button class="btn ghost sm" data-act="pay-amt-clear">${ic("x")}Без суммы</button>` : ""}</div>
-    </div>
+      <div class="pay-rtop">${ic("qr")}<span>Получить звёзды</span></div>
+      <div class="pay-rbody">
+        <div class="pay-rh">${avaHTML(ME, 42)}<div class="grow"><b>${esc(ME.name)}</b><span>${ME.username ? "@" + esc(ME.username) : "id " + ME.id}</span></div></div>
+        <div class="pay-rt">${amt ? "Отсканируй, чтобы перевести мне" : "Отсканируй, чтобы перевести мне звёзды"}</div>
+        ${amt ? `<div class="pay-ramt"><span class="pay-st">⭐</span>${fmt(amt)}</div>` : ""}
+        <div class="inv-code pay-code">${qr}<span class="inv-logo">${avaHTML(ME, 48)}</span></div>
+        <div class="pay-rbtns"><button class="pay-link" data-act="pay-amt" data-v="${amt}">${amt ? "Изменить сумму" : "Указать сумму"}</button>
+          ${amt ? `<button class="pay-link" data-act="pay-amt-clear">Без суммы</button>` : ""}</div>
+      </div></div>
     <button class="btn gold pay-share" data-act="pay-share" data-l="${esc(link)}" data-v="${amt}">${ic("send")}Отправить ссылку в Telegram</button>
     <p class="hint pay-note">QR можно навести и обычной камерой телефона — откроется бот с кнопкой перевода</p>`;
   const top = SHEETS[SHEETS.length - 1];
@@ -103,27 +139,37 @@ function payScan() {
 
 // экран перевода конкретному игроку
 async function openPaySend(id, amt = 0) {
-  let u; try { u = await api("pay/peer/" + id); } catch (e) { return; }
-  PAY.info = await api("pay").catch(() => PAY.info || { fee: 0.05, min: 10 });
-  const fee = PAY.info.fee, min = PAY.info.min || 10, max = PAY.info.max || 0;
-  const el = openSheet(`<div class="pay-to">${avaHTML(u, 76)}<b>${esc(u.name)}</b><span>${u.username ? "@" + esc(u.username) : "id " + u.id}</span></div>
-    <div class="pay-amt"><span class="pay-st">⭐</span><input id="pay-a" inputmode="numeric" placeholder="0" value="${amt || ""}" autocomplete="off"></div>
+  if (PAY.busy) return;   // двойной тап не открывает два экрана
+  PAY.busy = true;
+  let u, info;
+  try { [u, info] = await Promise.all([api("pay/peer/" + id), api("pay").catch(() => PAY.info || { fee: 0.05, min: 10 })]); }
+  catch (e) { return; } finally { PAY.busy = false; }
+  PAY.info = info;
+  const fee = info.fee, min = info.min || 10, max = info.max || 0, fp = +(fee * 100).toFixed(2);
+  const el = openSheet(`<div class="pay-to">${avaHTML(u, 78)}<span class="pay-tl">Перевод игроку</span><b>${esc(u.name)}</b><span>${u.username ? "@" + esc(u.username) : "id " + u.id}</span></div>
+    <div class="pay-amt"><label>Сумма перевода</label>
+      <div class="pay-ai"><span class="pay-st">⭐</span><input class="pay-a" inputmode="numeric" placeholder="0" value="${amt || ""}" autocomplete="off" maxlength="15"></div>
+      <div class="pay-ab">Баланс: <b class="bal-live">${fmt(ME.stars)}</b> ⭐</div></div>
     <div class="pay-chips">${[100, 1000, 10000, 100000].map(v => `<button data-act="pay-chip" data-v="${v}">+${short(v)}</button>`).join("")}<button data-act="pay-chip" data-v="all">Всё</button></div>
-    <div class="pay-fee" id="pay-fee"></div>
-    <input class="pay-memo" id="pay-n" maxlength="60" placeholder="Комментарий (необязательно)" autocomplete="off">
-    <button class="btn gold pay-go" id="pay-go" data-act="pay-go" data-id="${u.id}">${ic("send")}Перевести</button>`, "pay-x");
+    <div class="pay-sum"></div>
+    <input class="pay-memo" maxlength="60" placeholder="Комментарий (необязательно)" autocomplete="off">
+    <button class="btn gold pay-go" data-act="pay-go">${ic("send")}Перевести</button>`, "pay-x");
   el._peer = u;
   starify(el);
-  const inp = el.querySelector("#pay-a");
+  const inp = el.querySelector(".pay-a"), box = el.querySelector(".pay-sum"), go = el.querySelector(".pay-go");
   const upd = () => {
-    const a = parseInt(inp.value.replace(/\D/g, ""), 10) || 0, f = Math.ceil(a * fee);
-    if (inp.value !== (a ? fmt(a) : "")) inp.value = a ? fmt(a) : "";
-    const box = el.querySelector("#pay-fee"), go = el.querySelector("#pay-go");
-    const fp = +(fee * 100).toFixed(2);
-    if (!a) box.innerHTML = `Минимум ${fmt(min)} ⭐${max ? ` · максимум ${fmt(max)} ⭐` : ""} · комиссия ${fp}%`;
-    else if (max && a > max) box.innerHTML = `<b class="tl">За один раз не больше ${fmt(max)} ⭐</b>`;
-    else box.innerHTML = `Комиссия ${fp}%: ${fmt(f)} ⭐ · спишется <b class="${a + f > ME.stars ? "tl" : ""}">${fmt(a + f)} ⭐</b>`;
-    go.disabled = a < min || a + f > ME.stars || (max && a > max) || PAY.info.on === false;
+    const a = payAmt(el), f = Math.ceil(a * fee);
+    const txt = a ? fmt(a) : "";
+    if (inp.value !== txt) inp.value = txt;
+    let warn = "";
+    if (info.on === false) warn = "Переводы временно отключены";
+    else if (a && a < min) warn = `Минимум ${fmt(min)} ⭐`;
+    else if (max && a > max) warn = `За один раз не больше ${fmt(max)} ⭐`;
+    else if (a + f > ME.stars) warn = "Не хватает звёзд с учётом комиссии";
+    box.innerHTML = `<div><span>Получит</span><b>${fmt(a)} ⭐</b></div><div><span>Комиссия ${fp}%</span><b>${fmt(f)} ⭐</b></div>
+      <div class="tot"><span>Спишется</span><b>${fmt(a + f)} ⭐</b></div>${warn ? `<p class="tl">${warn}</p>` : !a ? `<p>Минимум ${fmt(min)} ⭐${max ? ` · максимум ${fmt(max)} ⭐` : ""}</p>` : ""}`;
+    go.disabled = !a || !!warn;
+    el.querySelector(".pay-amt").classList.toggle("bad", !!warn && !!a);
     starify(box);
   };
   el._upd = upd; el._fee = fee;
@@ -131,7 +177,7 @@ async function openPaySend(id, amt = 0) {
   if (!amt) setTimeout(() => inp.focus(), 350);
 }
 
-const payAmt = el => parseInt((el.querySelector("#pay-a").value || "").replace(/\D/g, ""), 10) || 0;
+const payAmt = el => Math.min(1e12, parseInt((el.querySelector(".pay-a").value || "").replace(/\D/g, ""), 10) || 0);
 
 Object.assign(ACT, {
   pay: () => openPay(),
@@ -150,35 +196,41 @@ Object.assign(ACT, {
     if (inTg) tg.openTelegramLink(url); else copyText(el.dataset.l);
   },
   "pay-chip": el => {
-    const s = SHEETS[SHEETS.length - 1]; if (!s || !s._upd) return;
+    const s = el.closest(".sheet"); if (!s || !s._upd) return;
     H.sel();
-    const inp = s.querySelector("#pay-a");
     let a = el.dataset.v === "all" ? Math.floor(ME.stars / (1 + s._fee)) : payAmt(s) + +el.dataset.v;
     if (el.dataset.v === "all") while (a > 0 && a + Math.ceil(a * s._fee) > ME.stars) a--;
     if (PAY.info && PAY.info.max) a = Math.min(a, PAY.info.max);
-    inp.value = String(Math.max(0, a)); s._upd();
+    s.querySelector(".pay-a").value = String(Math.max(0, a)); s._upd();
   },
   "pay-go": async el => {
-    const s = SHEETS[SHEETS.length - 1], u = s._peer, a = payAmt(s);
+    const s = el.closest(".sheet"), u = s._peer, a = payAmt(s);
+    if (s._sending || !a) return;   // двойной тап — одно подтверждение
+    s._sending = true;
     const ok = await confirmM("Перевести?", `${esc(u.name)} получит <b>${fmt(a)} ⭐</b>. Перевод нельзя отменить.`, "Перевести");
-    if (!ok) return;
+    if (!ok) { s._sending = false; return; }
     el.disabled = true;
+    const note = s.querySelector(".pay-memo").value.trim();
     let r;
-    try { r = await post("pay/send", { to: u.id, amount: a, note: s.querySelector("#pay-n").value }); } catch (e) { el.disabled = false; return; }
+    try { r = await post("pay/send", { to: u.id, amount: a, note }); } catch (e) { el.disabled = false; s._sending = false; return; }
     H.ok(); setStars(r.stars);
     replaceSheet(s, `<div class="pay-done"><div class="pay-ok">${ic("check")}</div><b>Перевод отправлен</b>
       <div class="pay-dsum"><span class="pay-st">⭐</span>${fmt(r.amount)}</div>
-      <div class="pay-dto">${avaHTML(u, 28)}<span>${esc(u.name)}</span></div>
-      <span class="hint">Комиссия ${fmt(r.fee)} ⭐ · на балансе ${fmt(r.stars)} ⭐</span></div>
+      <div class="pay-rcpt">
+        <div><span>Получатель</span><b class="pay-who">${avaHTML(u, 22)}${esc(u.name)}</b></div>
+        <div><span>Комиссия</span><b>${fmt(r.fee)} ⭐</b></div>
+        <div><span>Списано</span><b>${fmt(r.amount + r.fee)} ⭐</b></div>
+        ${note ? `<div><span>Комментарий</span><b>«${esc(note.slice(0, 60))}»</b></div>` : ""}
+        <div><span>Время</span><b>${payTime(Date.now() / 1000)}</b></div>
+        <div class="tot"><span>На балансе</span><b>${fmt(r.stars)} ⭐</b></div></div></div>
       <button class="btn gold" data-act="pay-done">Готово</button>`);
     starify(s);
     burstAt(s.querySelector(".pay-ok"));
-    PAY.info = null;
   },
   "pay-done": () => {
     closeSheet();
     const top = SHEETS[SHEETS.length - 1];
-    if (top && top.classList.contains("pay-s")) { closeSheet(); setTimeout(openPay, 360); }
+    if (top && top.classList.contains("pay-s")) openPay(top);   // обновить кошелёк на месте
   },
 });
 

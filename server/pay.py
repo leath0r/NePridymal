@@ -65,14 +65,20 @@ def pay_home(uid=Depends(auth)):
             peers[other] = _brief(other)
         if peers[other]:
             out.append({"in": r["dst"] == uid, "amount": r["amount"], "fee": r["fee"], "note": r["note"], "ts": r["ts"], "user": peers[other]})
-    return {"stars": bal(uid), "fee": cfg("fee"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out}
+    wk = now() - 7 * 86400
+    week = {"in": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE dst=? AND ts>=?", uid, wk)["s"],
+            "out": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE src=? AND ts>=?", uid, wk)["s"]}
+    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out}
 
 
 @app.get(R + "/pay/peer/{tid}")
 def pay_peer(tid: int, uid=Depends(auth)):
     if tid == uid:
         err("это твой QR-код — дай его отсканировать другу")
-    return _brief(tid) or err("игрок не найден")
+    u = q1("SELECT * FROM users WHERE id=?", tid)
+    if not u or u["banned"]:
+        err("игрок не найден")
+    return user_brief(u)
 
 
 @app.post(R + "/pay/send")
@@ -138,6 +144,8 @@ def _admin_routes():
         if aid not in OWNERS:
             err("Менять настройки переводов может только владелец")
         body = await req.json()
+        if not isinstance(body, dict):
+            err("неверные данные")
         cur = dict(CFG)
         for k, v in body.items():
             if k not in DEFAULTS:
@@ -145,7 +153,7 @@ def _admin_routes():
             if v is None:
                 cur.pop(k, None)
             elif k == "on":
-                cur[k] = bool(v)
+                cur[k] = v in (True, 1, "1", "true")
             else:
                 try:
                     v = round(float(v), 4) if k == "fee" else int(v)
