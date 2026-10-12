@@ -474,6 +474,16 @@ async def on_command(m):
                           text=f"🎁 <b>{esc(s['name'] if s else 'Друг')}</b> прислал тебе подарок! Жми, чтобы распаковать" + (f"\n\n<i>«{esc(lk['text'])}»</i>" if lk["text"] else ""),
                           reply_markup={"inline_keyboard": [[{"text": "🎁 Открыть подарок", "web_app": {"url": APP_URL + "?gift=" + arg[5:]}}]]})
             return
+    if cmd.startswith("/start") and arg.startswith("pay_"):   # QR / ссылка «Получить» (pay.py): pay_<id>[_<сумма>]
+        part = arg[4:].split("_")
+        if part[0].isdigit() and (len(part) == 1 or part[1].isdigit()):
+            s = q1("SELECT name FROM users WHERE id=?", int(part[0]))
+            if s:
+                amt = int(part[1]) if len(part) > 1 else 0
+                await tg_call("sendMessage", chat_id=uid, parse_mode="HTML",
+                              text=f"💸 Перевод игроку <b>{esc(s['name'])}</b>" + (f": <b>{amt} ⭐</b>" if amt else "") + "\nЖми кнопку, чтобы отправить",
+                              reply_markup={"inline_keyboard": [[{"text": "💸 Перевести", "web_app": {"url": APP_URL + f"?pay={part[0]}&amt={amt}"}}]]})
+                return
     if cmd.startswith("/start") and arg.startswith("clan_") and arg[5:].isdigit():
         c = q1("SELECT name, tag FROM clans WHERE id=?", int(arg[5:]))
         if c:
@@ -2187,6 +2197,7 @@ import gates  # noqa: E402,F401 — админ закрывает/скрывае
 import actlog  # noqa: E402,F401 — подробный журнал действий игроков (logs.db)
 import retain  # noqa: E402,F401 — кэшбэк недели и «возвращайся»
 import odds  # noqa: E402,F401 — админка «Шансы»: возврат по играм на лету
+import pay  # noqa: E402,F401 — переводы звёзд между игроками по QR («Кошелёк»)
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------
