@@ -43,7 +43,8 @@ async function openPay() {
     <div class="pay-peers" id="pay-peers">${PAY.friends.map(payPeer).join("") || `<div class="hint pay-empty">Добавь друзей или найди игрока поиском</div>`}</div>
     <div class="sec-t">История переводов</div>
     <div class="box">${r.history.map(payRow).join("") || `<div class="hint" style="padding:14px">Переводов пока не было</div>`}</div>
-    <p class="hint pay-note">Комиссия ${Math.round(r.fee * 100)}% платит отправитель — получатель получает ровно указанную сумму</p>`);
+    ${r.on === false ? `<div class="adm-warn" style="margin-top:12px">Переводы временно отключены администрацией</div>` : ""}
+    <p class="hint pay-note">Комиссия ${+(r.fee * 100).toFixed(2)}% платит отправитель — получатель получает ровно указанную сумму</p>`);
   starify(el);
   payCount($("#pay-num"), r.stars);
   let t;
@@ -103,8 +104,8 @@ function payScan() {
 // экран перевода конкретному игроку
 async function openPaySend(id, amt = 0) {
   let u; try { u = await api("pay/peer/" + id); } catch (e) { return; }
-  if (!PAY.info) PAY.info = await api("pay").catch(() => ({ fee: 0.05, min: 10 }));
-  const fee = PAY.info.fee, min = PAY.info.min || 10;
+  PAY.info = await api("pay").catch(() => PAY.info || { fee: 0.05, min: 10 });
+  const fee = PAY.info.fee, min = PAY.info.min || 10, max = PAY.info.max || 0;
   const el = openSheet(`<div class="pay-to">${avaHTML(u, 76)}<b>${esc(u.name)}</b><span>${u.username ? "@" + esc(u.username) : "id " + u.id}</span></div>
     <div class="pay-amt"><span class="pay-st">⭐</span><input id="pay-a" inputmode="numeric" placeholder="0" value="${amt || ""}" autocomplete="off"></div>
     <div class="pay-chips">${[100, 1000, 10000, 100000].map(v => `<button data-act="pay-chip" data-v="${v}">+${short(v)}</button>`).join("")}<button data-act="pay-chip" data-v="all">Всё</button></div>
@@ -118,9 +119,11 @@ async function openPaySend(id, amt = 0) {
     const a = parseInt(inp.value.replace(/\D/g, ""), 10) || 0, f = Math.ceil(a * fee);
     if (inp.value !== (a ? fmt(a) : "")) inp.value = a ? fmt(a) : "";
     const box = el.querySelector("#pay-fee"), go = el.querySelector("#pay-go");
-    if (!a) box.innerHTML = `Минимум ${fmt(min)} ⭐ · комиссия ${Math.round(fee * 100)}%`;
-    else box.innerHTML = `Комиссия ${Math.round(fee * 100)}%: ${fmt(f)} ⭐ · спишется <b class="${a + f > ME.stars ? "tl" : ""}">${fmt(a + f)} ⭐</b>`;
-    go.disabled = a < min || a + f > ME.stars;
+    const fp = +(fee * 100).toFixed(2);
+    if (!a) box.innerHTML = `Минимум ${fmt(min)} ⭐${max ? ` · максимум ${fmt(max)} ⭐` : ""} · комиссия ${fp}%`;
+    else if (max && a > max) box.innerHTML = `<b class="tl">За один раз не больше ${fmt(max)} ⭐</b>`;
+    else box.innerHTML = `Комиссия ${fp}%: ${fmt(f)} ⭐ · спишется <b class="${a + f > ME.stars ? "tl" : ""}">${fmt(a + f)} ⭐</b>`;
+    go.disabled = a < min || a + f > ME.stars || (max && a > max) || PAY.info.on === false;
     starify(box);
   };
   el._upd = upd; el._fee = fee;
@@ -152,6 +155,7 @@ Object.assign(ACT, {
     const inp = s.querySelector("#pay-a");
     let a = el.dataset.v === "all" ? Math.floor(ME.stars / (1 + s._fee)) : payAmt(s) + +el.dataset.v;
     if (el.dataset.v === "all") while (a > 0 && a + Math.ceil(a * s._fee) > ME.stars) a--;
+    if (PAY.info && PAY.info.max) a = Math.min(a, PAY.info.max);
     inp.value = String(Math.max(0, a)); s._upd();
   },
   "pay-go": async el => {

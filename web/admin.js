@@ -18,7 +18,7 @@ const admKv = (k, v) => `<div class="row kv"><div class="grow"><div class="s">${
 
 function openAdmin() {
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["bc", "Рассылка"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -90,6 +90,32 @@ async function admRender(el = topSheet()) {
           ${g.changed ? `<button class="btn sm ghost" data-act="adm-odds-rs" data-k="${g.key}" data-n="${esc(g.title)}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${pc(g.value)}%</b></div>`}</div>`).join("")}</div>
       ${d.canEdit ? "" : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Менять шансы может только владелец</div>`}
       <div class="disc">Прибыль казино за 7 дней сильно зависит от удачи: один крупный выигрыш может перекрыть день. Рулетка (97,3%), блэкджек и кейсы здесь не настраиваются: кейсы — в settings.toml.</div>`;
+    starify(body);
+  } else if (ADM.tab === "pay") {
+    const d = await api("admin/pay"), c = d.cfg, ed = d.canEdit, w = d.week;
+    const pair = x => `<div class="row tap" data-act="adm-user" data-id="${x.a.id}">${avaHTML(x.a, 28)}<span class="adm-arr">${ic("chev")}</span>${avaHTML(x.b, 28)}
+      <div class="grow" style="min-width:0"><div class="t">${esc(x.a.name)} → ${esc(x.b.name)}</div><div class="s">${x.n != null ? fmt(x.n) + " переводов за 7 дн" : admDate(x.ts) + (x.note ? " · «" + esc(x.note) + "»" : "")}</div></div>
+      <b>⭐ ${short(x.sum != null ? x.sum : x.amount)}</b></div>`;
+    const field = (k, title, hint, val, unit) => `<div class="adm-odd"><div class="adm-oh"><b>${title}</b>${d.changed.includes(k) ? `<span class="adm-tag">изменено</span>` : ""}</div>
+      <div class="adm-os">${hint}</div>
+      ${ed ? `<div class="adm-oc"><input class="adm-oi" inputmode="decimal" data-k="${k}" value="${val}"><span class="adm-op">${unit}</span>
+        <button class="btn sm gold" data-act="adm-pay" data-k="${k}">${ic("check")}Сохранить</button>
+        ${d.changed.includes(k) ? `<button class="btn sm ghost" data-act="adm-pay-rs" data-k="${k}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${val} ${unit}</b></div>`}</div>`;
+    body.innerHTML = `<div class="box">
+        <div class="row kv"><div class="grow"><div class="t">Переводы включены</div><div class="s" style="white-space:normal">Если выключить, кнопка «Перевести» у игроков перестанет работать</div></div>
+          ${ed ? `<button class="sw${c.on ? " on" : ""}" data-act="adm-pay-on" data-v="${c.on ? 0 : 1}"></button>` : `<b>${c.on ? "да" : "нет"}</b>`}</div>
+        ${field("fee", "Комиссия", `платит отправитель сверху суммы, уходит в банк · по умолчанию ${+(d.defaults.fee * 100).toFixed(2)}%`, +(c.fee * 100).toFixed(2), "%")}
+        ${field("min", "Минимальный перевод", `по умолчанию ⭐ ${fmt(d.defaults.min)}`, c.min, "⭐")}
+        ${field("max", "Максимум за один перевод", `0 — без ограничения · по умолчанию ${d.defaults.max ? "⭐ " + fmt(d.defaults.max) : "0"}`, c.max, "⭐")}
+        ${field("day", "Переводов в сутки с аккаунта", `по умолчанию ${d.defaults.day}`, c.day, "шт")}</div>
+      ${ed ? "" : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Менять настройки может только владелец</div>`}
+      <div class="sec-t">За 7 дней</div>
+      <div class="box">${admKv("Переводов", `<b>${fmt(w.n)}</b>`)}${admKv("Переведено", `<b>⭐ ${fmt(w.sum)}</b>`)}${admKv("Комиссия в банк", `<b class="tw">⭐ ${fmt(w.fee)}</b>`)}${admKv("Отправителей", `<b>${fmt(w.users)}</b>`)}</div>
+      <div class="sec-t">Крупнейшие пары за 7 дней</div>
+      <div class="box">${d.top.map(pair).join("") || `<div class="hint" style="padding:14px">Пусто</div>`}</div>
+      <div class="sec-t">Последние переводы</div>
+      <div class="box">${d.recent.map(pair).join("") || `<div class="hint" style="padding:14px">Переводов пока не было</div>`}</div>
+      <div class="disc">Если двое постоянно перекидывают звёзды только друг другу — это может быть один человек с двух аккаунтов. Нажми на пару, чтобы открыть карточку отправителя.</div>`;
     starify(body);
   } else if (ADM.tab === "bc") {
     const st = await api("admin/broadcast");
@@ -230,6 +256,17 @@ Object.assign(ACT, {
     if (!(v > 0)) return toast("Введи число, например 95");
     if (v > 100 && !await confirmM("Больше 100%?", `При ${v}% игроки на дистанции выигрывают больше, чем ставят: казино будет терять звёзды на каждой ставке, а самые хитрые смогут фармить звёзды без риска. Точно ставим?`, "Да, ставим")) return;
     await post("admin/odds", { key: el.dataset.k, value: v / 100 }); H.ok(); toast("Сохранено", "ok"); await loadMe(); admRender();
+  },
+  "adm-pay": async el => {
+    const k = el.dataset.k, inp = topSheet().querySelector(`.adm-oi[data-k="${k}"]`), v = parseFloat(inp.value.replace(",", ".").replace(/\s/g, ""));
+    if (!(v >= 0)) return toast("Введи число");
+    await post("admin/pay", { [k]: k === "fee" ? v / 100 : Math.round(v) }); H.ok(); toast("Сохранено", "ok"); admRender();
+  },
+  "adm-pay-rs": async el => { await post("admin/pay", { [el.dataset.k]: null }); H.ok(); toast("Сброшено", "ok"); admRender(); },
+  "adm-pay-on": async el => {
+    const on = el.dataset.v === "1";
+    if (!on && !await confirmM("Выключить переводы?", "Игроки не смогут переводить звёзды друг другу, пока не включишь обратно.", "Выключить")) return;
+    await post("admin/pay", { on }); H.ok(); toast(on ? "Переводы включены" : "Переводы выключены", "ok"); admRender();
   },
   "adm-odds-rs": async el => {
     if (!await confirmM("Сбросить?", `${esc(el.dataset.n)}: вернуть значение по умолчанию из settings.toml.`, "Сбросить")) return;

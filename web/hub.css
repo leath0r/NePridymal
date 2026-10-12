@@ -228,3 +228,5 @@ html.lite .pr-c-ic img{animation:none}
 .st-sl[hidden]{display:none!important}
 .pr-reveal>*:not(.pr-r-glow){position:relative}
 #adm-body>.seg{flex-wrap:wrap}#adm-body>.seg button{flex:1 0 30%}
+
+.adm-arr{display:inline-flex;color:var(--hint);margin:0 -4px}.adm-arr .ic{width:14px;height:14px}
