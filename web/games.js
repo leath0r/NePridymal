@@ -37,7 +37,13 @@ function renderGames() {
         : c.phase === "bet" ? `старт через ${Math.max(0, c.until - st).toFixed(0)}с` : `взорвалась на x${(c.crash || 1).toFixed(2)}`) + (c.bets.length ? ` · ${c.bets.length} игр.` : "");
     } catch (e) {}
   };
+  v._live = live;
   clearInterval(hubPoll); live(); hubPoll = setInterval(live, 2000);
+  loadBank();
+}
+function gamesResume() {
+  const v = $("#v-games"); if (!v._live) return renderGames();
+  clearInterval(hubPoll); v._live(); hubPoll = setInterval(v._live, 2000);
   loadBank();
 }
 
@@ -295,13 +301,28 @@ const stackHTML = (gs, label, empty) => `<span class="ulab">${label}${gs.length 
   ? `<div class="ustack n${Math.min(gs.length, 3)}">${gs.slice(0, 3).map((g, i) => `<div style="--i:${i}">${giftHTML(g, { lite: true, plain: true })}</div>`).join("")}</div>
      <div class="ucap">${gs.length > 1 ? `${gs.length} подарков` : esc(gs[0].col)}<small>⭐ ${fmt(gs.reduce((s, g) => s + g.value, 0))}</small></div>`
   : `<div class="uempty"><b>${ic(empty[0])}</b>${empty[1]}</div>`);
-function upgDraw(result) {
+// innerHTML только если разметка изменилась — иначе картинки пересоздаются и заново декодируются на каждый тап
+const setH = (el, h) => { if (el._h !== h) { el._h = h; el.innerHTML = h; } };
+// выбор цели: сетку (до 300 карточек) не перестраиваем, а только отмечаем выбранные и пересчитываем шансы на месте
+function upgMarks() {
+  const sel = new Set(UP.ts.map(upKey)), tv = upTV();
+  document.querySelectorAll("#u-targets .gcell.item").forEach(c => {
+    const x = REG.get(c.dataset.k); if (!x) return;
+    const on = sel.has(upKey(x)), ch = upgChance(on ? tv : tv + x.value), b = c.querySelector(".chance");
+    c.classList.toggle("picked", on);
+    if (b) b.textContent = `${ch.toFixed(ch < 10 ? 1 : 0)}%`;
+    const s = c.querySelector(".sel");
+    if (on && !s && b) b.insertAdjacentHTML("afterend", `<span class="sel">${ic("check")}</span>`);
+    else if (!on && s) s.remove();
+  });
+}
+function upgDraw(result, marks) {
   const from = $("#u-from"), to = $("#u-to"); if (!from) return;
-  from.innerHTML = stackHTML(UP.gs, "Ставка", ["plus", "Выбери подарки"]);
-  to.innerHTML = stackHTML(UP.ts, "Цель", ["target", UP.gs.length ? "Выбери ниже" : "—"]);
+  setH(from, stackHTML(UP.gs, "Ставка", ["plus", "Выбери подарки"]));
+  setH(to, stackHTML(UP.ts, "Цель", ["target", UP.gs.length ? "Выбери ниже" : "—"]));
   const ch = upgChance(), t0 = UP.ts[0];
-  $("#u-center").innerHTML = result ? `<div class="ures ${result}">${result === "win" ? "АПГРЕЙД!" : "СГОРЕЛ"}</div>`
-    : t0 ? `<img src="${A.model(t0.col, t0.model, 256)}" alt=""><b>${ch.toFixed(ch < 10 ? 1 : 0)}%</b><span>шанс</span>` : `<b class="hint">—</b><span>шанс</span>`;
+  setH($("#u-center"), result ? `<div class="ures ${result}">${result === "win" ? "АПГРЕЙД!" : "СГОРЕЛ"}</div>`
+    : t0 ? `<img src="${A.model(t0.col, t0.model, 256)}" alt=""><b>${ch.toFixed(ch < 10 ? 1 : 0)}%</b><span>шанс</span>` : `<b class="hint">—</b><span>шанс</span>`);
   const C = 2 * Math.PI * 47;
   $("#u-arc").style.strokeDasharray = `${C * ch / 100} ${C}`;
   $("#u-ring").className = "uring" + (result ? " " + result : "");
@@ -312,6 +333,7 @@ function upgDraw(result) {
   $("#u-quick").style.display = UP.gs.length ? "" : "none";
   document.querySelectorAll("#u-quick [data-act=upg-x]").forEach(b => b.classList.toggle("on", !!(UP.ts.length && UP.gs.length && Math.abs(upTV() / upSV() - +b.dataset.v) / +b.dataset.v < .2)));
   if (!UP.gs.length) return;
+  if (marks && $("#u-targets").children.length) return upgMarks();
   $("#u-cnt").textContent = UP.total ? `найдено ${fmt(UP.total)}` : "";
   $("#u-k").innerHTML = Object.entries(UPK).map(([k, [, , l]]) => `<button data-act="upg-k" data-v="${k}" class="${UP.f.k === k ? "on" : ""}">${l}</button>`).join("");
   $("#u-cols").innerHTML = [["", "Все коллекции"], ...UP.cols.map(c => [c, c])].map(([k, l]) => `<span data-act="upg-col" data-v="${esc(k)}" class="${UP.f.col === k ? "on" : ""}">${k ? `<img src="${A.orig(k, 64)}" alt="">` : ""}${esc(l)}</span>`).join("");
@@ -337,10 +359,10 @@ async function upgGo() {
   if (UP.busy || !UP.gs.length || !UP.ts.length) return;
   const ch = upgChance();
   if (!UP.fast && !await confirmM("Апгрейд?", `Шанс ${ch.toFixed(1)}%. Если не повезёт, ${UP.gs.length > 1 ? `все ${UP.gs.length} подарков ставки сгорят` : `${esc(UP.gs[0].col)} #${fmt(UP.gs[0].num)} сгорит`}.`, "Крутим")) return;
-  UP.busy = true; upgDraw();
+  UP.busy = true; upgDraw(undefined, true);
   let r;
   try { r = await post("upgrade", { gids: UP.gs.map(g => g.id), targets: UP.ts.map(t => ({ col: t.col, model: t.model })) }); }
-  catch (e) { UP.busy = false; upgDraw(); return; }
+  catch (e) { UP.busy = false; upgDraw(undefined, true); return; }
   const arc = r.chance / 100 * 360;
   const stop = r.win ? Math.random() * arc * .9 + arc * .05 : arc + 4 + Math.random() * (352 - arc);
   const start = UP.angle, to = start - (start % 360) + 360 * 5 + stop;
@@ -567,7 +589,7 @@ Object.assign(ACT, {
     if (UP.busy) return;
     const x = REG.get(el.dataset.k), i = UP.ts.findIndex(t => upKey(t) === upKey(x));
     if (i >= 0) UP.ts.splice(i, 1); else if (UP.ts.length >= 5) return toast("Максимум 5 целей"); else UP.ts.push(x);
-    H.sel(); upgDraw();
+    H.sel(); upgDraw(undefined, true);
   },
   "pg-all": () => { const s = topSheet(), p = s && s._pg; if (!p) return; p.free.slice(0, p.max).forEach(x => p.sel.add(x.id)); H.sel(); s._pgDraw(); },
   "pg-ok": () => {

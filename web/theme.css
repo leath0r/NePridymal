@@ -75,7 +75,7 @@ nav.tabs button:active{transform:scale(.92)}
 .ava{box-shadow:0 2px 8px -2px rgba(0,0,0,.4)}
 
 /* --- плавность: экраны появляются чуть объёмнее --- */
-.view.on{animation:viewin .32s cubic-bezier(.2,1,.4,1)}
+
 @keyframes viewin{from{opacity:0;transform:translateY(8px) scale(.995)}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 /* профиль: кнопка настроек */

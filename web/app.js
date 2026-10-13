@@ -334,7 +334,11 @@ function setTab(t) {
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "v-" + t));
   $("#title").textContent = TITLES[t];
   scrollTo(0, 0);
+  const v = $("#v-" + t);
+  // хаб игр почти статичный: если строили < 2 мин назад — показываем готовый, только оживляем счётчик краша и банк
+  if (t === "games" && v._ts && Date.now() - v._ts < 120000 && v.innerHTML && typeof gamesResume === "function") return gamesResume();
   (TAB_RENDER[t] || { cases: renderCases, games: renderGames, inv: renderInventory, market: renderMarket, top: renderTop }[t])();
+  if (t === "games") v._ts = Date.now();
 }
 // вкладки из отдельных файлов дописывают себя сюда (crypto.js)
 const TAB_RENDER = {};

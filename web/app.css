@@ -42,7 +42,7 @@ header h1{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:el
 
 /* ---------- экраны / таббар ---------- */
 main{padding:4px 16px calc(100px + var(--bot))}
-.view{display:none}.view.on{display:block;animation:fade .22s ease}
+.view{display:none}.view.on{display:block}   /* без анимации появления: она шла, пока строилась вкладка, и рывок был виден */
 @keyframes fade{from{opacity:0;transform:translateY(5px)}}
 nav.tabs{position:fixed;left:12px;right:12px;bottom:calc(10px + var(--bot));z-index:16;display:flex;padding:5px;border-radius:26px;
   background:color-mix(in srgb,var(--card) 80%,transparent);backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7);
