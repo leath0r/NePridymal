@@ -105,3 +105,5 @@
 .bankbar>div{flex:1;min-width:0}
 .bankbar b{display:block;overflow:hidden;text-overflow:ellipsis;font-size:clamp(15px,4.6vw,20px)}
 .bankbar em{flex:none;font-size:11.5px;padding:3px 7px}
+.loan-bar{height:4px;margin-top:5px;border-radius:4px;background:color-mix(in srgb,var(--hint) 25%,transparent);overflow:hidden}
+.loan-bar i{display:block;height:100%;border-radius:4px;background:#2fd47a}

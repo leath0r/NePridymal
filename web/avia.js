@@ -64,8 +64,8 @@ function avScene(path) {
   // облака «ступеньками»: три высоты, чтобы полёт выглядел как прыжки
   const ys = path ? path.map((_, i) => [70, 120, 95, 150, 80, 135][i % 6] + (Math.random() * 16 - 8)) : [];
   w.style.width = AV_X0 + (n + 4) * AV_STEP + 300 + "px";
-  w.innerHTML = (path ? path.map((s, i) => `<div class="avc ${s.t}" style="left:${AV_X0 + (i + 1) * AV_STEP - 55}px;top:${ys[i]}px" id="av-c${i}">
-      <i class="puff"></i><b>${avLabel(s)}</b></div>`).join("") : "") +
+  w.innerHTML = (path ? path.map((s, i) => `<div class="avc" style="left:${AV_X0 + (i + 1) * AV_STEP - 55}px;top:${ys[i]}px" id="av-c${i}">
+      <i class="puff"></i><b>?</b></div>`).join("") : "") +
     `<div class="avship start" style="left:${AV_X0 - 120}px">${AV_SHIP}<i class="wake"></i></div>
      <div class="avship" id="av-ship">${AV_SHIP}<i class="wake"></i></div>
      <div class="avplane" id="av-p"><i class="trail"></i><span>${AV_PLANE}</span></div>`;
@@ -109,7 +109,6 @@ async function avGo() {
   avScene(r.path); avHud(1);
   const ys = $("#av-w")._ys, n = r.path.length;
   const shipX = AV_X0 + (n + 2) * AV_STEP;
-  if (!r.landed) $("#av-ship").style.left = shipX + 110 + Math.random() * 50 + "px";   // промах: корабль дальше, чем дотянет самолёт
   // разбег по палубе и взлёт
   await avMove(AV_X0 - 10, 205, -4);
   $("#av-p").classList.add("fly"); $("#av-sc").classList.add("flying");
@@ -119,7 +118,8 @@ async function avGo() {
     const s = r.path[i], x = AV_X0 + (i + 1) * AV_STEP - 43, y = ys[i] - 26;
     await avMove(x, y, Math.max(-18, Math.min(18, (y - prevY) / 3)));
     prevY = y;
-    const c = $("#av-c" + i); if (c) c.classList.add("hit");
+    // облако раскрывается только при касании — заранее не видно ни множителей, ни ракет
+    const c = $("#av-c" + i); if (c) { c.classList.add("hit", s.t); c.querySelector("b").textContent = avLabel(s); }
     if (s.t === "rocket") {
       H.err(); avHud(s.k, "bad"); avFloat("÷2", "bad");
       const p = $("#av-p"); p.classList.add("boom"); setTimeout(() => p && p.classList.remove("boom"), 600);
@@ -134,8 +134,9 @@ async function avGo() {
     await avMove(shipX + 16, 207, 0);
     $("#av-p").classList.remove("fly"); $("#av-p").classList.add("landed"); H.ok();
   } else {
-    await avMove(shipX - 30, 200, 14);
-    await avMove(shipX + 40, 262, 48);
+    // корабль на том же месте, что и при посадке: исход виден только в последний момент — самолёт не дотягивает и падает перед кормой
+    await avMove(shipX - 60, 178, 8);
+    await avMove(shipX - 40, 262, 52);
     const sc = $("#av-sc"), pr = $("#av-p").getBoundingClientRect(), sr = sc.getBoundingClientRect();
     sc.style.setProperty("--sx", pr.left - sr.left + pr.width / 2 + "px"); sc.classList.add("splash");
     $("#av-p").classList.add("sunk"); H.err();

@@ -35,6 +35,21 @@ CREATE TABLE IF NOT EXISTS loans(id INTEGER PRIMARY KEY, user INTEGER, gift INTE
   until INTEGER, status TEXT DEFAULT 'open', closed INTEGER, warned INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS loans_user ON loans(user, status);
 """)
+try:   # paid — сколько уже внесено частями; осталось вернуть debt - paid
+    db.execute("ALTER TABLE loans ADD COLUMN paid INTEGER DEFAULT 0")
+except Exception:
+    pass
+PART_MIN = 100   # частичный взнос — не меньше (или весь остаток)
+
+
+def _pay_events(uid, r, amount):
+    """Взнос в счёт кредита: сначала гасится тело, потом комиссия (так журнал/прибыль банка сходятся при любом дроблении)."""
+    paid = r["paid"] or 0
+    body = max(0, min(amount, r["principal"] - paid))
+    if body:
+        event(uid, "loan", -body)
+    if amount - body:
+        event(uid, "fee", -(amount - body))
 # переезд со старого кодирования -(3e9 + uid), которое могло совпасть с сейфом другого игрока
 db.execute(f"UPDATE gifts SET owner=-({LOAN_OWNER}+(SELECT user FROM loans l WHERE l.gift=gifts.id AND l.status='open')) "
            "WHERE id IN (SELECT gift FROM loans WHERE status='open' AND gift IS NOT NULL)")
@@ -54,7 +69,8 @@ def terms(value):
 
 def loan_out(r):
     g = q1("SELECT * FROM gifts WHERE id=?", r["gift"]) if r["gift"] else None
-    return {"id": r["id"], "gift": gift_out(g) if g else None, "principal": r["principal"], "debt": r["debt"],
+    return {"id": r["id"], "gift": gift_out(g) if g else None, "principal": r["principal"], "debt": r["debt"] - (r["paid"] or 0),
+            "total": r["debt"], "paid": r["paid"] or 0, "partMin": PART_MIN,
             "ts": r["ts"], "until": r["until"], "status": r["status"]}
 
 
@@ -111,18 +127,37 @@ def take_loan(gid: int, uid=Depends(auth)):
 
 
 @app.post(R + "/loans/{lid}/repay")
-def repay(lid: int, uid=Depends(auth)):
+async def repay(lid: int, req: Request, uid=Depends(auth)):
+    """Вернуть кредит целиком или частью: {amount} — взнос; без amount или ≥ остатка — закрыть полностью."""
+    try:
+        b = await req.json()
+    except Exception:
+        b = {}
+    amount = (b or {}).get("amount") if isinstance(b, dict) else None
     with tx():
         r = q1("SELECT * FROM loans WHERE id=? AND user=? AND status='open'", lid, uid) or err("кредит уже закрыт")
-        if bal(uid) < r["debt"]:
-            err(f"Нужно ⭐ {r['debt']}")
-        db.execute("UPDATE users SET stars=stars-? WHERE id=?", (r["debt"], uid))
-        if r["gift"]:
-            db.execute("UPDATE gifts SET owner=? WHERE id=?", (uid, r["gift"]))
-        db.execute("UPDATE loans SET status='repaid', closed=? WHERE id=?", (now(), lid))
-        event(uid, "loan", -r["principal"])
-        event(uid, "fee", -(r["debt"] - r["principal"]))
-    return {"ok": True, "stars": bal(uid)}
+        left = r["debt"] - (r["paid"] or 0)
+        if amount is None:
+            amount = left
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            err("введи сумму")
+        amount = min(amount, left)
+        if amount < min(PART_MIN, left):
+            err(f"взнос — от ⭐ {PART_MIN}")
+        if bal(uid) < amount:
+            err(f"Нужно ⭐ {amount}")
+        db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount, uid))
+        _pay_events(uid, r, amount)
+        closed = amount == left
+        if closed:
+            if r["gift"]:
+                db.execute("UPDATE gifts SET owner=? WHERE id=?", (uid, r["gift"]))
+            db.execute("UPDATE loans SET status='repaid', closed=?, paid=debt WHERE id=?", (now(), lid))
+        else:
+            db.execute("UPDATE loans SET paid=COALESCE(paid,0)+? WHERE id=?", (amount, lid))
+    return {"ok": True, "stars": bal(uid), "closed": closed, "paid": amount, "left": left - amount, "gift": bool(r["gift"])}
 
 
 def _sweep():
@@ -131,20 +166,27 @@ def _sweep():
     with tx():
         for r in q("SELECT * FROM loans WHERE status='open' AND until<=?", t):
             db.execute("UPDATE loans SET status='lost', closed=? WHERE id=?", (t, r["id"]))
-            if not r["gift"]:   # без залога — списываем долг с баланса, хоть в минус
-                db.execute("UPDATE users SET stars=stars-? WHERE id=?", (r["debt"], r["user"]))
-                event(r["user"], "loan", -r["principal"])
-                event(r["user"], "fee", -(r["debt"] - r["principal"]))
-                msgs.append((r["user"], f"⌛ Срок кредита истёк — ⭐ {r['debt']} списаны с баланса. Если звёзд не хватило, баланс ушёл в минус: "
+            left = r["debt"] - (r["paid"] or 0)
+            if not r["gift"]:   # без залога — списываем остаток долга с баланса, хоть в минус
+                db.execute("UPDATE users SET stars=stars-? WHERE id=?", (left, r["user"]))
+                _pay_events(r["user"], r, left)
+                msgs.append((r["user"], f"⌛ Срок кредита истёк — ⭐ {left} списаны с баланса. Если звёзд не хватило, баланс ушёл в минус: "
                                         "доход и выигрыши сначала закроют долг."))
                 continue
             g = q1("SELECT * FROM gifts WHERE id=?", r["gift"])
+            if r["paid"]:   # подарок забирает банк — внесённое частями возвращаем, иначе платить частями было бы хуже, чем не платить
+                db.execute("UPDATE users SET stars=stars+? WHERE id=?", (r["paid"], r["user"]))
+                back_fee = max(0, r["paid"] - r["principal"])
+                event(r["user"], "loan", r["paid"] - back_fee)
+                if back_fee:
+                    event(r["user"], "fee", back_fee)
             if g:
                 db.execute("UPDATE gifts SET owner=0, price=?, listed=? WHERE id=?", (max(10, g["value"]), t, g["id"]))
-                msgs.append((r["user"], f"⌛ Срок кредита истёк — <b>{esc(g['col'])} #{g['num']}</b> перешёл банку казино и выставлен на маркет."))
+                msgs.append((r["user"], f"⌛ Срок кредита истёк — <b>{esc(g['col'])} #{g['num']}</b> перешёл банку казино и выставлен на маркет."
+                                        + (f" Внесённые частями ⭐ {r['paid']} вернули на баланс." if r["paid"] else "")))
         for r in q("SELECT * FROM loans WHERE status='open' AND warned=0 AND until-?<=?", t, WARN):
             db.execute("UPDATE loans SET warned=1 WHERE id=?", (r["id"],))
-            msgs.append((r["user"], f"⏰ Через {max(1, (r['until'] - t) // 3600)} ч истекает кредит: верни ⭐ {r['debt']}, иначе "
+            msgs.append((r["user"], f"⏰ Через {max(1, (r['until'] - t) // 3600)} ч истекает кредит: верни ⭐ {r['debt'] - (r['paid'] or 0)}, иначе "
                                     + ("подарок заберёт банк." if r["gift"] else "долг спишется с баланса, даже в минус.")))
     for uid, text in msgs:
         notify(uid, text)

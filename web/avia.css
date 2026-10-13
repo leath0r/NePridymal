@@ -111,3 +111,4 @@
 .avc b{padding:2px 10px;border-radius:12px;background:rgba(255,255,255,.92);box-shadow:0 3px 10px rgba(40,20,100,.25),inset 0 -2px 0 rgba(0,0,0,.06)}
 .avc.mul b{background:linear-gradient(180deg,#fff7df,#ffe2a1);color:#e85d00}
 .avc.rocket b{background:none;box-shadow:none;padding:0}
+.avc:not(.hit) b{color:#b9b2d6}
