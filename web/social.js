@@ -219,23 +219,22 @@ function profileHTML(p, tab = "show") {
   } else body = show.length ? `<div class="showcase">${show.map((g, i) => `<div class="sc${i === 0 ? " main" : ""}" data-act="gift" data-k="${reg({ g, mine: isMe, owner: p })}">${giftHTML(g)}<div class="cap">${giftName(g)}<span>⭐ ${short(g.value)}</span></div></div>`).join("")}</div>
       ${!p.pinned.length && isMe ? `<button class="btn ghost" style="margin-top:12px" data-act="edit-profile">${ic("pin")}Выбрать подарки для витрины</button>` : ""}`
     : emptyHTML("gift", isMe ? "Открой первый кейс — тут будет витрина" : "Витрина пуста");
-  return `${bannerHTML(p)}
-    <div class="phead v4">
-      <div class="ph-top">${avaHTML(p, 96, { ring: true, p: prog })}
-        <div class="ph-tags"><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}
-          ${got ? `<div class="pbadges">${p.ach.filter(a => a.got).slice(0, 6).map(a => `<span title="${esc(a.t)}">${ic(ACH_IC[a.t] || "award")}</span>`).join("")}</div>` : ""}</div></div>
-      <div class="pname"><h2>${esc(p.name)}</h2></div>
-      ${p.title ? `<div class="ptitle" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</div>` : ""}
-      <div class="un">${p.username ? "@" + esc(p.username) + " · " : ""}в игре с ${new Date(p.since * 1000).toLocaleDateString("ru", { day: "numeric", month: "short" })}</div>
-      ${p.bio ? `<div class="bio">${esc(p.bio)}</div>` : ""}
-    </div>
-    <div class="pworth">
-      <div class="pw-main"><span>Состояние</span><b>⭐ ${fmt(p.worth)}</b>${isMe ? `<div class="pw-lv"><div class="lvbar"><div style="width:${prog}%"></div></div><small>${lv.level} ур. · ещё ${fmt(lv.to - lv.xp)} XP до ${lv.level + 1}</small></div>` : ""}</div>
-      <div class="pw-mini">
-        <div>${ic("gift")}<b>${p.gifts.length}</b><span>подарков</span></div>
-        <div>${ic("layers")}<b>${p.cols}</b><span>коллекций</span></div>
-        <div>${ic("users")}<b>${p.friends}</b><span>друзей</span></div>
+  // шапка: баннер — фоном, поверх него аватар, имя, теги; лишнее (значки достижений, дата, полоса уровня) — убрано
+  return `<div class="phero">${bannerHTML(p)}
+    <div class="phead v5">${avaHTML(p, 76, { ring: true, p: prog })}
+      <div class="ph-main">
+        <div class="pname"><h2>${esc(p.name)}</h2></div>
+        <div class="ph-tags"><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}${p.title ? `<span class="ptitle" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</span>` : ""}</div>
+        ${p.username ? `<div class="un">@${esc(p.username)}</div>` : ""}
       </div>
+    </div></div>
+    ${p.badges && p.badges.length ? `<div class="pbadges"></div>` : ""}
+    ${p.bio ? `<div class="bio pbio">${esc(p.bio)}</div>` : ""}
+    <div class="pnums">
+      <div><b>⭐ ${short(p.worth)}</b><span>состояние</span></div>
+      <div><b>${p.gifts.length}</b><span>подарков</span></div>
+      <div><b>${p.cols}</b><span>коллекций</span></div>
+      <div><b>${p.friends}</b><span>друзей</span></div>
     </div>
     <div class="pacts">${isMe
       ? `<button class="btn ghost" data-act="edit-profile">${ic("edit")}Изменить</button><button class="btn ghost" data-act="friends">${ic("users")}Друзья</button><button class="btn" data-act="invite">${ic("send")}Позвать</button><button class="btn ghost pset" data-act="settings" aria-label="Настройки">${ic("gear")}</button>`

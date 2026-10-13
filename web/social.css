@@ -380,3 +380,26 @@ details.locked[open]>summary{margin-bottom:12px}
 .phead.v4 .pstatus{text-align:left;margin-top:4px;padding:0;max-width:none}
 .phead.v4 .un{color:var(--hint);font-size:13.5px;margin-top:4px}
 .phead.v4 .bio{margin-top:10px;padding:9px 14px;border-radius:14px;background:var(--card);font-size:14px;max-width:100%}
+
+/* ================= профиль v5: баннер — фон шапки, всё поверх него; без перегруза ================= */
+.phero{position:relative;margin:calc(-8px - var(--top)) -16px 0;padding:calc(var(--top) + 96px) 16px 14px;isolation:isolate}
+.phero>.banner{position:absolute;inset:0;margin:0;height:auto;z-index:-1}
+.phero>.banner::after{content:"";position:absolute;inset:0;height:auto;background:linear-gradient(180deg,transparent 30%,color-mix(in srgb,var(--bg) 70%,transparent) 72%,var(--bg))}
+.phead.v5{display:flex;align-items:center;gap:12px;margin:0;text-align:left}
+.phead.v5>.ava{--s:76px;flex:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.ph-main{flex:1;min-width:0}
+.phead.v5 .pname{justify-content:flex-start;margin:0}
+.phead.v5 h2{font-size:22px;text-shadow:0 1px 8px rgba(0,0,0,.35)}
+.phead.v5 .ph-tags{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:5px;padding:0}
+.phead.v5 .ph-tags>span{margin:0;font-size:11.5px;padding:2px 8px;border-radius:8px;box-shadow:none}
+.phead.v5 .ph-tags .ctag{background:rgba(0,0,0,.45);color:#fff}
+.phead.v5 .ph-tags .ptitle{display:inline-flex;align-items:center;gap:4px;background:rgba(0,0,0,.45);color:var(--gold)}
+.phead.v5 .ph-tags .ptitle .ic{width:12px;height:12px}
+.phead.v5 .un{color:var(--hint);font-size:13px;margin-top:4px}
+.phead.v5 .pstatus{text-align:left;margin:3px 0 0;padding:0;max-width:none;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbadges.chosen{justify-content:flex-start;padding:0;margin-top:2px}
+.pbio{margin-top:10px;padding:9px 13px;border-radius:14px;background:var(--card);font-size:14px;white-space:pre-wrap;word-break:break-word}
+.pnums{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;margin-top:12px;border-radius:16px;background:var(--card);padding:10px 4px}
+.pnums>div{display:flex;flex-direction:column;align-items:center;min-width:0}
+.pnums>div+div{border-left:1px solid var(--sep)}
+.pnums b{font-size:16px;font-weight:900;white-space:nowrap}.pnums span{font-size:11px;color:var(--hint)}
