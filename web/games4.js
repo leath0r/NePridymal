@@ -190,7 +190,7 @@ Object.assign(ACT, {
     const r = await post("hilo/start", { bet }); HL = r; setStars(r.stars); H.imp("medium"); fillHL(); if (r.levelup) afterLevelUp(r.levelup);
   },
   "hl-go": async el => {
-    if (hlBusy) return; hlBusy = true;
+    if (hlBusy || !HL || !HL.active) return; hlBusy = true;   // ход и «Забрать» не идут параллельно
     try {
       const r = await post("hilo/guess", { dir: el.dataset.v });
       if (r.res === "lose") { HL = { active: false }; H.err(); fillHL(null, { ...r, res: "lose" }); setStars(r.stars); }
@@ -199,8 +199,11 @@ Object.assign(ACT, {
     } finally { hlBusy = false; }
   },
   "hl-cash": async () => {
-    const r = await post("hilo/cashout"); setStars(r.stars); H.ok();
-    fillHL(null, { res: "cash", card: HL.card, suit: HL.suit, pay: r.pay, mult: r.mult }); burstAt($("#hl-body")); HL = { active: false }; if (r.mult >= 5) bigWin(r.pay, r.mult);
+    if (hlBusy || !HL || !HL.active) return; hlBusy = true;
+    try {
+      const r = await post("hilo/cashout"); setStars(r.stars); H.ok();
+      fillHL(null, { res: "cash", card: HL.card, suit: HL.suit, pay: r.pay, mult: r.mult }); burstAt($("#hl-body")); HL = { active: false }; if (r.mult >= 5) bigWin(r.pay, r.mult);
+    } finally { hlBusy = false; }
   },
   "cr-pick": () => pickGifts("Подарки для крафта", { max: 10, pre: CR.gifts }, list => { CR.gifts = list; fillCraft(); }),
   "cr-col": el => { CR.col = el.dataset.v; H.sel(); fillCraft(); },

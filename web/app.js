@@ -60,7 +60,16 @@ const clock = s => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 360
   return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
 const plural = (n, f) => { n = Math.abs(n) % 100; if (n > 10 && n < 20) return f[2]; n %= 10; return n === 1 ? f[0] : n > 1 && n < 5 ? f[1] : f[2]; };
 
+// один и тот же POST (адрес + данные), пока он ещё в пути, второй раз не шлём: двойной тап по «Забрать» / «Играть»
+// давал красное «нечего забирать» / «игра уже идёт» сразу после выигрыша. Дубль тихо отклоняется (status — errlog его не шлёт).
+const API_BUSY = new Set();
 async function api(path, body) {
+  const key = body ? path + "|" + JSON.stringify(body) : "";
+  if (key && API_BUSY.has(key)) throw Object.assign(new Error("dup"), { status: "dup" });
+  if (key) API_BUSY.add(key);
+  try { return await apiReq(path, body); } finally { if (key) API_BUSY.delete(key); }
+}
+async function apiReq(path, body) {
   const headers = { "Content-Type": "application/json" };
   if (inTg) headers["X-Init-Data"] = tg.initData; else if (DEV_USER) headers["X-Dev-User"] = DEV_USER;
   let r;
@@ -391,6 +400,7 @@ async function doOpen(sheet, id) {
   if (opening) return;
   const c = CASES.find(x => x.id === id), n = c.keys ? 1 : c.price ? OPEN.n : 1;
   if (!c.keys && ME.lv.level < c.level) return toast(`Нужен ${c.level} уровень`);
+  if (id === "free" && !c.keys && ME.freeIn > 0) return toast(`Бесплатный кейс будет через ${clock(ME.freeIn)}`);
   if (!c.keys && c.price * n > ME.stars) { H.err(); return toast("Не хватает звёзд ⭐"); }
   opening = true;
   try { await doOpenInner(sheet, id, c, n); } finally { opening = false; }
@@ -401,7 +411,8 @@ async function doOpenInner(sheet, id, c, n) {
   sheet.querySelectorAll(".ocount button").forEach(b => b.disabled = true);
   won.innerHTML = "";
   let r;
-  try { r = await post(`case/${id}/open?n=${n}`); c.keys = r.keys || 0; } catch (e) { btns.querySelectorAll("button").forEach(b => b.disabled = false); sheet.querySelectorAll(".ocount button").forEach(b => b.disabled = false); return; }
+  // после бесплатного кейса обновляем ME — иначе на главной таймер ещё «можно открыть!»
+  try { r = await post(`case/${id}/open?n=${n}`); c.keys = r.keys || 0; if (id === "free") loadMe().catch(() => {}); } catch (e) { btns.querySelectorAll("button").forEach(b => b.disabled = false); sheet.querySelectorAll(".ocount button").forEach(b => b.disabled = false); return; }
   setStars(r.stars);
   if (!OPEN.fast) {
     const small = n > 1, W = small ? 76 : 104, step = W + 8;

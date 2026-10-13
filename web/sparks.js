@@ -78,6 +78,8 @@ function sparkHelp() {
 }
 Object.assign(ACT, {
   spark: async el => {
+    if (SPK && !SPK.played && !(await loadSparks()).played)   // сервер всё равно откажет — объясняем без красной ошибки
+      return toast("Сначала сыграй сегодня любой раунд — потом можно отправить огонёк");
     const r = await post(`sparks/${el.dataset.id}`); H.ok();
     burstAt(el, null);
     toast(r.done ? (r.reward ? `Серия ${r.count}! +${fmt(r.reward)} ⭐ каждому` : `Серия ${r.count} — день засчитан`) : "Огонёк отправлен — ждём ответа друга", "ok");

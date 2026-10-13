@@ -81,7 +81,7 @@ async function admRender(el = topSheet()) {
     const d = await api("admin/odds"), pc = v => +(v * 100).toFixed(2);
     body.innerHTML = `<p class="hint" style="margin:0 0 10px;font-size:12.5px">Возврат игроку на дистанции: 96% — из каждых ⭐ 100 ставок игрокам возвращается ⭐ 96, казино оставляет 4%. Меньше 100% — казино в плюсе, больше 100% — игроки в плюсе. Действует сразу. Можно ${pc(d.lo)}–${pc(d.hi)}%.</p>
       ${d.promo ? `<div class="adm-warn"><b>Идёт акция «Щедрые выходные».</b> Пока она идёт, часть игр отдаёт не меньше 98% (апгрейд 93%, скретч 96%), значения ниже не действуют. Выключить — вкладка «Обзор».</div>` : ""}
-      ${d.canEdit ? (() => { const vs = d.list.map(g => g.value), same = vs.every(v => v === vs[0]), a = pc(same ? vs[0] : vs.reduce((x, y) => x + y, 0) / vs.length); return `<div class="box adm-odd-all">
+      ${d.canEdit ? (() => { const vs = d.list.map(g => g.value), same = vs.every(v => v === vs[0]), a = pc(same ? vs[0] : vs.reduce((x, y) => x + y, 0) / vs.length); return `<div class="box adm-odd adm-odd-all">
         <div class="adm-oh"><b>Все игры сразу</b><span class="adm-tag">${same ? "у всех одинаково" : "сейчас разные"}</span></div>
         <div class="adm-os">Ставит один возврат для всех игр ниже. ${same ? "" : `Сейчас в среднем ${a}%.`}</div>
         <input type="range" class="drange" id="adm-oall" min="${pc(d.lo)}" max="${pc(d.hi)}" step="0.5" value="${a}">
