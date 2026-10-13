@@ -224,11 +224,13 @@ function profileHTML(p, tab = "show") {
   return `<div class="pf">
     <div class="pf-cover">${bannerHTML(p)}</div>
     <div class="pf-row">
-      <div class="pf-ava">${avaHTML(p, 88, { ring: true, p: prog })}</div>
-      <div class="pf-tags"><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}</div>
+      <div class="pf-ava">${avaHTML(p, 84, { ring: true, p: prog })}</div>
+      <div class="pf-info">
+        <div class="pf-tags"><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}</div>
+        <div class="pname"><h2>${esc(p.name)}</h2></div>
+        <div class="pf-sub">${p.username ? `<span>@${esc(p.username)}</span>` : ""}${p.title ? `<span class="pf-title" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</span>` : ""}</div>
+      </div>
     </div>
-    <div class="pname"><h2>${esc(p.name)}</h2></div>
-    <div class="pf-sub">${p.username ? `<span>@${esc(p.username)}</span>` : ""}${p.title ? `<span class="pf-title" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</span>` : ""}</div>
     ${p.badges && p.badges.length ? `<div class="pbadges"></div>` : ""}
     ${p.bio ? `<div class="pf-bio">${esc(p.bio)}</div>` : ""}
     <div class="pf-stats">
