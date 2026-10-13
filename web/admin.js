@@ -81,6 +81,13 @@ async function admRender(el = topSheet()) {
     const d = await api("admin/odds"), pc = v => +(v * 100).toFixed(2);
     body.innerHTML = `<p class="hint" style="margin:0 0 10px;font-size:12.5px">Возврат игроку на дистанции: 96% — из каждых ⭐ 100 ставок игрокам возвращается ⭐ 96, казино оставляет 4%. Меньше 100% — казино в плюсе, больше 100% — игроки в плюсе. Действует сразу. Можно ${pc(d.lo)}–${pc(d.hi)}%.</p>
       ${d.promo ? `<div class="adm-warn"><b>Идёт акция «Щедрые выходные».</b> Пока она идёт, часть игр отдаёт не меньше 98% (апгрейд 93%, скретч 96%), значения ниже не действуют. Выключить — вкладка «Обзор».</div>` : ""}
+      ${d.canEdit ? (() => { const vs = d.list.map(g => g.value), same = vs.every(v => v === vs[0]), a = pc(same ? vs[0] : vs.reduce((x, y) => x + y, 0) / vs.length); return `<div class="box adm-odd-all">
+        <div class="adm-oh"><b>Все игры сразу</b><span class="adm-tag">${same ? "у всех одинаково" : "сейчас разные"}</span></div>
+        <div class="adm-os">Ставит один возврат для всех игр ниже. ${same ? "" : `Сейчас в среднем ${a}%.`}</div>
+        <input type="range" class="drange" id="adm-oall" min="${pc(d.lo)}" max="${pc(d.hi)}" step="0.5" value="${a}">
+        <div class="adm-oc"><input class="adm-oi" inputmode="decimal" id="adm-oall-n" value="${a}"><span class="adm-op">%</span>
+          <button class="btn sm gold" data-act="adm-odds-all">${ic("check")}Всем играм</button>
+          <button class="btn sm ghost" data-act="adm-odds-all-rs">${ic("refresh")}</button></div></div>`; })() : ""}
       <div class="box">${d.list.map(g => `<div class="adm-odd${g.value > 1 ? " plus" : ""}">
         <div class="adm-oh"><b>${esc(g.title)}</b>${g.value > 1 ? `<span class="adm-tag red">игроки в плюсе</span>` : g.changed ? `<span class="adm-tag">изменено</span>` : ""}</div>
         <div class="adm-os">по умолчанию ${pc(g.default)}% · казино за 7 дн: <span class="${g.house7 >= 0 ? "tw" : "tl"}">${g.house7 >= 0 ? "+" : "−"}⭐ ${short(Math.abs(g.house7))}</span> · ${fmt(g.rounds7)} игр</div>
@@ -91,6 +98,8 @@ async function admRender(el = topSheet()) {
       ${d.canEdit ? "" : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Менять шансы может только владелец</div>`}
       <div class="disc">Прибыль казино за 7 дней сильно зависит от удачи: один крупный выигрыш может перекрыть день. Рулетка (97,3%), блэкджек и кейсы здесь не настраиваются: кейсы — в settings.toml.</div>`;
     starify(body);
+    const rg = body.querySelector("#adm-oall"), nb = body.querySelector("#adm-oall-n");
+    if (rg) { rg.oninput = () => { nb.value = rg.value; }; nb.oninput = () => { const v = parseFloat(nb.value.replace(",", ".")); if (v > 0) rg.value = v; }; }
   } else if (ADM.tab === "pay") {
     const d = await api("admin/pay"), c = d.cfg, ed = d.canEdit, w = d.week;
     const pair = x => `<div class="row tap" data-act="adm-user" data-id="${x.a.id}">${avaHTML(x.a, 28)}<span class="adm-arr">${ic("chev")}</span>${avaHTML(x.b, 28)}
@@ -273,6 +282,17 @@ Object.assign(ACT, {
     const on = el.dataset.v === "1";
     if (!on && !await confirmM("Выключить переводы?", "Игроки не смогут переводить звёзды друг другу, пока не включишь обратно.", "Выключить")) return;
     await post("admin/pay", { on }); H.ok(); toast(on ? "Переводы включены" : "Переводы выключены", "ok"); admRender();
+  },
+  "adm-odds-all": async () => {
+    const v = parseFloat(topSheet().querySelector("#adm-oall-n").value.replace(",", "."));
+    if (!(v >= 50 && v <= 150)) return toast("От 50 до 150%");
+    if (!await confirmM("Всем играм?", `Поставить возврат ${v}% сразу во всех играх? Свои значения у отдельных игр перезапишутся.`, "Да, всем")) return;
+    if (v > 100 && !await confirmM("Больше 100%?", `При ${v}% игроки на дистанции выигрывают больше, чем ставят — во ВСЕХ играх: казино будет терять звёзды на каждой ставке, а самые хитрые смогут фармить звёзды без риска. Точно ставим?`, "Да, ставим")) return;
+    await post("admin/odds/all", { value: v / 100 }); H.ok(); toast("Сохранено для всех игр", "ok"); await loadMe(); admRender();
+  },
+  "adm-odds-all-rs": async () => {
+    if (!await confirmM("Сбросить все?", "Все игры вернутся к значениям по умолчанию из settings.toml.", "Сбросить")) return;
+    await post("admin/odds/all", { value: null }); H.ok(); toast("Сброшено", "ok"); await loadMe(); admRender();
   },
   "adm-odds-rs": async el => {
     if (!await confirmM("Сбросить?", `${esc(el.dataset.n)}: вернуть значение по умолчанию из settings.toml.`, "Сбросить")) return;

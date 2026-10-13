@@ -87,5 +87,28 @@ def _routes():
         settings._LIVE.update(cur)
         return {"ok": True}
 
+    @app.post(R + "/admin/odds/all")
+    async def odds_set_all(req: Request, aid=Depends(admin)):
+        """Общий ползунок: один возврат сразу для всех игр (value=null — все игры на значения из settings.toml)."""
+        if aid not in OWNERS:
+            err("Менять шансы может только владелец")
+        val = (await req.json()).get("value")
+        if val is None:
+            cur, detail = {}, "все игры: сброс на значения по умолчанию"
+        else:
+            try:
+                val = round(float(val), 4)
+            except (TypeError, ValueError):
+                err("введи число")
+            if not LO <= val <= HI:
+                err(f"от {LO * 100:g}% до {HI * 100:g}%")
+            cur, detail = {k: val for k in KEYS}, f"все игры: {val * 100:g}%"
+        with tx():
+            db.execute("INSERT INTO kv(k,v) VALUES('odds',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur),))
+            log(aid, "odds", None, detail)
+        settings._LIVE.clear()
+        settings._LIVE.update(cur)
+        return {"ok": True}
+
 
 _routes()
