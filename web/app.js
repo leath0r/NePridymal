@@ -274,6 +274,7 @@ let BAL_HOLD = 0;   // >0 — идёт анимация игры: фоновое
 async function loadMe() {
   const prevKeys = ME ? ME.keys : null;
   const fresh = await api("me");
+  if (!fresh || typeof fresh !== "object") throw new Error("me: пустой ответ");   // иначе ME = null и таймеры падают каждую секунду
   if (BAL_HOLD > 0 && ME) fresh.stars = ME.stars;
   ME = fresh;
   renderHeader();

@@ -60,7 +60,7 @@ async function openChicken() {
 }
 function ckTable() { return CK.active ? CK.table : CK.modes[ckMode]; }
 function ckDraw(deadAt) {
-  const w = $("#ck-w"); if (!w) return;
+  const w = $("#ck-w"); if (!w || !CK) return;   // CK ещё грузится — сложность могли переключить раньше
   const t = ckTable(), step = CK.active ? CK.step : 0;
   w.innerHTML = `<div class="cklane side start"><div class="ckgrass"></div><div class="ckhen" id="ck-hen">${CK_HEN}</div></div>` +
     t.map((m, i) => `<div class="cklane${i < step ? " done" : ""}${i === step && CK.active ? " next" : ""}${deadAt === i + 1 ? " dead" : ""}" data-i="${i + 1}">
@@ -78,6 +78,7 @@ function ckPlaceHen(i, smooth = true) {
   w.style.transform = `translateX(${-Math.min(x, w.scrollWidth - road.clientWidth)}px)`;
 }
 function ckUI() {
+  if (!CK) return;
   const b = $("#ck-btns"); if (!b) return;
   const on = CK.active;
   $("#ck-bet").style.display = on ? "none" : "";
