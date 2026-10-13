@@ -19,11 +19,12 @@ from settings import conf
 DEFAULTS = {
     "on": True,
     "fee": conf("economy.transfer_fee", conf("economy.trade_fee", 0.05)),
+    "fee_addr": conf("economy.transfer_fee_addr", conf("economy.transfer_fee", conf("economy.trade_fee", 0.05))),   # перевод по адресу NP…
     "min": conf("economy.transfer_min", 10),
     "max": conf("economy.transfer_max", 0),            # один перевод не больше (0 — без ограничения)
     "day": conf("economy.transfer_day_count", 50),     # переводов в сутки с одного аккаунта
 }
-LIMITS = {"fee": (0, 0.5), "min": (1, 10 ** 7), "max": (0, 10 ** 10), "day": (1, 1000)}
+LIMITS = {"fee": (0, 0.5), "fee_addr": (0, 0.5), "min": (1, 10 ** 7), "max": (0, 10 ** 10), "day": (1, 1000)}
 CFG = {}
 NOTE_MAX = 60
 
@@ -38,6 +39,8 @@ def _load():
 
 
 def cfg(k):
+    if k == "fee_addr" and k not in CFG:   # пока не задана отдельно — как обычная комиссия
+        return cfg("fee")
     return CFG.get(k, DEFAULTS[k])
 
 
@@ -143,8 +146,8 @@ async def check_pin(uid, pin):
         err(f"неверный пароль, осталось попыток: {PIN_FAILS - fails}")
 
 
-def _fee(amount):
-    return math.ceil(amount * cfg("fee"))
+def _fee(amount, k="fee"):
+    return math.ceil(amount * cfg(k))
 
 
 def _brief(uid):
@@ -166,7 +169,7 @@ def pay_home(uid=Depends(auth)):
     wk = now() - 7 * 86400
     week = {"in": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE dst=? AND ts>=?", uid, wk)["s"],
             "out": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE src=? AND ts>=?", uid, wk)["s"]}
-    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out, "pin": has_pin(uid), "addr": addr_of(uid)}
+    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "feeAddr": cfg("fee_addr"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out, "pin": has_pin(uid), "addr": addr_of(uid)}
 
 
 @app.get(R + "/pay/peer/{tid}")
@@ -179,8 +182,8 @@ def pay_peer(tid: int, uid=Depends(auth)):
     return user_brief(u)
 
 
-@app.get(R + "/pay/addr/{a}")
-def pay_addr(a: str, uid=Depends(auth)):
+def addr_owner(a):
+    """Адрес → id владельца (или err с понятной причиной)."""
     n = addr_norm(a)
     if not n:
         err("это не адрес кошелька: он начинается с NP и состоит из 22 символов")
@@ -189,6 +192,12 @@ def pay_addr(a: str, uid=Depends(auth)):
     r = q1("SELECT user FROM pay_addr WHERE addr=?", n)
     if not r:
         err("кошелёк с таким адресом не найден")
+    return r["user"]
+
+
+@app.get(R + "/pay/addr/{a}")
+def pay_addr(a: str, uid=Depends(auth)):
+    r = {"user": addr_owner(a)}
     if r["user"] == uid:
         err("это твой адрес — дай его другу")
     u = q1("SELECT * FROM users WHERE id=?", r["user"])
@@ -201,9 +210,12 @@ def pay_addr(a: str, uid=Depends(auth)):
 async def pay_send(req: Request, uid=Depends(auth)):
     b = await req.json()
     try:
-        to, amount = int(b.get("to", 0)), int(b.get("amount", 0))
+        to, amount = int(b.get("to", 0) or 0), int(b.get("amount", 0))
     except (TypeError, ValueError):
         err("введи сумму")
+    fee_k = "fee"
+    if b.get("addr"):   # перевод по адресу — своя комиссия (админка → «Переводы»)
+        to, fee_k = addr_owner(b["addr"]), "fee_addr"
     note = " ".join(str(b.get("note", "")).split())[:NOTE_MAX]
     if to == uid:
         err("себе перевести нельзя")
@@ -214,7 +226,7 @@ async def pay_send(req: Request, uid=Depends(auth)):
     if cfg("max") and amount > cfg("max"):
         err(f"за один раз не больше {cfg('max'):,} ⭐".replace(",", " "))
     await check_pin(uid, str(b.get("pin", "")))
-    fee = _fee(amount)
+    fee = _fee(amount, fee_k)
     with tx():
         dst = q1("SELECT id, banned FROM users WHERE id=?", to)
         if not dst or dst["banned"]:
@@ -333,7 +345,7 @@ def _admin_routes():
                 cur[k] = v in (True, 1, "1", "true")
             else:
                 try:
-                    v = round(float(v), 4) if k == "fee" else int(v)
+                    v = round(float(v), 4) if k in ("fee", "fee_addr") else int(v)
                 except (TypeError, ValueError):
                     err("введи число")
                 lo, hi = LIMITS[k]

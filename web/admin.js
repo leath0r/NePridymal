@@ -150,7 +150,8 @@ async function admRender(el = topSheet()) {
     body.innerHTML = `<div class="box">
         <div class="row kv"><div class="grow"><div class="t">Переводы включены</div><div class="s" style="white-space:normal">Если выключить, кнопка «Перевести» у игроков перестанет работать</div></div>
           ${ed ? `<button class="sw${c.on ? " on" : ""}" data-act="adm-pay-on" data-v="${c.on ? 0 : 1}"></button>` : `<b>${c.on ? "да" : "нет"}</b>`}</div>
-        ${field("fee", "Комиссия", `платит отправитель сверху суммы, уходит в банк · по умолчанию ${+(d.defaults.fee * 100).toFixed(2)}%`, +(c.fee * 100).toFixed(2), "%")}
+        ${field("fee", "Комиссия обычного перевода", `по QR, поиску и id · платит отправитель сверху суммы, уходит в банк · по умолчанию ${+(d.defaults.fee * 100).toFixed(2)}%`, +(c.fee * 100).toFixed(2), "%")}
+        ${field("fee_addr", "Комиссия перевода по адресу", `когда переводят по адресу кошелька NP… · по умолчанию такая же, как обычная`, +(c.fee_addr * 100).toFixed(2), "%")}
         ${field("min", "Минимальный перевод", `по умолчанию ⭐ ${fmt(d.defaults.min)}`, c.min, "⭐")}
         ${field("max", "Максимум за один перевод", `0 — без ограничения · по умолчанию ${d.defaults.max ? "⭐ " + fmt(d.defaults.max) : "0"}`, c.max, "⭐")}
         ${field("day", "Переводов в сутки с аккаунта", `по умолчанию ${d.defaults.day}`, c.day, "шт")}</div>
@@ -341,7 +342,7 @@ Object.assign(ACT, {
   "adm-pay": async el => {
     const k = el.dataset.k, inp = topSheet().querySelector(`.adm-oi[data-k="${k}"]`), v = parseFloat(inp.value.replace(",", ".").replace(/\s/g, ""));
     if (!(v >= 0)) return toast("Введи число");
-    await post("admin/pay", { [k]: k === "fee" ? v / 100 : Math.round(v) }); H.ok(); toast("Сохранено", "ok"); admRender();
+    await post("admin/pay", { [k]: k === "fee" || k === "fee_addr" ? v / 100 : Math.round(v) }); H.ok(); toast("Сохранено", "ok"); admRender();
   },
   "adm-pay-rs": async el => { await post("admin/pay", { [el.dataset.k]: null }); H.ok(); toast("Сброшено", "ok"); admRender(); },
   "adm-pay-on": async el => {
