@@ -2202,6 +2202,17 @@ import pay  # noqa: E402,F401 — переводы звёзд между игр�
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------
 ASSET_CACHE = os.path.join(os.path.dirname(__file__), ".asset_cache")
+_WEBP_SEM = asyncio.Semaphore(2)   # одновременно не больше 2 конверсий — одно ядро, игра важнее
+
+
+def _to_webp(data):
+    """PNG → WebP (в 4–5 раз легче). Конвертируем один раз: дальше отдаёт кэш nginx (ключ с учётом X-Webp)."""
+    import io
+    from PIL import Image
+    im = Image.open(io.BytesIO(data))
+    out = io.BytesIO()
+    im.save(out, "WEBP", quality=85, method=4)
+    return out.getvalue()
 
 
 @app.get("/np/a/{path:path}")
@@ -2221,6 +2232,13 @@ async def asset(path: str, request: Request):
         return Response(status_code=r.status_code)
     if DEV or SERVE_WEB:
         open(f, "wb").write(r.content)
+    if ct == "image/png" and request.headers.get("x-webp") == "1":   # nginx ставит, если браузер шлёт Accept: image/webp
+        try:
+            async with _WEBP_SEM:
+                body = await asyncio.to_thread(_to_webp, r.content)
+            return Response(body, media_type="image/webp", headers={"Cache-Control": "public, max-age=2592000"})
+        except Exception as e:   # не вышло — отдаём PNG как раньше
+            print("webp:", raw[:80], e, flush=True)
     return Response(r.content, media_type=ct, headers={"Cache-Control": "public, max-age=2592000"})
 
 
