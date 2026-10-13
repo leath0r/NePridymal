@@ -10,7 +10,7 @@ async function loansHTML() {
       ${cash ? `<div class="hint" style="font-size:13px;margin-top:10px">У тебя уже есть кредит без залога — сначала верни его.</div>`
         : !lvlOk ? `<div class="hint" style="font-size:13px;margin-top:10px">${ic("lock")} Доступен с ${L.cashLevel} уровня</div>`
         : L.stars < 0 ? `<div class="hint tl" style="font-size:13px;margin-top:10px">Сначала закрой минус на балансе</div>`
-        : `<div class="jpbuy cashl-b">${Array.from({ length: Math.round(L.cashCap / L.cashStep) }, (_, i) => (i + 1) * L.cashStep).map(n => n <= L.cashMax
+        : `<div class="jpbuy cashl-b">${[1000, 2000, 3000, 4000, 5000, ...Array.from({ length: Math.round(L.cashCap / L.cashStep) }, (_, i) => (i + 1) * L.cashStep)].map(n => n <= L.cashMax
             ? `<button data-act="loan-cash" data-v="${n}"><b>⭐ ${short(n)}</b><span>вернуть ${short(Math.ceil(n * (1 + L.fee)))}</span></button>`
             : `<button class="off" disabled><b>⭐ ${short(n)}</b><span>${ic("lock")}</span></button>`).join("")}</div>
           ${L.cashMax < L.cashCap ? `<div class="hint" style="font-size:12px;margin-top:6px">Вернул кредит вовремя — лимит +⭐ ${short(L.cashStep)}. Просрочка сбрасывает лимит до ⭐ ${short(L.cashStep)}.</div>` : ""}`}
