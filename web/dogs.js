@@ -33,7 +33,7 @@ async function openDogs() {
       <div class="dgbtns"><button class="btn cta gold" id="dg-btn" data-act="dg-spin">Крутить</button><button class="ufast${dgFast ? " on" : ""}" data-act="dg-fast">${ic("trend")}Быстро</button></div>
       <div class="dgbuy" id="dg-buy"></div></div>
     <details class="rules" style="margin-top:12px"><summary>${ic("award")}Как играть и выплаты</summary><div id="dg-pay"></div></details>`, "dogs-s");
-  if (!DG) DG = await api("dogs");
+  DG = await api("dogs");   // выплаты зависят от возврата в админке — не кэшируем
   const head = document.querySelector(".dogs-s .ghead img"); if (head) head.src = DOGHOUSE;
   dgBuild();
   $("#dg-amt").addEventListener("input", dgBtnText);

@@ -436,7 +436,9 @@ async function mineClick(i) {
 
 // ============================================================ КОЛЕСО
 let WH = null, whAngle = 0, whBusy = false;
-const WCOL = { 0: ["#363a48", "#1d2029"], 0.5: ["#64708a", "#363d4d"], 1.2: ["#4f9bff", "#1b4fb0"], 1.5: ["#a57bff", "#5a2fc0"], 2: ["#ff6fb5", "#b5216a"], 3: ["#ffa24a", "#c2560c"], 5: ["#ffe27a", "#d79a00"] };
+// цвет сектора — по рангу множителя (из админки они масштабируются: 0.5 → 0.43 и т. п.), а не по точному значению
+const WCOL_R = [["#363a48", "#1d2029"], ["#64708a", "#363d4d"], ["#4f9bff", "#1b4fb0"], ["#a57bff", "#5a2fc0"], ["#ff6fb5", "#b5216a"], ["#ffa24a", "#c2560c"], ["#ffe27a", "#d79a00"]];
+const wcol = m => { const u = [...new Set(WH)].sort((a, b) => a - b); return WCOL_R[Math.min(WCOL_R.length - 1, u.indexOf(m))] || WCOL_R[0]; };
 async function openWheel() {
   whBusy = false;
   openSheet(`${gameHead("Hypno Lollipop", "Колесо", "Крути и лови множитель")}
@@ -446,18 +448,19 @@ async function openWheel() {
     <div class="wres" id="w-res">Сделай ставку и крути</div>
     <div class="wleg" id="w-leg"></div>
     <div class="betp">${betHTML("w-amt")}<button class="btn cta gold" id="w-btn" data-act="wheel-spin">Крутить</button></div>`, "wheel-s");
-  if (!WH) WH = (await api("wheel")).segments;
+  WH = (await api("wheel")).segments;   // каждый раз заново: множители меняются вместе с возвратом в админке
+  if (!$("#w-cv")) return;
   wheelDraw();
   const cnt = {}; WH.forEach(m => cnt[m] = (cnt[m] || 0) + 1);
   $("#w-leg").innerHTML = Object.keys(cnt).map(Number).sort((a, b) => a - b).map(m =>
-    `<span style="--wc:${WCOL[m][0]}"><i></i>x${m} · ${Math.round(cnt[m] / WH.length * 100)}%</span>`).join("");
+    `<span style="--wc:${wcol(m)[0]}"><i></i>x${m} · ${Math.round(cnt[m] / WH.length * 100)}%</span>`).join("");
 }
 function wheelDraw() {
   const cv = $("#w-cv"); if (!cv) return;
   const c = cv.getContext("2d"), R = 320, n = WH.length, step = Math.PI * 2 / n;
   c.clearRect(0, 0, 640, 640);
   for (let i = 0; i < n; i++) {
-    const a0 = -Math.PI / 2 + i * step, [l, dk] = WCOL[WH[i]];
+    const a0 = -Math.PI / 2 + i * step, [l, dk] = wcol(WH[i]);
     const g = c.createRadialGradient(R, R, 40, R, R, R);
     g.addColorStop(0, dk); g.addColorStop(.55, l); g.addColorStop(1, dk);
     c.beginPath(); c.moveTo(R, R); c.arc(R, R, R - 4, a0, a0 + step); c.closePath();
@@ -496,6 +499,7 @@ async function wheelSpin() {
   if (!cv.isConnected) { whBusy = false; loadMe(); return; }
   $("#w-bulbs").classList.remove("fast");
   setStars(r.stars);
+  if (WH[r.idx] !== r.mult) api("wheel").then(d => { WH = d.segments; if ($("#w-cv")) wheelDraw(); }).catch(() => {});   // возврат поменяли, пока колесо было открыто
   if (r.pay > bet) { H.ok(); res.className = "wres win"; res.textContent = `x${r.mult} · +⭐ ${fmt(r.pay)}`; burstAt(cv); winFx(null, r.pay, bet); }
   else if (r.pay) { H.imp("medium"); res.className = "wres meh"; res.textContent = `x${r.mult} · ⭐ ${fmt(r.pay)}`; }
   else { H.err(); res.className = "wres lose"; res.textContent = "Пусто — попробуй ещё"; }

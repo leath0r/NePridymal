@@ -259,7 +259,7 @@ async function openSlots() {
       <div class="mn" style="margin:0 0 10px"><span>Автоматы</span><div class="quick" id="sl-n">${[1, 2, 3, 5].map(n => `<button data-act="sl-n" data-v="${n}" class="${slN === n ? "on" : ""}">x${n}</button>`).join("")}</div></div>
       ${betHTML("sl-amt")}<div class="dgbtns"><button class="btn cta gold" id="sl-btn" data-act="sl-spin">Крутить</button><button class="ufast${slFast ? " on" : ""}" data-act="sl-fast">${ic("trend")}Быстро</button></div></div>
     <div class="sec-t">Выплаты на один автомат</div><div class="box" id="sl-pay"></div>`, "slots-s");
-  if (!SL) SL = await api("slots");
+  SL = await api("slots");   // таблица выплат зависит от возврата в админке — не кэшируем
   slBuild();
   $("#sl-amt").addEventListener("input", slBtnText);
   $("#sl-pay").innerHTML = SL.syms.map((s, i) => `<div class="row kv"><img class="spi" src="${A.orig(s, 64)}" alt=""><img class="spi" src="${A.orig(s, 64)}" alt=""><img class="spi" src="${A.orig(s, 64)}" alt="">
