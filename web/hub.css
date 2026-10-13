@@ -235,3 +235,6 @@ html.lite .pr-c-ic img{animation:none}
 
 #fps{position:fixed;left:6px;top:calc(var(--top,0px) + 6px);z-index:9999;padding:2px 7px;border-radius:8px;background:rgba(0,0,0,.6);color:#9ff;font:700 11px/1.4 ui-monospace,monospace;pointer-events:auto}
 #fps.hi{color:#7dffb8}#fps.lo{color:#ff8a8a}
+
+.bcs.off{opacity:.6}.bcs-t{white-space:pre-wrap;color:var(--text)!important;max-height:7.5em;overflow:hidden}
+.adm-sel{flex:1;min-width:120px;padding:8px 10px;border-radius:12px;background:var(--card2);color:var(--text);border:0;font:inherit;font-weight:600}

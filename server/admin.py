@@ -226,6 +226,121 @@ def broadcast_state(aid=Depends(admin)):
     return BROADCAST
 
 
+# ---------- регулярные рассылки: текст + «раз в N дней в ЧЧ:ММ по Москве»; хранятся в kv 'bc_sched' ----------
+# Получают только игроки с включёнными напоминаниями от бота (notif=1): ежедневная реклама всем — путь к блокировкам бота.
+import json as _json
+from datetime import datetime, timedelta, timezone
+
+MSK = timezone(timedelta(hours=3))
+SCHED_EVERY = (1, 2, 3, 7)
+
+
+def _sched():
+    r = q1("SELECT v FROM kv WHERE k='bc_sched'")
+    try:
+        return _json.loads(r["v"]) if r else []
+    except Exception:
+        return []
+
+
+def _sched_save(lst):
+    db.execute("INSERT INTO kv(k,v) VALUES('bc_sched',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (_json.dumps(lst, ensure_ascii=False),))
+
+
+def _first_at(hhmm):
+    """Ближайшее ЧЧ:ММ по Москве (сегодня, если ещё не прошло, иначе завтра) — unix-время."""
+    h, m = map(int, hhmm.split(":"))
+    d = datetime.now(MSK).replace(hour=h, minute=m, second=0, microsecond=0)
+    if d.timestamp() <= time.time():
+        d += timedelta(days=1)
+    return int(d.timestamp())
+
+
+def _sched_ids():
+    return [r["id"] for r in q("SELECT id FROM users WHERE banned=0 AND notif=1")]
+
+
+def _start_broadcast(text):
+    ids = _sched_ids()
+    BROADCAST.update(running=True, sent=0, failed=0, total=len(ids))
+    asyncio.create_task(_broadcast(ids, esc(text)))
+    return len(ids)
+
+
+@app.get(R + "/admin/broadcast/sched")
+def sched_list(aid=Depends(admin)):
+    return {"list": _sched(), "now": now(), "every": SCHED_EVERY, "audience": len(_sched_ids())}
+
+
+@app.post(R + "/admin/broadcast/sched")
+async def sched_edit(req: Request, aid=Depends(admin)):
+    b = await req.json()
+    act, sid = str(b.get("action", "")), int(b.get("id") or 0)
+    with tx():
+        lst = _sched()
+        cur = next((x for x in lst if x["id"] == sid), None)
+        if act == "add":
+            text, every, at = str(b.get("text", "")).strip(), int(b.get("every") or 0), str(b.get("time", ""))
+            if not 1 <= len(text) <= 3000:
+                err("текст от 1 до 3000 символов")
+            if every not in SCHED_EVERY:
+                err("период: 1, 2, 3 или 7 дней")
+            try:
+                hh, mm = map(int, at.split(":"))
+                assert 0 <= hh <= 23 and 0 <= mm <= 59
+                at = f"{hh:02d}:{mm:02d}"
+            except Exception:
+                err("время в формате ЧЧ:ММ")
+            if len(lst) >= 10:
+                err("не больше 10 регулярных рассылок")
+            lst.append({"id": int(time.time() * 1000) % 10 ** 12, "text": text, "every": every, "time": at,
+                        "next": _first_at(at), "on": True, "last": 0, "lastSent": 0})
+            log(aid, "broadcast_sched", None, f"+ раз в {every} дн. в {at}: {text[:120]}")
+        elif not cur:
+            err("рассылка не найдена — обнови экран")
+        elif act == "toggle":
+            cur["on"] = not cur["on"]
+            if cur["on"]:
+                cur["next"] = _first_at(cur["time"])
+            log(aid, "broadcast_sched", None, ("вкл: " if cur["on"] else "пауза: ") + cur["text"][:120])
+        elif act == "del":
+            lst.remove(cur)
+            log(aid, "broadcast_sched", None, "удалена: " + cur["text"][:120])
+        elif act == "now":
+            if BROADCAST["running"]:
+                err("рассылка уже идёт")
+            n = _start_broadcast(cur["text"])
+            cur["last"], cur["lastSent"] = now(), n
+            log(aid, "broadcast", None, "регулярная вручную: " + cur["text"][:150])
+        else:
+            err("неизвестное действие")
+        _sched_save(lst)
+    return {"ok": True, "list": lst}
+
+
+async def _sched_loop():
+    while True:
+        await asyncio.sleep(60)
+        try:
+            t = now()
+            with tx():
+                lst = _sched()
+                due = next((x for x in lst if x["on"] and x["next"] <= t), None)
+                if due and not BROADCAST["running"]:
+                    due["last"], due["lastSent"] = t, _start_broadcast(due["text"])
+                    while due["next"] <= t:   # сервер мог лежать — не догоняем пачкой, а идём дальше по расписанию
+                        due["next"] += due["every"] * 86400
+                    log(0, "broadcast", None, f"регулярная (раз в {due['every']} дн.): " + due["text"][:150])
+                    _sched_save(lst)
+        except Exception as e:
+            print("bc_sched:", e, flush=True)
+
+
+@app.on_event("startup")
+async def _sched_start():
+    asyncio.create_task(_sched_loop())
+
+
 @app.get(R + "/admin/log")
 def admin_log(aid=Depends(admin)):
     return {"log": [dict(r) for r in q("SELECT * FROM admin_log ORDER BY id DESC LIMIT 50")]}

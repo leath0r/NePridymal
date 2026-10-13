@@ -168,6 +168,26 @@ async function admRender(el = topSheet()) {
     body.innerHTML = `<textarea id="adm-bc" rows="5" placeholder="Текст сообщения всем игрокам"></textarea>
       <button class="btn" data-act="adm-bc" style="margin-top:10px" ${st.running ? "disabled" : ""}>${ic("send")}Отправить всем</button>
       <div class="hint" style="font-size:12.5px;text-align:center;margin-top:10px">${st.total ? `Последняя рассылка: отправлено ${st.sent} из ${st.total}, ошибок ${st.failed}${st.running ? " · идёт…" : ""}` : "Сообщение придёт от бота с кнопкой «Открыть». Заблокированным не отправляется."}</div>`;
+    // регулярные рассылки
+    const sc = await api("admin/broadcast/sched").catch(() => null);
+    if (sc && body.isConnected) {
+      const per = n => ({ 1: "каждый день", 2: "раз в 2 дня", 3: "раз в 3 дня", 7: "раз в неделю" })[n] || `раз в ${n} дн.`;
+      const left = x => { const s = Math.max(0, x.next - sc.now), h = Math.floor(s / 3600); return h >= 24 ? `${Math.floor(h / 24)} д ${h % 24} ч` : h ? `${h} ч ${Math.floor(s % 3600 / 60)} мин` : `${Math.ceil(s / 60)} мин`; };
+      body.insertAdjacentHTML("beforeend", `<div class="sec-t" style="margin-top:16px">${ic("clock")}Регулярные</div>
+        ${sc.list.length ? `<div class="box">${sc.list.map(x => `<div class="adm-odd bcs${x.on ? "" : " off"}">
+          <div class="adm-oh"><b>${per(x.every)} в ${x.time}</b><span class="adm-tag${x.on ? "" : " red"}">${x.on ? `через ${left(x)}` : "на паузе"}</span></div>
+          <div class="adm-os bcs-t">${esc(x.text)}</div>
+          ${x.last ? `<div class="adm-os">последняя: ${new Date(x.last * 1000).toLocaleString("ru", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · ${fmt(x.lastSent)} игрокам</div>` : ""}
+          <div class="adm-oc"><button class="btn sm ghost" data-act="adm-bcs" data-a="toggle" data-id="${x.id}">${x.on ? "Пауза" : "Включить"}</button>
+            <button class="btn sm ghost" data-act="adm-bcs" data-a="now" data-id="${x.id}">${ic("send")}Сейчас</button>
+            <button class="btn sm red" data-act="adm-bcs" data-a="del" data-id="${x.id}">${ic("x")}</button></div></div>`).join("")}</div>` : ""}
+        <div class="box adm-odd" style="margin-top:8px">
+          <textarea id="adm-bcs" rows="4" placeholder="Текст регулярной рассылки"></textarea>
+          <div class="adm-oc" style="flex-wrap:wrap"><select id="adm-bcs-e" class="adm-sel">${sc.every.map(n => `<option value="${n}">${per(n)}</option>`).join("")}</select>
+            <input id="adm-bcs-t" type="time" value="18:00" class="adm-oi" style="width:96px"><span class="adm-op">МСК</span>
+            <button class="btn sm gold" data-act="adm-bcs-add">${ic("plus")}Добавить</button></div>
+          <div class="adm-os">Придёт ${fmt(sc.audience)} игрокам — тем, у кого включены напоминания от бота (кто выключил — не получит).</div></div>`);
+    }
   } else if (ADM.tab === "db") {
     body.innerHTML = `<div class="box adm-odd"><div class="adm-oh"><b>${ic("download")}Экспорт</b></div>
         <div class="adm-os">Свежая копия базы (игроки, звёзды, подарки, всё) — бот пришлёт файл .db.gz тебе в личку. Игру не останавливает.</div>
@@ -371,6 +391,19 @@ Object.assign(ACT, {
     if (on && !await confirmM("Заблокировать игрока?", "Он не сможет пользоваться игрой, пока не разбаните.", "Заблокировать")) return;
     await post(`admin/user/${el.dataset.id}/ban`, { ban: on }); H.ok(); toast(on ? "Заблокирован" : "Разблокирован", "ok");
     topSheet()._redraw && topSheet()._redraw();
+  },
+  "adm-bcs-add": async () => {
+    const s = topSheet(), text = s.querySelector("#adm-bcs").value.trim(), every = +s.querySelector("#adm-bcs-e").value, time = s.querySelector("#adm-bcs-t").value;
+    if (!text) return toast("Напиши текст");
+    if (!/^\d{2}:\d{2}$/.test(time)) return toast("Укажи время");
+    await post("admin/broadcast/sched", { action: "add", text, every, time }); H.ok(); toast("Регулярная рассылка добавлена", "ok"); admRender();
+  },
+  "adm-bcs": async el => {
+    const a = el.dataset.a;
+    if (a === "del" && !await confirmM("Удалить рассылку?", "Она больше не будет отправляться.", "Удалить")) return;
+    if (a === "now" && !await confirmM("Отправить сейчас?", "Текст уйдёт игрокам прямо сейчас (расписание не сдвинется).", "Отправить")) return;
+    await post("admin/broadcast/sched", { action: a, id: +el.dataset.id }); H.ok();
+    toast({ del: "Удалено", now: "Рассылка запущена", toggle: "Готово" }[a], "ok"); admRender();
   },
   "adm-bc": async () => {
     const text = topSheet().querySelector("#adm-bc").value.trim();
