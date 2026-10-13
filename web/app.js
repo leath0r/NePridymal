@@ -65,7 +65,7 @@ async function api(path, body) {
   if (inTg) headers["X-Init-Data"] = tg.initData; else if (DEV_USER) headers["X-Dev-User"] = DEV_USER;
   let r;
   try { r = await fetch("api/" + path, { method: body ? "POST" : "GET", headers, body: body ? JSON.stringify(body) : undefined }); }
-  catch (e) { const m = "Нет связи с сервером — проверь интернет"; if (body) { toast(m, "err"); H.err(); } throw new Error(m); }   // фоновые GET — молча
+  catch (e) { const m = "Нет связи с сервером — проверь интернет"; if (body) { toast(m, "err"); H.err(); } throw Object.assign(new Error(m), { status: "net" }); }   // фоновые GET — молча
   let d = null; try { d = await r.json() } catch (e) {}
   if (!r.ok) {
     let m = d && typeof d.detail === "string" ? d.detail : "";
@@ -74,7 +74,7 @@ async function api(path, body) {
     else if (!m && r.status === 422) m = "Неверные данные — проверь сумму";
     else if (!m) m = r.status >= 500 ? "Сервер занят — попробуй через пару секунд" : "Ошибка сети — проверь интернет";
     if (body || (r.status < 500 && r.status !== 401)) { toast(m, "err"); H.err(); }   // сбои фоновых опросов (502 при перезапуске и т. п.) не показываем
-    throw new Error(m);
+    throw Object.assign(new Error(m), { status: r.status });   // status — чтобы errlog.js не слал на сервер обычные отказы API
   }
   return d;
 }

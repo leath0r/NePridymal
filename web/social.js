@@ -75,6 +75,7 @@ function drawSelBar() {
   let bar = $("#selbar");
   if (!INV.sel || TAB !== "inv") { bar && bar.remove(); return; }
   if (!bar) { bar = document.createElement("div"); bar.id = "selbar"; bar.className = "selbar"; document.body.appendChild(bar); }
+  if (!MYP) return renderInventory();   // MYP сбрасывают после апгрейда, джекпота и т. п. — подгрузим заново
   const ids = [...INV.sel], sum = MYP.gifts.filter(g => INV.sel.has(g.id)).reduce((s, g) => s + Math.floor(g.value * .85), 0);
   bar.innerHTML = `<div><b>Выбрано: ${ids.length}</b><span>продажа за ⭐ ${fmt(sum)}</span></div>
     <button class="btn sm ghost" data-act="inv-all">Все</button><button class="btn sm red" data-act="inv-sell" ${ids.length ? "" : "disabled"}>${ic("coins")}Продать</button>`;
@@ -262,13 +263,16 @@ Object.assign(ACT, {
   "inv-sel": () => { INV.sel = INV.sel ? null : new Set(); H.sel(); drawInventory(); },
   "inv-tap": el => {
     if (!INV.sel) return openGift(REG.get(el.dataset.k));
+    if (!MYP) return renderInventory();
     const id = +el.dataset.id, g = MYP.gifts.find(x => x.id === id);
+    if (!g) return renderInventory();   // подарка уже нет (продан, ушёл в игру)
     if (g.price != null) return toast("Сначала сними подарок с маркета");
     INV.sel.has(id) ? INV.sel.delete(id) : INV.sel.add(id); H.sel(); drawInventory();
   },
-  "inv-all": () => { MYP.gifts.filter(g => g.price == null && (!INV.col || g.col === INV.col)).forEach(g => INV.sel.add(g.id)); H.sel(); drawInventory(); },
+  "inv-all": () => { if (!MYP) return renderInventory(); MYP.gifts.filter(g => g.price == null && (!INV.col || g.col === INV.col)).forEach(g => INV.sel.add(g.id)); H.sel(); drawInventory(); },
   "inv-sell": async () => {
     const ids = [...INV.sel]; if (!ids.length) return;
+    if (!MYP) return renderInventory();
     const sum = MYP.gifts.filter(g => INV.sel.has(g.id)).reduce((s, g) => s + Math.floor(g.value * .85), 0);
     if (!await confirmM(`Продать ${ids.length} ${plural(ids.length, ["подарок", "подарка", "подарков"])}?`, `Получишь ⭐ ${fmt(sum)} (85% ценности).`, "Продать")) return;
     const r = await post("gifts/sell", { ids }); setStars(r.stars); H.ok(); toast(`Продано на ⭐ ${fmt(r.paid)}`);

@@ -11,5 +11,5 @@
     } catch (e) {}
   };
   addEventListener("error", e => send(e.message, e.filename, e.lineno + ":" + e.colno));
-  addEventListener("unhandledrejection", e => { const r = e.reason; if (r && r.status) return; send(r && (r.stack || r.message) || r, "promise", 0); });
+  addEventListener("unhandledrejection", e => { const r = e.reason; if (r && r.status) return; send(r && r.message ? r.message + (r.stack && !String(r.stack).includes(r.message) ? " | " + r.stack : "") : r && r.stack || r, "promise", 0); });   // Safari кладёт в stack только кадры, без текста
 })();

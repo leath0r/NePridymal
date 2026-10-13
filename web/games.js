@@ -559,9 +559,10 @@ Object.assign(ACT, {
     if (i >= 0) UP.ts.splice(i, 1); else if (UP.ts.length >= 5) return toast("Максимум 5 целей"); else UP.ts.push(x);
     H.sel(); upgDraw();
   },
-  "pg-all": () => { const s = topSheet(), p = s._pg; p.free.slice(0, p.max).forEach(x => p.sel.add(x.id)); H.sel(); s._pgDraw(); },
+  "pg-all": () => { const s = topSheet(), p = s && s._pg; if (!p) return; p.free.slice(0, p.max).forEach(x => p.sel.add(x.id)); H.sel(); s._pgDraw(); },
   "pg-ok": () => {
-    const s = topSheet(), p = s._pg, list = p.free.filter(x => p.sel.has(x.id)), v = list.reduce((a, x) => a + x.value, 0);
+    const s = topSheet(), p = s && s._pg; if (!p) return;
+    const list = p.free.filter(x => p.sel.has(x.id)), v = list.reduce((a, x) => a + x.value, 0);
     if (!list.length) return toast("Выбери хотя бы один подарок");
     if (p.min && v < p.min) return toast(`Нужно минимум на ⭐ ${fmt(p.min)}`);
     closeSheet(); H.ok(); p.cb(list);
