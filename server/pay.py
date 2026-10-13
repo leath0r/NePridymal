@@ -1,13 +1,18 @@
 """Переводы звёзд между игроками (экран «Кошелёк» в стиле WeChat): свой QR «Получить», сканер, перевод по QR/поиску.
 QR и ссылка ведут на бота: t.me/<бот>?start=pay_<id>[_<сумма>] → кнопка открывает игру с ?pay=<id>&amt=<сумма>.
 Получатель получает ровно сумму перевода, комиссия (как в обменах) списывается с отправителя сверху и уходит в банк."""
+import asyncio
+import hashlib
+import hmac
 import json
 import math
+import secrets
 
 from fastapi import Depends, Request
 
 import loans
-from app import BOT_NAME, R, app, auth, bal, db, err, esc, event, kv_get, notify, now, q, q1, tx, user_brief
+import app as A
+from app import BOT_NAME, R, app, auth, bal, db, err, esc, event, kv_get, notify, now, q, q1, tg_call, tx, user_brief
 from settings import conf
 
 # настройки: по умолчанию из settings.toml, владелец меняет на лету в админке (вкладка «Переводы», хранится в kv 'paycfg')
@@ -42,7 +47,66 @@ db.executescript("""
 CREATE TABLE IF NOT EXISTS transfers(id INTEGER PRIMARY KEY, src INTEGER, dst INTEGER, amount INTEGER, fee INTEGER, note TEXT, ts INTEGER);
 CREATE INDEX IF NOT EXISTS transfers_src ON transfers(src, ts);
 CREATE INDEX IF NOT EXISTS transfers_dst ON transfers(dst, ts);
+CREATE TABLE IF NOT EXISTS pay_pin(user INTEGER PRIMARY KEY, hash TEXT, salt TEXT, ts INTEGER, fails INTEGER DEFAULT 0, lock INTEGER DEFAULT 0,
+  code TEXT, code_until INTEGER DEFAULT 0, code_fails INTEGER DEFAULT 0, code_ts INTEGER DEFAULT 0);
 """)
+
+# ---------------- пароль кошелька (6 цифр, как в WeChat): без него переводы не проходят ----------------
+# Храним только PBKDF2-хэш с солью. 5 неверных подряд — блок переводов на 15 минут. Забыл — бот присылает код сброса в личку.
+PIN_ITER, PIN_FAILS, PIN_LOCK = 120_000, 5, 15 * 60
+CODE_TTL, CODE_FAILS, CODE_EVERY = 10 * 60, 5, 60
+WEAK = {"000000", "111111", "222222", "333333", "444444", "555555", "666666", "777777", "888888", "999999",
+        "123456", "654321", "012345", "543210", "123123", "112233"}
+
+
+def _hash(pin, salt):
+    return hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(salt), PIN_ITER).hex()
+
+
+def _pin_ok(pin):
+    return isinstance(pin, str) and len(pin) == 6 and pin.isdigit()
+
+
+def has_pin(uid):
+    r = q1("SELECT hash FROM pay_pin WHERE user=?", uid)
+    return bool(r and r["hash"])
+
+
+async def _set_pin(uid, pin):
+    if not _pin_ok(pin):
+        err("пароль — 6 цифр")
+    if pin in WEAK:
+        err("слишком простой пароль — придумай другой")
+    salt = secrets.token_hex(16)
+    h = await asyncio.to_thread(_hash, pin, salt)   # PBKDF2 ~0,1 с — не держим цикл событий
+    with tx():
+        db.execute("INSERT INTO pay_pin(user,hash,salt,ts,fails,lock,code,code_until,code_fails) VALUES(?,?,?,?,0,0,NULL,0,0) "
+                   "ON CONFLICT(user) DO UPDATE SET hash=excluded.hash, salt=excluded.salt, ts=excluded.ts, fails=0, lock=0, code=NULL, code_until=0, code_fails=0",
+                   (uid, h, salt, now()))
+
+
+async def check_pin(uid, pin):
+    """Неверный пароль считает попытку и бросает err() — уже ПОСЛЕ записи счётчика (иначе tx откатил бы его)."""
+    r = q1("SELECT * FROM pay_pin WHERE user=?", uid)
+    if not r or not r["hash"]:
+        err("сначала задай пароль кошелька")
+    t = now()
+    if r["lock"] > t:
+        err(f"слишком много неверных попыток — переводы снова через {(r['lock'] - t + 59) // 60} мин")
+    ok = _pin_ok(pin) and hmac.compare_digest(await asyncio.to_thread(_hash, pin, r["salt"]), r["hash"])
+    with tx():
+        if ok:
+            db.execute("UPDATE pay_pin SET fails=0 WHERE user=?", (uid,))
+        else:
+            fails = (q1("SELECT fails FROM pay_pin WHERE user=?", uid)["fails"] or 0) + 1
+            if fails >= PIN_FAILS:
+                db.execute("UPDATE pay_pin SET fails=0, lock=? WHERE user=?", (t + PIN_LOCK, uid))
+            else:
+                db.execute("UPDATE pay_pin SET fails=? WHERE user=?", (fails, uid))
+    if not ok:
+        if fails >= PIN_FAILS:
+            err(f"неверный пароль — переводы заблокированы на {PIN_LOCK // 60} минут")
+        err(f"неверный пароль, осталось попыток: {PIN_FAILS - fails}")
 
 
 def _fee(amount):
@@ -68,7 +132,7 @@ def pay_home(uid=Depends(auth)):
     wk = now() - 7 * 86400
     week = {"in": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE dst=? AND ts>=?", uid, wk)["s"],
             "out": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE src=? AND ts>=?", uid, wk)["s"]}
-    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out}
+    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out, "pin": has_pin(uid)}
 
 
 @app.get(R + "/pay/peer/{tid}")
@@ -97,6 +161,7 @@ async def pay_send(req: Request, uid=Depends(auth)):
         err(f"минимум {cfg('min')} ⭐")
     if cfg("max") and amount > cfg("max"):
         err(f"за один раз не больше {cfg('max'):,} ⭐".replace(",", " "))
+    await check_pin(uid, str(b.get("pin", "")))
     fee = _fee(amount)
     with tx():
         dst = q1("SELECT id, banned FROM users WHERE id=?", to)
@@ -119,6 +184,66 @@ async def pay_send(req: Request, uid=Depends(auth)):
         left = bal(uid)
     notify(to, f"💸 Перевод от <b>{esc(name)}</b>: <b>{amount:,} ⭐</b>".replace(",", " ") + (f"\n\n<i>«{esc(note)}»</i>" if note else ""))
     return {"ok": True, "stars": left, "amount": amount, "fee": fee}
+
+
+@app.post(R + "/pay/pin")
+async def pin_set(req: Request, uid=Depends(auth)):
+    """Задать пароль (первый раз) или сменить (нужен старый)."""
+    b = await req.json()
+    if has_pin(uid):
+        await check_pin(uid, str(b.get("old", "")))
+    await _set_pin(uid, str(b.get("pin", "")))
+    return {"ok": True}
+
+
+@app.post(R + "/pay/pin/forgot")
+async def pin_forgot(uid=Depends(auth)):
+    """Код сброса — ботом в личку (аккаунт Telegram = личность игрока)."""
+    t = now()
+    r = q1("SELECT code_ts FROM pay_pin WHERE user=?", uid)
+    if r and t - (r["code_ts"] or 0) < CODE_EVERY:
+        err("код уже отправлен — проверь сообщения от бота (повторно — через минуту)")
+    code = f"{secrets.randbelow(10 ** 6):06d}"
+    res = await tg_call("sendMessage", chat_id=uid, parse_mode="HTML",
+                        text=f"🔐 Код для сброса пароля кошелька: <b>{code}</b>\n\nДействует 10 минут. Никому его не сообщай — администрация никогда его не спрашивает.")
+    if not res.get("ok"):
+        err("бот не смог написать — открой чат с ботом, нажми «Старт» и попробуй снова")
+    with tx():
+        db.execute("INSERT INTO pay_pin(user,code,code_until,code_fails,code_ts) VALUES(?,?,?,0,?) "
+                   "ON CONFLICT(user) DO UPDATE SET code=excluded.code, code_until=excluded.code_until, code_fails=0, code_ts=excluded.code_ts",
+                   (uid, hashlib.sha256(code.encode()).hexdigest(), t + CODE_TTL, t))
+    return {"ok": True}
+
+
+@app.post(R + "/pay/pin/reset")
+async def pin_reset(req: Request, uid=Depends(auth)):
+    b = await req.json()
+    code, t = str(b.get("code", "")), now()
+    r = q1("SELECT code, code_until, code_fails FROM pay_pin WHERE user=?", uid)
+    if not r or not r["code"] or r["code_until"] < t:
+        err("код устарел — запроси новый")
+    if r["code_fails"] >= CODE_FAILS:
+        err("слишком много неверных кодов — запроси новый")
+    if not hmac.compare_digest(hashlib.sha256(code.encode()).hexdigest(), r["code"]):
+        with tx():
+            db.execute("UPDATE pay_pin SET code_fails=code_fails+1 WHERE user=?", (uid,))
+        err("неверный код")
+    await _set_pin(uid, str(b.get("pin", "")))   # заодно стирает код и снимает блокировку
+    return {"ok": True}
+
+
+@app.post(R + "/pay/qr/send")
+async def qr_send(req: Request, uid=Depends(auth)):
+    """Постоянный QR для печати: картинку рисует телефон (PNG), бот присылает её игроку в чат — оттуда печатать/сохранять."""
+    data = await req.body()
+    if not 1000 < len(data) < 3 * 1024 * 1024 or not data.startswith(b"\x89PNG"):
+        err("не получилось сделать картинку")
+    r = await A.http.post(f"https://api.telegram.org/bot{A.TOKEN}/sendDocument", timeout=60,
+                          data={"chat_id": str(uid), "caption": "🧾 Твой постоянный QR для приёма звёзд — его можно распечатать. Он не меняется."},
+                          files={"document": ("qr-oplata.png", data, "image/png")})
+    if not r.json().get("ok"):
+        err("бот не смог написать — открой чат с ботом и нажми «Старт»")
+    return {"ok": True}
 
 
 # ---------------- админка: переводы игрока (в карточке игрока) ----------------

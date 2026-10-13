@@ -76,9 +76,11 @@ async function openPay(el) {
     <div class="pay-peers">${payPeers()}</div>
     <div class="sec-t">История переводов</div>
     ${payHistory(r.history)}
-    <p class="hint pay-note">Комиссия ${+(r.fee * 100).toFixed(2)}% платит отправитель — получатель получает ровно указанную сумму</p>`);
+    <p class="hint pay-note">Комиссия ${+(r.fee * 100).toFixed(2)}% платит отправитель — получатель получает ровно указанную сумму</p>
+    <div class="pay-rbtns"><button class="pay-link" data-act="pay-pin-change">${ic("lock")}Сменить пароль кошелька</button></div>`);
   starify(el);
   payCount(el.querySelector(".pay-num"), r.stars);
+  if (!r.pin && !(await payPinSetup())) { if (el.isConnected) closeSheet(); return; }   // без пароля кошелёк не открываем
   let t;
   el.querySelector(".pay-q").oninput = e => {
     clearTimeout(t);
@@ -109,7 +111,8 @@ function openPayRecv(amt = 0) {
           ${amt ? `<button class="pay-link" data-act="pay-amt-clear">Без суммы</button>` : ""}</div>
       </div></div>
     <button class="btn gold pay-share" data-act="pay-share" data-l="${esc(link)}" data-v="${amt}">${ic("send")}Отправить ссылку в Telegram</button>
-    <p class="hint pay-note">QR можно навести и обычной камерой телефона — откроется бот с кнопкой перевода</p>`;
+    <button class="btn ghost pay-share" data-act="pay-print">${ic("download")}QR для печати — прислать в Telegram</button>
+    <p class="hint pay-note">QR без суммы — постоянный: распечатай и принимай по нему звёзды. Камерой телефона он тоже открывается — бот покажет кнопку перевода</p>`;
   const top = SHEETS[SHEETS.length - 1];
   if (top && top.classList.contains("pay-r")) replaceSheet(top, html); else openSheet(html, "pay-r");
   starify(SHEETS[SHEETS.length - 1]);
@@ -207,12 +210,17 @@ Object.assign(ACT, {
     const s = el.closest(".sheet"), u = s._peer, a = payAmt(s);
     if (s._sending || !a) return;   // двойной тап — одно подтверждение
     s._sending = true;
-    const ok = await confirmM("Перевести?", `${esc(u.name)} получит <b>${fmt(a)} ⭐</b>. Перевод нельзя отменить.`, "Перевести");
-    if (!ok) { s._sending = false; return; }
+    if (!(PAY.info && PAY.info.pin)) {   // перевод из сканера, кошелёк ещё не открывали — пароль мог быть не задан
+      const st = await api("pay").catch(() => null);
+      if (st) PAY.info = { ...(PAY.info || {}), ...st };
+      if (st && !st.pin && !(await payPinSetup())) { s._sending = false; return; }
+    }
+    const pin = await pinPad(`Перевод ${fmt(a)} ⭐`, `${esc(u.name)} получит ${fmt(a)} ⭐ · введи пароль кошелька`, { forgot: true });
+    if (!pin) { s._sending = false; return; }
     el.disabled = true;
     const note = s.querySelector(".pay-memo").value.trim();
     let r;
-    try { r = await post("pay/send", { to: u.id, amount: a, note }); } catch (e) { el.disabled = false; s._sending = false; return; }
+    try { r = await post("pay/send", { to: u.id, amount: a, note, pin }); } catch (e) { el.disabled = false; s._sending = false; return; }
     H.ok(); setStars(r.stars);
     replaceSheet(s, `<div class="pay-done"><div class="pay-ok">${ic("check")}</div><b>Перевод отправлен</b>
       <div class="pay-dsum"><span class="pay-st">⭐</span>${fmt(r.amount)}</div>
@@ -226,6 +234,23 @@ Object.assign(ACT, {
       <button class="btn gold" data-act="pay-done">Готово</button>`);
     starify(s);
     burstAt(s.querySelector(".pay-ok"));
+  },
+  "pay-pin-change": async () => {
+    const old = await pinPad("Текущий пароль", "Введи пароль кошелька", { forgot: true }); if (!old) return;
+    const pin = await payPinTwice("Новый пароль"); if (!pin) return;
+    await post("pay/pin", { old, pin }); H.ok(); toast("Пароль изменён", "ok");
+  },
+  "pay-print": async el => {
+    el.disabled = true;
+    try {
+      const blob = await payQrPng();
+      const headers = { "Content-Type": "image/png" };
+      if (inTg) headers["X-Init-Data"] = tg.initData; else if (DEV_USER) headers["X-Dev-User"] = DEV_USER;
+      const r = await fetch("api/pay/qr/send", { method: "POST", headers, body: blob }), d = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(d && d.detail || "не получилось");
+      H.ok(); toast("Бот прислал QR в чат — оттуда его можно распечатать", "ok");
+    } catch (e) { H.err(); toast(e.message || "Не получилось", "err"); }
+    finally { el.disabled = false; }
   },
   "pay-done": () => {
     closeSheet();
@@ -243,3 +268,77 @@ Object.assign(ACT, {
     setTimeout(go, 600);
   }
 })();
+
+// ============================================================ пароль кошелька (6 цифр, как в WeChat)
+// pinPad → Promise<строка из 6 цифр | null (закрыли)>. opts.forgot — ссылка «Забыл пароль?» (сброс кодом от бота).
+function pinPad(title, sub, opts = {}) {
+  return new Promise(done => {
+    let v = "", fin = false;
+    const finish = x => { if (fin) return; fin = true; done(x); };
+    const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9, opts.forgot ? "?" : "", 0, "<"];
+    const el = openSheet(`<div class="pin">
+        <div class="pin-ic">${ic("lock")}</div><b class="pin-t">${title}</b><span class="pin-s">${sub || ""}</span>
+        <div class="pin-dots">${"<i></i>".repeat(6)}</div>
+        <div class="pin-kb">${keys.map(k => k === "" ? "<span></span>" : k === "?" ? `<button class="pin-f" data-k="?">Забыл?</button>`
+          : `<button data-k="${k}">${k === "<" ? ic("back") : k}</button>`).join("")}</div></div>`, "pin-s");
+    const dots = el.querySelectorAll(".pin-dots i");
+    const paint = () => dots.forEach((d, i) => d.classList.toggle("on", i < v.length));
+    el._onClose = () => finish(null);
+    el.querySelector(".pin-kb").onclick = async e => {
+      const b = e.target.closest("button"); if (!b || fin) return;
+      const k = b.dataset.k; H.sel();
+      if (k === "<") { v = v.slice(0, -1); return paint(); }
+      if (k === "?") { fin = true; closeSheet(); return done(await payPinForgot()); }
+      if (v.length >= 6) return;
+      v += k; paint();
+      if (v.length === 6) { const x = v; setTimeout(() => { if (fin) return; fin = true; closeSheet(); done(x); }, 120); }
+    };
+  });
+}
+// ввести новый пароль дважды; null — передумали
+async function payPinTwice(title = "Придумай пароль кошелька") {
+  for (;;) {
+    const a = await pinPad(title, "6 цифр — будешь вводить при каждом переводе"); if (!a) return null;
+    if (/^(\d)\1{5}$/.test(a) || ["123456", "654321", "012345", "543210", "123123", "112233"].includes(a)) { H.err(); toast("Слишком простой пароль — придумай другой", "err"); continue; }
+    const b = await pinPad("Повтори пароль", "Введи те же 6 цифр ещё раз"); if (!b) return null;
+    if (a === b) return a;
+    H.err(); toast("Пароли не совпали — давай ещё раз", "err");
+  }
+}
+// первый вход в кошелёк: пароль обязателен
+async function payPinSetup() {
+  const pin = await payPinTwice();
+  if (!pin) { toast("Без пароля кошелёк не откроется — он защищает переводы"); return false; }
+  try { await post("pay/pin", { pin }); } catch (e) { return false; }
+  if (PAY.info) PAY.info.pin = true;
+  H.ok(); toast("Пароль установлен — запомни его", "ok");
+  return true;
+}
+// забыл пароль: код от бота → новый пароль. Возвращает новый пароль (им же продолжаем перевод) или null
+async function payPinForgot() {
+  if (!await confirmM("Сбросить пароль?", "Бот пришлёт тебе в Telegram код из 6 цифр — введи его, потом придумай новый пароль.", "Прислать код")) return null;
+  try { await post("pay/pin/forgot"); } catch (e) { return null; }
+  toast("Код отправлен — загляни в чат с ботом", "ok");
+  const code = await pinPad("Код из сообщения бота", "Действует 10 минут"); if (!code) return null;
+  const pin = await payPinTwice("Новый пароль"); if (!pin) return null;
+  try { await post("pay/pin/reset", { code, pin }); } catch (e) { return null; }
+  H.ok(); toast("Пароль изменён", "ok");
+  return pin;
+}
+// постоянный QR (без суммы) картинкой для печати: белый лист, имя, QR, подпись
+function payQrPng() {
+  const link = ME.refLink.replace(/start=.*$/, `start=pay_${ME.id}`);
+  const q = qrcode(0, "M"); q.addData(link); q.make();
+  const n = q.getModuleCount(), cell = 16, qs = n * cell, W = qs + 160, H0 = qs + 360;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H0;
+  const c = cv.getContext("2d");
+  c.fillStyle = "#fff"; c.fillRect(0, 0, W, H0);
+  c.fillStyle = "#14112a"; c.textAlign = "center";
+  c.font = "800 44px -apple-system,Segoe UI,Roboto,sans-serif"; c.fillText("Оплата звёздами ⭐", W / 2, 80);
+  c.font = "600 34px -apple-system,Segoe UI,Roboto,sans-serif"; c.fillText((ME.name || "").slice(0, 28), W / 2, 135);
+  for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) c.fillRect(80 + k * cell, 170 + r * cell, cell, cell);
+  c.font = "500 28px -apple-system,Segoe UI,Roboto,sans-serif"; c.fillStyle = "#555";
+  c.fillText("Наведи камеру телефона или сканер в игре", W / 2, 170 + qs + 70);
+  c.fillText("@" + (ME.refLink.match(/t\.me\/([^?]+)/) || [, "бот"])[1], W / 2, 170 + qs + 115);
+  return new Promise((ok, no) => cv.toBlob(b => b ? ok(b) : no(new Error("не получилось сделать картинку")), "image/png"));
+}
