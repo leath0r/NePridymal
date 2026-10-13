@@ -215,6 +215,7 @@ Object.assign(ACT, {
       PAY.taps = 0;
       try { a = (PAY.anon = PAY.anon || (await api("pay/anon")).addr); } catch (e) { return; }
       msg = "🕶 Анонимный адрес скопирован — отправитель не узнает, кому переводит";
+      if (typeof eggFound === "function") setTimeout(() => eggFound("anon"), 1500);
       H.imp("heavy");
     }
     const ok = () => { H.ok(); toast(msg, "ok"); };
@@ -256,6 +257,7 @@ Object.assign(ACT, {
     let r;
     try { r = await post("pay/send", s._addr ? { addr: s._addr, amount: a, note, pin } : { to: u.id, amount: a, note, pin }); } catch (e) { el.disabled = false; s._sending = false; return; }
     H.ok(); setStars(r.stars);
+    if (r.amount === 1337 && typeof eggFound === "function") setTimeout(() => { toast("👾 1337 ⭐ — ты из наших", "ok"); eggFound("leet"); }, 900);
     replaceSheet(s, `<div class="pay-done"><div class="pay-ok">${ic("check")}</div><b>Перевод отправлен</b>
       <div class="pay-dsum"><span class="pay-st">⭐</span>${fmt(r.amount)}</div>
       <div class="pay-rcpt">

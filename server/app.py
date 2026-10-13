@@ -799,6 +799,9 @@ def achievements(u, gifts, friends, worth):
          ("🤝", "Душа компании", "5 друзей", friends >= 5),
          ("📣", "Вербовщик", "Пригласи 3 друзей", u["refs"] >= 3),
          ("🎖", "Ветеран", "Достигни 10 уровня", lvl >= 10)]
+    import eggs
+    n = eggs.egg_count(u["id"])
+    A.append(("🥚", "Охотник за пасхалками", f"Найди {eggs.EGG_NEED} секретов в игре · найдено {min(n, eggs.EGG_NEED)} из {eggs.EGG_NEED}", n >= eggs.EGG_NEED))
     return [{"e": e, "t": t, "d": d, "got": bool(g)} for e, t, d, g in A]
 
 
@@ -2202,6 +2205,7 @@ import retain  # noqa: E402,F401 — кэшбэк недели и «возвра
 import odds  # noqa: E402,F401 — админка «Шансы»: возврат по играм на лету
 import pay  # noqa: E402,F401 — переводы звёзд между игроками по QR («Кошелёк»)
 import dbtools  # noqa: E402,F401 — админка: экспорт/импорт базы (только владелец)
+import eggs  # noqa: E402,F401 — пасхалки (без звёзд, только достижение)
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------

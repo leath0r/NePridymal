@@ -248,7 +248,7 @@ function profileHTML(p, tab = "show") {
     ${isMe ? `<div class="disc">${esc(ME.disclaimer)}</div>` : ""}`;
 }
 
-const ACH_IC = { "Первый кейс": "gift", "Кейсоман": "box", "Легенда": "crown", "Космонавт": "rocket", "На Луну": "moon", "Магнат": "wallet",
+const ACH_IC = { "Первый кейс": "gift", "Охотник за пасхалками": "award", "Кейсоман": "box", "Легенда": "crown", "Космонавт": "rocket", "На Луну": "moon", "Магнат": "wallet",
   "Коллекционер": "layers", "Душа компании": "heart", "Вербовщик": "megaphone", "Ветеран": "medal" };
 
 // ============================================================ действия
