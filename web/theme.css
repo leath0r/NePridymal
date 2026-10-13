@@ -87,7 +87,7 @@ html.lite *,html.lite *::before,html.lite *::after{backdrop-filter:none!importan
 html.lite::before,html.lite::after{display:none!important}
 html.lite *,html.lite *::before,html.lite *::after{animation-iteration-count:1!important}
 html.lite .btn.gold::after,html.lite .gcard::after,html.lite .case::after,html.lite .gift.shine::after,html.lite .showcase .sc .gift::after,
-html.lite .pw-main::after,html.lite .phead.v3>.ava::before,html.lite .bcoin,html.lite .rays,html.lite .won-rays,html.lite .bt-hero-bg,
+html.lite .pw-main::after,html.lite .phead.v3>.ava::before,html.lite .ph-top>.ava::before,html.lite .bcoin,html.lite .rays,html.lite .won-rays,html.lite .bt-hero-bg,
 html.lite .avfar,html.lite .avstars,html.lite .sfsky,html.lite .dg-lights,html.lite .slot::before,html.lite .avspeed{display:none!important}
 html.lite nav.tabs{background-color:var(--card)}
 html.lite header{background:var(--bg)}

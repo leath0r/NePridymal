@@ -220,12 +220,14 @@ function profileHTML(p, tab = "show") {
       ${!p.pinned.length && isMe ? `<button class="btn ghost" style="margin-top:12px" data-act="edit-profile">${ic("pin")}Выбрать подарки для витрины</button>` : ""}`
     : emptyHTML("gift", isMe ? "Открой первый кейс — тут будет витрина" : "Витрина пуста");
   return `${bannerHTML(p)}
-    <div class="phead v3">${avaHTML(p, 100, { ring: true, p: prog })}
-      <div class="pname"><h2>${esc(p.name)}</h2><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}</div>
+    <div class="phead v4">
+      <div class="ph-top">${avaHTML(p, 96, { ring: true, p: prog })}
+        <div class="ph-tags"><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}
+          ${got ? `<div class="pbadges">${p.ach.filter(a => a.got).slice(0, 6).map(a => `<span title="${esc(a.t)}">${ic(ACH_IC[a.t] || "award")}</span>`).join("")}</div>` : ""}</div></div>
+      <div class="pname"><h2>${esc(p.name)}</h2></div>
       ${p.title ? `<div class="ptitle" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</div>` : ""}
       <div class="un">${p.username ? "@" + esc(p.username) + " · " : ""}в игре с ${new Date(p.since * 1000).toLocaleDateString("ru", { day: "numeric", month: "short" })}</div>
       ${p.bio ? `<div class="bio">${esc(p.bio)}</div>` : ""}
-      ${got ? `<div class="pbadges">${p.ach.filter(a => a.got).slice(0, 6).map(a => `<span title="${esc(a.t)}">${ic(ACH_IC[a.t] || "award")}</span>`).join("")}</div>` : ""}
     </div>
     <div class="pworth">
       <div class="pw-main"><span>Состояние</span><b>⭐ ${fmt(p.worth)}</b>${isMe ? `<div class="pw-lv"><div class="lvbar"><div style="width:${prog}%"></div></div><small>${lv.level} ур. · ещё ${fmt(lv.to - lv.xp)} XP до ${lv.level + 1}</small></div>` : ""}</div>

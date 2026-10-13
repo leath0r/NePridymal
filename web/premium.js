@@ -85,6 +85,6 @@ function offerCard() {
 const _phPrem = profileHTML;
 profileHTML = function (p, tab) {
   const h = _phPrem(p, tab);
-  return p.vip ? h.replace('</h2><span class="plv">', '</h2><span class="vipb">VIP</span><span class="plv">') : h;
+  return p.vip ? h.replace('<span class="plv">', '<span class="vipb">VIP</span><span class="plv">') : h;   // теги справа от аватара
 };
 Object.assign(ACT, { "prem-buy": el => premBuy(el.dataset.k, el) });

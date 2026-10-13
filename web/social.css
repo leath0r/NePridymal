@@ -358,3 +358,25 @@ details.locked[open]>summary{margin-bottom:12px}
 .psheet .banner i{animation:bdrift 9s ease-in-out infinite alternate}
 .psheet .banner i:nth-child(2n){animation-duration:11s;animation-direction:alternate-reverse}
 @keyframes bdrift{to{translate:0 -6px;rotate:6deg}}
+
+/* ================= профиль v4: аватар слева, наполовину на баннере; теги справа от аватара — поверх баннера ================= */
+.phead.v4{margin-top:-58px;position:relative;z-index:1;text-align:left}
+.ph-top{display:flex;align-items:flex-start;gap:12px;padding:0 2px}
+.ph-top>.ava{--s:96px;flex:none;isolation:isolate}
+/* свечение за аватаром — статичное (вращающийся размытый градиент тормозил на слабых телефонах) */
+.ph-top>.ava::before{content:"";position:absolute;inset:-7px;border-radius:50%;z-index:-1;pointer-events:none;
+  background:conic-gradient(from 210deg,#ffd23f,#ff6fb5,#7c6bff,#3fd6ff,#ffd23f);filter:blur(9px);opacity:.5}
+.ph-tags{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:14px}
+.ph-tags .plv,.ph-tags .vipb,.ph-tags .ctag{margin:0;box-shadow:0 4px 12px -4px rgba(0,0,0,.5)}
+.ph-tags .ctag{background:rgba(0,0,0,.5);color:#fff}
+.ph-tags .pbadges{display:flex;flex-wrap:wrap;gap:5px;margin:0;justify-content:flex-start;flex-basis:100%}
+.ph-tags .pbadges span{width:26px;height:26px;border-radius:9px}
+.ph-tags .pbadges .ic{width:15px;height:15px}
+.ph-tags .pbadges.chosen{padding:0;margin:0}
+.ph-tags .pbadges.chosen .pbadge{background:rgba(0,0,0,.5);color:#fff;padding:3px 9px 3px 6px;font-size:11px}
+.phead.v4 .pname{justify-content:flex-start;margin-top:10px}
+.phead.v4 h2{text-shadow:none}
+.phead.v4 .ptitle{margin:6px 0 2px}
+.phead.v4 .pstatus{text-align:left;margin-top:4px;padding:0;max-width:none}
+.phead.v4 .un{color:var(--hint);font-size:13.5px;margin-top:4px}
+.phead.v4 .bio{margin-top:10px;padding:9px 14px;border-radius:14px;background:var(--card);font-size:14px;max-width:100%}
