@@ -40,7 +40,9 @@ function payCount(el, to) {
   requestAnimationFrame(step);
 }
 
-const payRow = x => `<div class="row tap pay-row" data-act="pay-to" data-id="${x.user.id}">${avaHTML(x.user, 40)}<div class="grow"><div class="t">${esc(x.user.name)}</div>
+// анонимный получатель (пасхалка с адресом): серый аватар с «?» вместо фото
+const payAva = (u, s) => u.anon ? `<div class="ava pay-anon" style="--s:${s}px"><span>?</span></div>` : avaHTML(u, s);
+const payRow = x => `<div class="row pay-row${x.user.anon ? "" : " tap"}"${x.user.anon ? "" : ` data-act="pay-to" data-id="${x.user.id}"`}>${payAva(x.user, 40)}<div class="grow"><div class="t">${esc(x.user.name)}</div>
   <div class="s">${x.in ? "Входящий" : "Исходящий"} · ${payTime(x.ts)}${x.note ? " · «" + esc(x.note) + "»" : ""}</div></div>
   <b class="pay-d ${x.in ? "in" : ""}">${x.in ? "+" : "−"}${fmt(x.amount)} ⭐</b></div>`;
 function payHistory(list) {
@@ -53,11 +55,11 @@ function payHistory(list) {
   }
   return out + "</div>";
 }
-const payPeer = (u, tag, addr) => `<button class="pay-peer" data-act="pay-to" data-id="${u.id}"${addr ? ` data-addr="${esc(addr)}"` : ""}>${avaHTML(u, 50)}<span>${esc(u.name)}</span>${tag ? `<i>${tag}</i>` : ""}</button>`;
+const payPeer = (u, tag, addr) => `<button class="pay-peer" data-act="pay-to" data-id="${u.id}"${addr ? ` data-addr="${esc(addr)}"` : ""}>${payAva(u, 50)}<span>${esc(u.name)}</span>${tag ? `<i>${tag}</i>` : ""}</button>`;
 // недавние получатели/отправители из истории + друзья, без повторов
 function payPeers() {
   const seen = new Set(), out = [];
-  for (const x of (PAY.info && PAY.info.history) || []) if (!seen.has(x.user.id)) { seen.add(x.user.id); out.push(payPeer(x.user, "недавно")); }
+  for (const x of (PAY.info && PAY.info.history) || []) if (!x.user.anon && !seen.has(x.user.id)) { seen.add(x.user.id); out.push(payPeer(x.user, "недавно")); }
   for (const u of PAY.friends || []) if (!seen.has(u.id)) { seen.add(u.id); out.push(payPeer(u)); }
   return out.slice(0, 20).join("") || `<div class="hint pay-empty">Добавь друзей или найди игрока поиском</div>`;
 }
@@ -164,11 +166,11 @@ async function openPaySend(id, amt = 0, addr = "") {
   if (PAY.busy) return;   // двойной тап не открывает два экрана
   PAY.busy = true;
   let u, info;
-  try { [u, info] = await Promise.all([api("pay/peer/" + id), api("pay").catch(() => PAY.info || { fee: 0.05, min: 10 })]); }
+  try { [u, info] = await Promise.all([api(addr ? "pay/addr/" + enc(addr) : "pay/peer/" + id), api("pay").catch(() => PAY.info || { fee: 0.05, min: 10 })]); }
   catch (e) { return; } finally { PAY.busy = false; }
   PAY.info = info;
   const fee = addr && info.feeAddr != null ? info.feeAddr : info.fee, min = info.min || 10, max = info.max || 0, fp = +(fee * 100).toFixed(2);
-  const el = openSheet(`<div class="pay-to">${avaHTML(u, 78)}<span class="pay-tl">Перевод игроку</span><b>${esc(u.name)}</b><span>${addr ? "по адресу " + payAddrFmt(addr.toUpperCase()) : u.username ? "@" + esc(u.username) : "id " + u.id}</span></div>
+  const el = openSheet(`<div class="pay-to">${payAva(u, 78)}<span class="pay-tl">Перевод игроку</span><b>${esc(u.name)}</b><span>${addr ? "по адресу " + payAddrFmt(addr.toUpperCase()) : u.username ? "@" + esc(u.username) : "id " + u.id}</span></div>
     <div class="pay-amt"><label>Сумма перевода</label>
       <div class="pay-ai"><span class="pay-st">⭐</span><input class="pay-a" inputmode="numeric" placeholder="0" value="${amt || ""}" autocomplete="off" maxlength="15"></div>
       <div class="pay-ab">Баланс: <b class="bal-live">${fmt(ME.stars)}</b> ⭐</div></div>
@@ -205,8 +207,17 @@ Object.assign(ACT, {
   pay: () => openPay(),
   "pay-scan": () => payScan(),
   "pay-recv": () => openPayRecv(0),
-  "pay-addr-copy": el => {
-    const a = el.dataset.a, ok = () => { H.ok(); toast("Адрес кошелька скопирован", "ok"); };
+  "pay-addr-copy": async el => {
+    // пасхалка: 5 нажатий подряд (без пауз дольше 1.5 с) — копируется анонимный адрес
+    const t = Date.now(); PAY.taps = t - (PAY.tapT || 0) < 1500 ? (PAY.taps || 0) + 1 : 1; PAY.tapT = t;
+    let a = el.dataset.a, msg = "Адрес кошелька скопирован";
+    if (PAY.taps >= 5) {
+      PAY.taps = 0;
+      try { a = (PAY.anon = PAY.anon || (await api("pay/anon")).addr); } catch (e) { return; }
+      msg = "🕶 Анонимный адрес скопирован — отправитель не узнает, кому переводит";
+      H.imp("heavy");
+    }
+    const ok = () => { H.ok(); toast(msg, "ok"); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(a).then(ok, () => copyFallback(a, ok)); else copyFallback(a, ok);
   },
   "pay-to": el => openPaySend(+el.dataset.id, 0, el.dataset.addr || ""),
@@ -248,7 +259,7 @@ Object.assign(ACT, {
     replaceSheet(s, `<div class="pay-done"><div class="pay-ok">${ic("check")}</div><b>Перевод отправлен</b>
       <div class="pay-dsum"><span class="pay-st">⭐</span>${fmt(r.amount)}</div>
       <div class="pay-rcpt">
-        <div><span>Получатель</span><b class="pay-who">${avaHTML(u, 22)}${esc(u.name)}</b></div>
+        <div><span>Получатель</span><b class="pay-who">${payAva(u, 22)}${esc(u.name)}</b></div>
         <div><span>Комиссия</span><b>${fmt(r.fee)} ⭐</b></div>
         <div><span>Списано</span><b>${fmt(r.amount + r.fee)} ⭐</b></div>
         ${note ? `<div><span>Комментарий</span><b>«${esc(note.slice(0, 60))}»</b></div>` : ""}

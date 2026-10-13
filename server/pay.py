@@ -53,7 +53,15 @@ CREATE INDEX IF NOT EXISTS transfers_dst ON transfers(dst, ts);
 CREATE TABLE IF NOT EXISTS pay_pin(user INTEGER PRIMARY KEY, hash TEXT, salt TEXT, ts INTEGER, fails INTEGER DEFAULT 0, lock INTEGER DEFAULT 0,
   code TEXT, code_until INTEGER DEFAULT 0, code_fails INTEGER DEFAULT 0, code_ts INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS pay_addr(user INTEGER PRIMARY KEY, addr TEXT UNIQUE NOT NULL, ts INTEGER);
+CREATE TABLE IF NOT EXISTS pay_anon(user INTEGER PRIMARY KEY, addr TEXT UNIQUE NOT NULL, ts INTEGER);
 """)
+try:   # anon=1 — перевод на анонимный адрес: отправитель не видит, кому ушли звёзды
+    db.execute("ALTER TABLE transfers ADD COLUMN anon INTEGER DEFAULT 0")
+except Exception:
+    pass
+# пасхалка: 5 раз подряд «скопировать адрес» → копируется анонимный адрес; переводящий видит «Неизвестный пользователь»
+ANON = {"id": 0, "anon": True, "name": "Неизвестный пользователь", "username": None, "photo": None, "level": 0,
+        "clan": None, "crown": None, "title": None, "frame": None, "vip": False}
 
 # ---------------- адрес кошелька (как в крипте): NP + 16 случайных символов + 4 символа контрольной суммы ----------------
 # Случайный, а не из id: по адресу не узнать Telegram-аккаунт, подобрать чужой нельзя (80 бит). Контрольная сумма ловит опечатки.
@@ -73,19 +81,20 @@ def addr_norm(s):
     return s
 
 
-def addr_of(uid):
-    r = q1("SELECT addr FROM pay_addr WHERE user=?", uid)
+def addr_of(uid, table="pay_addr"):
+    """Постоянный адрес игрока (table="pay_anon" — анонимный). Создаётся при первом запросе."""
+    r = q1(f"SELECT addr FROM {table} WHERE user=?", uid)
     if r:
         return r["addr"]
     while True:
         body = "".join(secrets.choice(ADDR_ABC) for _ in range(16))
         a = "NP" + body + _addr_sum(body)
         with tx():
-            r = q1("SELECT addr FROM pay_addr WHERE user=?", uid)
+            r = q1(f"SELECT addr FROM {table} WHERE user=?", uid)
             if r:
                 return r["addr"]
-            if not q1("SELECT 1 FROM pay_addr WHERE addr=?", a):
-                db.execute("INSERT INTO pay_addr(user,addr,ts) VALUES(?,?,?)", (uid, a, now()))
+            if not q1("SELECT 1 FROM pay_addr WHERE addr=? UNION SELECT 1 FROM pay_anon WHERE addr=?", a, a):
+                db.execute(f"INSERT INTO {table}(user,addr,ts) VALUES(?,?,?)", (uid, a, now()))
                 return a
 
 # ---------------- пароль кошелька (6 цифр, как в WeChat): без него переводы не проходят ----------------
@@ -165,7 +174,8 @@ def pay_home(uid=Depends(auth)):
         if other not in peers:
             peers[other] = _brief(other)
         if peers[other]:
-            out.append({"in": r["dst"] == uid, "amount": r["amount"], "fee": r["fee"], "note": r["note"], "ts": r["ts"], "user": peers[other]})
+            hide = r["anon"] and r["src"] == uid   # отправитель анонимного перевода получателя не видит
+            out.append({"in": r["dst"] == uid, "amount": r["amount"], "fee": r["fee"], "note": r["note"], "ts": r["ts"], "user": ANON if hide else peers[other]})
     wk = now() - 7 * 86400
     week = {"in": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE dst=? AND ts>=?", uid, wk)["s"],
             "out": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE src=? AND ts>=?", uid, wk)["s"]}
@@ -183,27 +193,35 @@ def pay_peer(tid: int, uid=Depends(auth)):
 
 
 def addr_owner(a):
-    """Адрес → id владельца (или err с понятной причиной)."""
+    """Адрес → (id владельца, анонимный ли адрес) или err с понятной причиной."""
     n = addr_norm(a)
     if not n:
         err("это не адрес кошелька: он начинается с NP и состоит из 22 символов")
     if _addr_sum(n[2:18]) != n[18:]:
         err("в адресе опечатка — проверь символы")
     r = q1("SELECT user FROM pay_addr WHERE addr=?", n)
+    if r:
+        return r["user"], False
+    r = q1("SELECT user FROM pay_anon WHERE addr=?", n)
     if not r:
         err("кошелёк с таким адресом не найден")
-    return r["user"]
+    return r["user"], True
 
 
 @app.get(R + "/pay/addr/{a}")
 def pay_addr(a: str, uid=Depends(auth)):
-    r = {"user": addr_owner(a)}
-    if r["user"] == uid:
+    owner, anon = addr_owner(a)
+    if owner == uid:
         err("это твой адрес — дай его другу")
-    u = q1("SELECT * FROM users WHERE id=?", r["user"])
+    u = q1("SELECT * FROM users WHERE id=?", owner)
     if not u or u["banned"]:
         err("кошелёк с таким адресом не найден")
-    return user_brief(u)
+    return ANON if anon else user_brief(u)
+
+
+@app.get(R + "/pay/anon")
+def pay_anon(uid=Depends(auth)):
+    return {"addr": addr_of(uid, "pay_anon")}
 
 
 @app.post(R + "/pay/send")
@@ -213,9 +231,9 @@ async def pay_send(req: Request, uid=Depends(auth)):
         to, amount = int(b.get("to", 0) or 0), int(b.get("amount", 0))
     except (TypeError, ValueError):
         err("введи сумму")
-    fee_k = "fee"
+    fee_k, anon = "fee", False
     if b.get("addr"):   # перевод по адресу — своя комиссия (админка → «Переводы»)
-        to, fee_k = addr_owner(b["addr"]), "fee_addr"
+        (to, anon), fee_k = addr_owner(b["addr"]), "fee_addr"
     note = " ".join(str(b.get("note", "")).split())[:NOTE_MAX]
     if to == uid:
         err("себе перевести нельзя")
@@ -243,7 +261,7 @@ async def pay_send(req: Request, uid=Depends(auth)):
         if fee:
             event(uid, "fee", -fee)
         event(to, "transfer", amount)
-        db.execute("INSERT INTO transfers(src,dst,amount,fee,note,ts) VALUES(?,?,?,?,?,?)", (uid, to, amount, fee, note, now()))
+        db.execute("INSERT INTO transfers(src,dst,amount,fee,note,ts,anon) VALUES(?,?,?,?,?,?,?)", (uid, to, amount, fee, note, now(), int(anon)))
         name = q1("SELECT name FROM users WHERE id=?", uid)["name"]
         left = bal(uid)
     notify(to, f"💸 Перевод от <b>{esc(name)}</b>: <b>{amount:,} ⭐</b>".replace(",", " ") + (f"\n\n<i>«{esc(note)}»</i>" if note else ""))

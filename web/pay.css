@@ -160,3 +160,5 @@ html.lite .pay-ok .ic path{stroke-dashoffset:0;animation:none}
 .pay-raddr small{grid-column:1/-1;font-size:11px;color:#14112a80}
 .pay-raddr span{font:700 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em;overflow-wrap:anywhere}
 .pay-raddr .ic{width:16px;height:16px;color:#c47a00}
+.ava.pay-anon{--ac:#3a3550}
+.ava.pay-anon span{color:#ffffffb3;font-weight:900}
