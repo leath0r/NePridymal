@@ -273,7 +273,9 @@ const CASE_COL = {
 let BAL_HOLD = 0;   // >0 — идёт анимация игры: фоновое обновление не показывает итоговый баланс раньше времени
 async function loadMe() {
   const prevKeys = ME ? ME.keys : null;
-  const fresh = await api("me");
+  let fresh = null;
+  if (window.ME_P) { const p = window.ME_P; window.ME_P = null; fresh = await p.catch(() => null); }   // ранний запрос из index.html
+  if (!fresh) fresh = await api("me");
   if (!fresh || typeof fresh !== "object") throw new Error("me: пустой ответ");   // иначе ME = null и таймеры падают каждую секунду
   if (BAL_HOLD > 0 && ME) fresh.stars = ME.stars;
   ME = fresh;
