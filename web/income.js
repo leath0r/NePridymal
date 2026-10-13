@@ -90,6 +90,8 @@ renderCases = async function () {
   loadInc();
 };
 setInterval(() => { if (TAB === "cases" && !bgOff()) loadInc(); }, 60000);
+// бизнес по id; INC может быть ещё не загружен (тап до ответа сервера) — тогда null
+const incBiz = id => INC && INC.biz ? INC.biz.find(x => x.id === id) : null;
 
 Object.assign(ACT, {
   inc: () => openInc(),
@@ -98,10 +100,10 @@ Object.assign(ACT, {
     const r = await post("income/collect"); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.got)} дохода${r.tax ? ` (налог 3% в банк: ⭐ ${fmt(r.tax)})` : ""}`, "ok"); burstAt(el);
     await loadInc();
   },
-  "biz-shift": el => bizShift(INC.biz.find(x => x.id === el.dataset.id)),
+  "biz-shift": el => { const b = incBiz(el.dataset.id); if (b) bizShift(b); },
   "biz-tap": el => bizTap(el),
   "biz-buy": async el => {
-    const b = INC.biz.find(x => x.id === el.dataset.id), cost = b.level ? b.upgrade : b.price;
+    const b = incBiz(el.dataset.id); if (!b) return; const cost = b.level ? b.upgrade : b.price;
     if (cost > ME.stars) return toast("Не хватает звёзд ⭐");
     if (!await confirmM(b.level ? "Прокачать?" : "Купить бизнес?", b.level
       ? `${esc(b.name)} → ${b.level + 1} ур.: доход ⭐ ${fmt(b.income)} → ⭐ ${fmt(b.next)} в час за ⭐ ${fmt(cost)}. Накопленное заберётся автоматически.`
@@ -110,7 +112,7 @@ Object.assign(ACT, {
     await loadInc(); afterLevelUp(r.levelup);
   },
   "biz-sell": el => {
-    const b = INC.biz.find(x => x.id === el.dataset.id); if (!b || !b.level) return;
+    const b = incBiz(el.dataset.id); if (!b || !b.level) return;
     const acc = b.accrued ? ` Накопленные ⭐ ${fmt(b.accrued)} заберутся автоматически.` : "";
     openSheet(`<h2 class="gtitle">${ic("coins")}Продать: ${esc(b.name)}</h2>
       <div class="hint" style="font-size:13px;margin:-4px 0 12px">Возвращается половина того, что ты вложил.${acc}</div>
@@ -118,7 +120,7 @@ Object.assign(ACT, {
       <button class="btn red" data-act="biz-sell-go" data-id="${b.id}" data-w="all"><span class="bs-t"><b>Продать бизнес · +⭐ ${fmt(b.sell)}</b><small>все ${b.level} ${plural(b.level, ["уровень", "уровня", "уровней"])}, купить заново — за полную цену</small></span></button>`, "bizsell-s");
   },
   "biz-sell-go": async el => {
-    const b = INC.biz.find(x => x.id === el.dataset.id), all = el.dataset.w === "all"; if (!b) return;
+    const b = incBiz(el.dataset.id), all = el.dataset.w === "all"; if (!b) return;
     if (all && !await confirmM("Продать бизнес?", `${esc(b.name)} уйдёт за ⭐ ${fmt(b.sell)}. Купить снова можно только за полную цену ⭐ ${fmt(b.price)}.`, "Продать")) return;
     const r = await post(`biz/${b.id}/sell`, { what: all ? "all" : "level" }); closeSheet();
     setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.got + r.income)}${r.income ? ` (с доходом ⭐ ${fmt(r.income)})` : ""}`, "ok");

@@ -519,8 +519,8 @@ async function renderTop() {
   const money = topKind === "profit" || topKind === "week";
   const sc = r => topKind === "level" ? `${r.score} ур.` : topKind === "crash" ? `x${(+r.score).toFixed(2)}`
     : money ? `${r.score >= 0 ? "+" : "−"}⭐ ${short(Math.abs(r.score))}` : `⭐ ${short(r.score)}`;
-  const me = d.me;
-  $("#tme").innerHTML = `<div class="tme">
+  const me = d.me, tme = $("#tme"); if (!tme) return;   // пока грузилось, переключили на «Сезон» — там другая разметка
+  tme.innerHTML = `<div class="tme">
     <div class="tme-h">${avaHTML(ME, 40, { lv: true })}<div><b>Твоя статистика</b><span>${topKind === "week" ? "за эту неделю" : "за всё время"}${me.pos ? ` · ${me.pos} место` : ""}</span></div></div>
     <div class="tme-g"><div><span>Выиграно</span><b class="tw">+⭐ ${short(me.won)}</b></div><div><span>Проиграно</span><b class="tl">−⭐ ${short(me.lost)}</b></div>
       <div><span>Итог</span><b class="${me.net >= 0 ? "tw" : "tl"}">${me.net >= 0 ? "+" : "−"}⭐ ${short(Math.abs(me.net))}</b></div></div></div>`;
