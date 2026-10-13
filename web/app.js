@@ -4,6 +4,8 @@
 // ============================================================
 const tg = window.Telegram && Telegram.WebApp;
 const inTg = !!(tg && tg.initData);
+// мини-апп свёрнут: фоновые опросы сервера пропускаем (батарея, трафик, нагрузка), при возврате — сразу обновляем
+const bgOff = () => document.hidden || !!(tg && tg.isActive === false);
 if (!inTg) document.body.classList.add("no-tg");
 const DEV_USER = new URLSearchParams(location.search).get("dev");
 
@@ -817,8 +819,11 @@ document.addEventListener("click", e => {
   const cq = new URLSearchParams(location.search).get("clan");   // приглашение в клан из бота
   if (cq && typeof openClan === "function") setTimeout(() => openClan(+cq), 500);
   setTimeout(() => { const b = $("#boot"); if (b) { b.classList.add("out"); setTimeout(() => b.remove(), 400); } }, 250);
-  setInterval(() => { if (TAB === "cases") loadFeed(); }, 12000);
-  setInterval(() => loadMe().catch(() => {}), 20000);
+  setInterval(() => { if (TAB === "cases" && !bgOff()) loadFeed(); }, 12000);
+  setInterval(() => { if (!bgOff()) loadMe().catch(() => {}); }, 20000);
+  const back = () => { if (!bgOff() && ME) loadMe().catch(() => {}); };
+  document.addEventListener("visibilitychange", back);
+  if (tg && tg.onEvent) tg.onEvent("activated", back);
   setInterval(() => {   // тикающие таймеры
     if (ME.freeIn > 0) ME.freeIn--; if (ME.dailyIn > 0) ME.dailyIn--;
     const f = $("#free-t"); if (f) f.textContent = ME.freeIn ? "через " + clock(ME.freeIn) : "можно открыть!";

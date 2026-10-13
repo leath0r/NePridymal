@@ -21,7 +21,7 @@ async function openCD(id) {
   el._onClose = () => { clearInterval(cdPoll); cancelAnimationFrame(cdRaf); };
   await loadCD(id);
   clearInterval(cdPoll);
-  cdPoll = setInterval(() => el.isConnected ? loadCD(id) : clearInterval(cdPoll), 500);
+  cdPoll = setInterval(() => el.isConnected ? bgOff() || loadCD(id) : clearInterval(cdPoll), 500);
   cancelAnimationFrame(cdRaf); cdRaf = requestAnimationFrame(cdFrame);
 }
 async function loadCD(id) {

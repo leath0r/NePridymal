@@ -24,7 +24,7 @@ async function openJR() {
   el._onClose = () => clearInterval(jrPoll);
   jrAnimated = 0;
   await jrLoad();
-  clearInterval(jrPoll); jrPoll = setInterval(() => el.isConnected ? jrLoad() : clearInterval(jrPoll), 1200);
+  clearInterval(jrPoll); jrPoll = setInterval(() => el.isConnected ? bgOff() || jrLoad() : clearInterval(jrPoll), 1200);
 }
 async function jrLoad() {
   try { JR = await api("jroul"); } catch (e) { return; }

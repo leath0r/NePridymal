@@ -37,7 +37,7 @@ async function openInc() {
   const el = openSheet(`<div id="inc-body">${emptyHTML("hourglass", "Считаем доход…")}</div>`, "inc-s");
   el._inc = true;
   await loadInc();
-  el._t = setInterval(() => el.isConnected ? loadInc() : clearInterval(el._t), 30000);
+  el._t = setInterval(() => el.isConnected ? bgOff() || loadInc() : clearInterval(el._t), 30000);
 }
 function fillInc(el) {
   if (!INC || !el.isConnected) return;
@@ -88,7 +88,7 @@ renderCases = async function () {
   if (p && !v.querySelector(".incbar")) p.insertAdjacentHTML("afterend", `<button class="incbar" data-act="inc"></button>`);
   loadInc();
 };
-setInterval(() => { if (TAB === "cases") loadInc(); }, 60000);
+setInterval(() => { if (TAB === "cases" && !bgOff()) loadInc(); }, 60000);
 
 Object.assign(ACT, {
   inc: () => openInc(),

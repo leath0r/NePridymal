@@ -13,7 +13,9 @@
 .tfl:not(.cur):not(.done) .tm{color:rgba(255,255,255,.35)}
 .tts{flex:1;display:grid;gap:6px}
 .tt{height:42px;border-radius:11px;background:linear-gradient(180deg,#6b3e14,#4a280a);box-shadow:inset 0 -3px 0 rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.12);display:grid;place-items:center}
-.tfl.cur .tt:not([disabled]){background:linear-gradient(180deg,#a8662a,#7a4512);animation:tilewait 2s ease-in-out infinite}
+.tt{position:relative}
+.tfl.cur .tt:not([disabled]){background:linear-gradient(180deg,#a8662a,#7a4512)}
+.tfl.cur .tt:not([disabled])::after{animation-duration:2s}
 .tt:not([disabled]):active{transform:scale(.92)}
 .tt img{height:80%;object-fit:contain}
 .tt.gem{background:radial-gradient(circle,#ffd26a55,#5a3405);box-shadow:inset 0 0 0 2px #ffc53d,0 0 12px -3px #ffc53d;animation:flip .4s cubic-bezier(.2,1.5,.4,1)}

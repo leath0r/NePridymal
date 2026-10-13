@@ -19,8 +19,8 @@
 .gc-t{font-size:21px;font-weight:900;color:#fff;letter-spacing:-.01em;text-shadow:0 2px 6px rgba(0,0,0,.25)}
 .gc-s{font-size:12.5px;color:rgba(255,255,255,.82);margin-top:2px;line-height:1.3}
 .gc-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
-.gc-chips span{font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:8px;background:rgba(0,0,0,.28);color:#fff;backdrop-filter:blur(6px);letter-spacing:.02em}
-.gc-live{position:absolute;top:12px;left:14px;display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:#fff;background:rgba(0,0,0,.32);padding:4px 9px;border-radius:9px;backdrop-filter:blur(6px)}
+.gc-chips span{font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:8px;background:rgba(0,0,0,.38);color:#fff;letter-spacing:.02em}
+.gc-live{position:absolute;top:12px;left:14px;display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;color:#fff;background:rgba(0,0,0,.42);padding:4px 9px;border-radius:9px}
 .gc-live i{width:7px;height:7px;border-radius:50%;background:#4cf0a0;box-shadow:0 0 8px #4cf0a0;animation:blink 1.2s infinite}
 @keyframes blink{50%{opacity:.3}}
 
@@ -97,8 +97,10 @@
 .mc{position:relative;aspect-ratio:1;border-radius:14px;display:grid;place-items:center;transition:transform .12s;
   background:linear-gradient(180deg,#34507f,#223a63);box-shadow:inset 0 -4px 0 rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.14)}
 .mc span{width:28%;aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.08)}
-.mgrid.live .mc:not(.gem):not([disabled]){animation:tilewait 2.4s ease-in-out infinite}
-@keyframes tilewait{50%{box-shadow:inset 0 -4px 0 rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.14),0 0 10px -2px #3aa0ff}}
+/* свечение клеток — отдельным слоем, анимируется только opacity (тень на 25 клетках перерисовывалась каждый кадр) */
+.mgrid.live .mc:not(.gem):not([disabled])::after,.tfl.cur .tt:not([disabled])::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  box-shadow:0 0 10px -2px var(--tg,#3aa0ff);opacity:0;animation:tileglow 2.4s ease-in-out infinite}
+@keyframes tileglow{50%{opacity:1}}
 .mc:not([disabled]):active{transform:scale(.9)}
 .mc img{width:78%;height:78%;object-fit:contain;filter:drop-shadow(0 4px 6px rgba(0,0,0,.4))}
 .mc.gem{background:radial-gradient(circle,#5fd2ff40,#0b2e4f);box-shadow:inset 0 0 0 2px #5fd2ff,0 0 16px -3px #5fd2ff;animation:flip .45s cubic-bezier(.2,1.5,.4,1)}

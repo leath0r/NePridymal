@@ -136,7 +136,7 @@ async function openRoom(id) {
   el._onClose = () => { clearInterval(roomPoll); ROOM = null; refreshTables(); loadMe(); };
   await roomLoad(id);
   clearInterval(roomPoll);
-  roomPoll = setInterval(() => { if (el.isConnected && ROOM && ROOM.status !== "done" && ROOM.status !== "cancelled") roomLoad(id); }, 1300);
+  roomPoll = setInterval(() => { if (el.isConnected && !bgOff() && ROOM && ROOM.status !== "done" && ROOM.status !== "cancelled") roomLoad(id); }, 1300);
 }
 async function roomLoad(id) {
   if (roomBusy) return;

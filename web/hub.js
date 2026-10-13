@@ -49,7 +49,7 @@ const _bhInc = loadInc;
 loadInc = async function () { await _bhInc(); if (TAB === "crypto" && BH === "inc" && $("#v-crypto #inc-body")) fillInc($("#v-crypto")); };
 const _bhBK = loadBK;
 loadBK = async function () { await _bhBK(); if (TAB === "crypto" && BH === "shares" && BK && $("#v-crypto #bk-body")) _fillBKL($("#v-crypto")); };
-setInterval(() => { if (TAB === "crypto" && BH === "inc" && !document.hidden) loadInc(); }, 30000);
+setInterval(() => { if (TAB === "crypto" && BH === "inc" && !bgOff()) loadInc(); }, 30000);
 function goBank(sec) {
   while (SHEETS.length) closeSheet();
   BH = sec;
@@ -71,7 +71,7 @@ function bellPaint() {
 const _rhHub = renderHeader;
 renderHeader = function () { _rhHub.apply(this, arguments); bellPaint(); };
 async function bellPoll() {
-  if (document.hidden || !ME) return;
+  if (bgOff() || !ME) return;
   try { const m = await api("me"); if (m.inbox !== ME.inbox) { ME.inbox = m.inbox; bellPaint(); } } catch (e) {}
 }
 setInterval(bellPoll, 45000);

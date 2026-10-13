@@ -30,7 +30,7 @@ TAB_RENDER.crypto = async function () {
   if (!CX) v.innerHTML = emptyHTML("hourglass", "Загружаем курсы…");
   await loadCX();
   clearInterval(cxPoll);
-  cxPoll = setInterval(() => TAB === "crypto" ? loadCX() : clearInterval(cxPoll), 10000);
+  cxPoll = setInterval(() => TAB === "crypto" ? bgOff() || loadCX() : clearInterval(cxPoll), 10000);
 };
 let CX_PREV = {};
 function fillCX() {
@@ -76,7 +76,7 @@ async function openCA(id) {
   const el = openSheet(`<div id="ca-body">${emptyHTML("hourglass", "Загружаем график…")}</div>`, "ca-s");
   el._ca = id;
   await loadCA(id);
-  el._t = setInterval(() => el.isConnected ? loadCA(id, true) : clearInterval(el._t), 10000);
+  el._t = setInterval(() => el.isConnected ? bgOff() || loadCA(id, true) : clearInterval(el._t), 10000);
 }
 async function loadCA(id, soft) {
   try { CA = await api(`crypto/${id}?r=${cxRange}`); } catch (e) { return; }

@@ -88,7 +88,7 @@ nav.tabs .badge-dot{top:0;right:calc(50% - 22px)}
   -webkit-mask-position:center;mask-position:center;background:var(--c3)}
 .gift>img{position:absolute;left:50%;top:46%;width:62%;height:62%;transform:translate(-50%,-50%);object-fit:contain;filter:drop-shadow(0 4px 8px rgba(0,0,0,.25))}
 .gift .lt{position:absolute;left:50%;top:46%;width:66%;height:66%;transform:translate(-50%,-50%)}
-.gift .tag{position:absolute;left:6%;bottom:6%;font-size:11px;font-weight:700;color:var(--c4);background:rgba(0,0,0,.22);padding:2px 7px;border-radius:8px;backdrop-filter:blur(4px)}
+.gift .tag{position:absolute;left:6%;bottom:6%;font-size:11px;font-weight:700;color:var(--c4);background:rgba(0,0,0,.32);padding:2px 7px;border-radius:8px}
 .gift .rib{position:absolute;top:13%;right:-28%;width:80%;transform:rotate(45deg);text-align:center;font-size:9.5px;font-weight:800;color:#fff;padding:2px 0;letter-spacing:.04em}
 .gift.big{border-radius:28px}
 .gift.big>img{width:58%;height:58%}
@@ -129,7 +129,7 @@ nav.tabs .badge-dot{top:0;right:calc(50% - 22px)}
 .case .cv{width:72%;aspect-ratio:1;margin:4px auto 6px;object-fit:contain;filter:drop-shadow(0 8px 14px rgba(0,0,0,.35));transition:transform .3s}
 .case:hover .cv{transform:scale(1.05) rotate(-3deg)}
 .case .nm{font-weight:800;font-size:15px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.3)}
-.case .pr{margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:10px;background:rgba(0,0,0,.28);color:#fff;font-weight:700;font-size:13.5px;backdrop-filter:blur(6px)}
+.case .pr{margin-top:6px;display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:10px;background:rgba(0,0,0,.38);color:#fff;font-weight:700;font-size:13.5px}
 .case .lock{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-weight:700;gap:4px;backdrop-filter:blur(2px)}
 .case .lock b{font-size:28px}
 .case .hot{position:absolute;top:10px;right:10px;font-size:10px;font-weight:800;padding:2px 7px;border-radius:7px;background:#ff3d6e;color:#fff}
@@ -297,11 +297,11 @@ canvas#fx{position:fixed;inset:0;pointer-events:none;z-index:95}
 .chero .cprice{position:relative;z-index:1;display:inline-block;padding:5px 12px;border-radius:12px;background:rgba(0,0,0,.25);color:#fff;font-weight:700;backdrop-filter:blur(8px)}
 .chero .halo{top:34%;width:200px}
 .chero .rays{top:34%}
-.gcell.item .chance{position:absolute;top:6px;left:6px;font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:7px;background:rgba(0,0,0,.35);color:#fff;backdrop-filter:blur(4px)}
+.gcell.item .chance{position:absolute;top:6px;left:6px;font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:7px;background:rgba(0,0,0,.45);color:#fff}
 .gcell.item .rbar{height:3px;border-radius:2px;margin:6px 8px 0}
 .gcell.item.r-gold .gift{box-shadow:0 0 0 2px var(--gold),0 6px 18px -6px var(--gold)}
 .gcell.item.r-pink .gift{box-shadow:0 0 0 2px var(--pink),0 6px 18px -6px var(--pink)}
-.case .lock{z-index:3;background:rgba(0,0,0,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.case .lock{z-index:3;background:rgba(0,0,0,.5)}
 .case .cfoot{z-index:4}
 
 

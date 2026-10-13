@@ -29,6 +29,7 @@ function renderGames() {
     <div class="disc">Все игры — на игровых звёздах. ${esc(ME.disclaimer)}</div>`;
   const live = async () => {
     if (TAB !== "games") return clearInterval(hubPoll);
+    if (bgOff()) return;
     const el = $("#hub-crash"); if (!el) return;
     try {
       const c = await api("crash"), st = c.now;
@@ -49,7 +50,7 @@ const betHTML = (id, val = 100) => `
 const betVal = id => Math.floor(+document.getElementById(id).value || 0);
 
 // ============================================================ КРАШ
-let CRASH_ALLIN = -1, CS = null, cOff = 0, cPoll = null, cRaf = null, cBoomRound = 0, autoOn = false, CRASH_ON = false;
+let cVisHook = false, CRASH_ALLIN = -1, CS = null, cOff = 0, cPoll = null, cRaf = null, cBoomRound = 0, autoOn = false, CRASH_ON = false;
 let cStars = [], cBoom = null, cTip = null, cLastT = 0;
 const ROCKET = new Image(); ROCKET.src = A.orig("Stellar Rocket", 128);
 function openCrash() {
@@ -65,10 +66,11 @@ function openCrash() {
     <div class="sec-t">Игроки раунда <span id="ccount"></span></div><div class="box" id="cbets"></div>
     <div class="disc">Множитель растёт, пока ракета не взорвётся. ${esc(ME.disclaimer)}</div>`, "crash-s");
   el._onClose = () => { CRASH_ON = false; stopCrash(); };
+  if (!cVisHook) { cVisHook = true; document.addEventListener("visibilitychange", () => { if (CRASH_ON && !bgOff()) pollCrash(); }); }   // вернулись в игру — сразу свежий раунд
   CRASH_ON = true; CS = null; cBoom = null;
   cStars = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), z: .2 + Math.random() * .8 }));
   pollCrash();
-  clearInterval(cPoll); cPoll = setInterval(() => CRASH_ON ? pollCrash() : stopCrash(), 600);
+  clearInterval(cPoll); cPoll = setInterval(() => CRASH_ON ? bgOff() || pollCrash() : stopCrash(), 600);
   cancelAnimationFrame(cRaf); cLastT = performance.now(); cRaf = requestAnimationFrame(crashFrame);
 }
 function stopCrash() { clearInterval(cPoll); cPoll = null; cancelAnimationFrame(cRaf); }

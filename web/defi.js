@@ -24,7 +24,7 @@ const _rCx = TAB_RENDER.crypto;
 TAB_RENDER.crypto = async function () {
   await _rCx();
   clearInterval(fxPoll);
-  fxPoll = setInterval(() => { if (TAB !== "crypto") return clearInterval(fxPoll); if (cxView === "fut") loadFX(); }, 5000);
+  fxPoll = setInterval(() => { if (TAB !== "crypto") return clearInterval(fxPoll); if (cxView === "fut" && !bgOff()) loadFX(); }, 5000);
   if (cxView === "fut") loadFX();
 };
 

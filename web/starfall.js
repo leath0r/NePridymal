@@ -22,7 +22,7 @@ async function openStarfall() {
     <details class="rules" style="margin-top:12px"><summary>${ic("award")}Как играть</summary><div id="sf-rules"></div></details>`, "sf-s");
   el._onClose = () => { clearInterval(sfPoll); sfPoll = null; };
   await sfLoad(true);
-  clearInterval(sfPoll); sfPoll = setInterval(() => sfLoad(), 4000);
+  clearInterval(sfPoll); sfPoll = setInterval(() => bgOff() || sfLoad(), 4000);
 }
 async function sfLoad(first) {
   const prev = SF;

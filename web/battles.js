@@ -21,7 +21,7 @@ async function openBattles() {
     <div id="bt-list">${emptyHTML("hourglass", "Загружаем…")}</div>`, "bt-s");
   el._onClose = () => { clearInterval(btPoll); btPoll = null; };
   await btLoad();
-  clearInterval(btPoll); btPoll = setInterval(() => { if (SHEETS.some(s => s.classList.contains("bt-s"))) btLoad(); else { clearInterval(btPoll); btPoll = null; } }, 3000);
+  clearInterval(btPoll); btPoll = setInterval(() => { if (SHEETS.some(s => s.classList.contains("bt-s"))) bgOff() || btLoad(); else { clearInterval(btPoll); btPoll = null; } }, 3000);
 }
 async function btLoad() {
   try { BT = await api("battles"); } catch (e) { return; }

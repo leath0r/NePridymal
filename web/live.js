@@ -36,7 +36,7 @@ const _setTabLive = setTab;
 setTab = function (t) {
   _setTabLive(t);
   clearInterval(livePoll);
-  if (t === "cases" || t === "games") { setTimeout(() => { liveTicker(); livePlaying(); }, 50); liveLoad(); livePoll = setInterval(liveLoad, 15000); }
+  if (t === "cases" || t === "games") { setTimeout(() => { liveTicker(); livePlaying(); }, 50); liveLoad(); livePoll = setInterval(() => bgOff() || liveLoad(), 15000); }
 };
 async function openLive() {
   const el = openSheet(emptyHTML("hourglass", "Загружаем…"), "lv-s");
