@@ -570,3 +570,7 @@ html{background:var(--bg)}body{background:transparent}
 .newtag{position:absolute;top:9px;left:9px;z-index:3;padding:2px 7px;border-radius:7px;font-size:10px;font-weight:900;letter-spacing:.04em;
   background:linear-gradient(90deg,#3fe08f,#2bb3ff);color:#04210f;box-shadow:0 2px 10px #2bb3ff66}
 .case:has(.keytag) .newtag{top:36px}
+
+/* длинные сетки подарков (инвентарь, маркет, профиль): ячейки за краем экрана браузер не рисует и не анимирует.
+   Не для .item/.mw — у них свечение выходит за ячейку и обрезалось бы. Высота-заглушка ≈ ячейка с подписью. */
+.ggrid>.gcell:not(.item):not(.mw){content-visibility:auto;contain-intrinsic-size:auto 150px}
