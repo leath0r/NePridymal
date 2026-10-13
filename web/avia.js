@@ -103,7 +103,8 @@ async function avGo() {
   avBusy = true; $("#av-btn").disabled = true;
   setStars(ME.stars - bet);
   let r;
-  try { r = await post("avia", { bet }); } catch (e) { avBusy = false; $("#av-btn").disabled = false; loadMe(); return; }
+  try { r = await post("avia", { bet }); } catch (e) { avBusy = false; const b = $("#av-btn"); if (b) b.disabled = false; loadMe(); return; }
+  try {   // окно закрыли посреди полёта — элементов уже нет; раунд всё равно завершаем, иначе avBusy залипнет
   $("#av-res").className = "wres"; $("#av-res").textContent = "Полёт…";
   avScene(r.path); avHud(1);
   const ys = $("#av-w")._ys, n = r.path.length;
@@ -140,6 +141,7 @@ async function avGo() {
     $("#av-p").classList.add("sunk"); H.err();
   }
   avEnd(r, bet);
+  } catch (e) { if (avBusy) avEnd(r, bet); }
 }
 async function avEnd(r, bet) {
   avBusy = false;

@@ -115,6 +115,7 @@ async function dgSpin(buy) {   // buy — сколько лапок покупа
   $("#dg-fs").textContent = "—"; $("#dg-win").textContent = "—";
   let r;
   try { r = await post(buy ? "dogs/buy" : "dogs", buy ? { bet, scat: +buy } : { bet, n }); } catch (e) { dgEnd(); loadMe(); return; }
+  try {   // окно закрыли посреди спина — всё равно dgEnd, иначе залипнут dgBusy и баланс (BAL_HOLD)
   const rounds = r.rounds || [r];
   let acc = 0;
   const addWin = pay => { if (!pay) return; acc += pay; $("#dg-win").textContent = "⭐ " + fmt(acc); };
@@ -154,6 +155,7 @@ async function dgSpin(buy) {   // buy — сколько лапок покупа
   }
   document.querySelectorAll(".dgwrap .dgb").forEach(b => b.classList.remove("dim"));
   dgEnd(r, cost);
+  } catch (e) { if (dgBusy) dgEnd(r, cost); }
 }
 async function dgEnd(r, spent) {
   dgBusy = false; BAL_HOLD = Math.max(0, BAL_HOLD - 1);

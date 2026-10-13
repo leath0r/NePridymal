@@ -765,7 +765,9 @@ const ACT = {
   trade: async el => {
     const v = el.dataset.v;
     if (v === "accept" && !await confirmM("Принять обмен?", "Подарки и звёзды сразу перейдут между вами.", "Принять")) return;
-    await post(`trades/${el.dataset.id}/${v}`); H.ok(); toast({ accept: "Обмен совершён", decline: "Отклонено", cancel: "Отменено" }[v]);
+    try { await post(`trades/${el.dataset.id}/${v}`); }
+    catch (e) { if (e.status !== "dup") refreshFriends(); return; }   // обмен уже закрыт / не хватает звёзд — убираем устаревшую карточку
+    H.ok(); toast({ accept: "Обмен совершён", decline: "Отклонено", cancel: "Отменено" }[v]);
     await loadMe(); refreshFriends();
   },
   topk: el => { topKind = el.dataset.v; H.sel(); renderTop(); },

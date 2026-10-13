@@ -132,7 +132,8 @@ async function rlSpin() {
   RL.busy = true; $("#rl-go").disabled = true;
   setStars(ME.stars - rlTotal());
   let r;
-  try { r = await post("rlt", { bets }); } catch (e) { RL.busy = false; $("#rl-go").disabled = false; loadMe(); return; }
+  try { r = await post("rlt", { bets }); } catch (e) { RL.busy = false; const g = $("#rl-go"); if (g) g.disabled = false; loadMe(); return; }
+  if (!$("#rl-cv")) { RL.busy = false; loadMe(); return; }   // окно закрыли, пока шла ставка — иначе RL.busy залипнет
   const cv = $("#rl-cv"), idx = RL_ORDER.indexOf(r.n), seg = 360 / 37;
   const target = 360 - idx * seg + (Math.random() - .5) * seg * .5, start = RL.angle - RL.angle % 360, end = start + 360 * 5 + target, t0 = performance.now();
   $("#rl-c").innerHTML = "<b>…</b>";

@@ -163,7 +163,7 @@ function tradeCard(t) {
   const ST = { open: ["ждёт ответа", "var(--blue)"], done: ["совершён", "var(--green)"], declined: ["отклонён", "var(--red)"], cancelled: ["отменён", "var(--hint)"], void: ["аннулирован", "var(--hint)"] }[t.status];
   let btns = "";
   if (t.status === "open") btns = mine ? `<div class="btns"><button class="btn sm ghost" style="flex:1" data-act="trade" data-id="${t.id}" data-v="cancel">Отменить</button></div>`
-    : `<div class="btns"><button class="btn sm red" style="flex:1" data-act="trade" data-id="${t.id}" data-v="decline">Отклонить</button><button class="btn sm green" style="flex:1" data-act="trade" data-id="${t.id}" data-v="accept">Принять</button></div>`;
+    : `<div class="btns"><button class="btn sm red" style="flex:1" data-act="trade" data-id="${t.id}" data-v="decline">Отклонить</button>${ME.stars < t.wantStars ? `<button class="btn sm ghost" style="flex:1" disabled>Нужно ⭐ ${short(t.wantStars)}</button>` : `<button class="btn sm green" style="flex:1" data-act="trade" data-id="${t.id}" data-v="accept">Принять</button>`}</div>`;
   return `<div class="tr"><div class="row" style="padding:0;min-height:0" data-act="profile" data-id="${other.id}">${avaHTML(other, 30)}<div class="grow"><div class="t">${mine ? "Ты → " : ""}${esc(other.name)}${mine ? "" : " → тебе"}</div></div><span class="st" style="color:${ST[1]}">${ST[0]}</span></div>
     <div class="hint" style="font-size:12px;margin-top:8px">Ты отдаёшь</div><div class="side">${give}</div>
     <div class="hint" style="font-size:12px">Ты получаешь</div><div class="side">${get}</div>${btns}</div>`;
@@ -288,7 +288,9 @@ Object.assign(ACT, {
   trade: async el => {
     const v = el.dataset.v;
     if (v === "accept" && !await confirmM("Принять обмен?", "Подарки и звёзды сразу перейдут между вами.", "Принять")) return;
-    await post(`trades/${el.dataset.id}/${v}`); H.ok(); toast({ accept: "Обмен совершён", decline: "Отклонено", cancel: "Отменено" }[v]);
+    try { await post(`trades/${el.dataset.id}/${v}`); }
+    catch (e) { if (e.status !== "dup") refreshFriends(); return; }   // обмен уже закрыт / не хватает звёзд — убираем устаревшую карточку
+    H.ok(); toast({ accept: "Обмен совершён", decline: "Отклонено", cancel: "Отменено" }[v]);
     await loadMe(); refreshFriends();
   },
 });

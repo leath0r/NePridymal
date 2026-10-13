@@ -164,9 +164,10 @@ function crashFrame(now) {
     }
   }
   const my = CS.my;
-  const ai = $("#callin"); if (ai) { ai.disabled = !(CS.phase === "bet" && !my) || ME.stars < 10; $("#cbox").classList.toggle("allin-on", !!(my && CRASH_ALLIN === CS.round)); }
+  const ai = $("#callin"); if (ai) { ai.disabled = !(CS.phase === "bet" && !my && !crashLate()) || ME.stars < 10; $("#cbox").classList.toggle("allin-on", !!(my && CRASH_ALLIN === CS.round)); }
   if (CS.phase === "bet") {
     if (my) setBtn(btn, "ghost", `Ставка ⭐ ${fmt(my.amount)} принята${my.auto ? " · авто " + my.auto + "x" : ""}`, true);
+    else if (crashLate()) setBtn(btn, "ghost", "Старт — жди следующий раунд", true);
     else setBtn(btn, "cta", `Поставить ⭐ ${fmt(betVal("camt"))}`, false);
   } else if (CS.phase === "run" && my && !my.cashed) {
     setBtn(btn, "green cta", `Забрать ⭐ ${fmt(my.amount * m)}`, false);
@@ -174,6 +175,8 @@ function crashFrame(now) {
     setBtn(btn, "ghost", `Забрал x${my.cashed.toFixed(2)} · +⭐ ${fmt(my.amount * my.cashed)}`, true);
   } else setBtn(btn, "ghost", CS.phase === "end" ? "Новый раунд через пару секунд" : "Раунд идёт — жди следующий", true);
 }
+// сервер закрывает приём за 0,2 с до старта; с запасом на пинг гасим кнопку за 0,6 с — иначе «приём ставок закрыт»
+const crashLate = () => CS && CS.phase === "bet" && Date.now() / 1000 + cOff > CS.until - 0.6;
 function setBtn(b, cls, text, dis) {
   const c = "btn" + (cls ? " " + cls : "");
   if (b.className !== c) b.className = c;
@@ -186,7 +189,7 @@ async function crashAllin() {
   const amount = Math.min(ME.stars, 1_000_000);
   if (amount < 10) return toast("Не хватает звёзд ⭐");
   if (!await confirmM("ALL IN?", `Ставишь ⭐ ${fmt(amount)} — ${amount === ME.stars ? "весь баланс" : "максимум за раунд"}. Успей забрать до взрыва!`, "Поехали 🔥")) return;
-  if (CS.phase !== "bet" || CS.my) return toast("Раунд уже начался — жди следующий");
+  if (CS.phase !== "bet" || CS.my || crashLate()) return toast("Раунд уже начался — жди следующий");
   const auto = autoOn ? parseFloat(($("#cauto").value || "").replace(",", ".")) : null;
   try {
     const r = await post("crash/bet", { amount, auto }); H.imp("heavy"); setStars(ME.stars - amount);
@@ -197,6 +200,7 @@ async function crashAllin() {
 async function crashBtn() {
   if (!CS) return;
   if (CS.phase === "bet" && !CS.my) {
+    if (crashLate()) return;
     const amount = betVal("camt");
     const auto = autoOn ? parseFloat(($("#cauto").value || "").replace(",", ".")) : null;
     if (amount > ME.stars) return toast("Не хватает звёзд ⭐");

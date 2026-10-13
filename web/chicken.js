@@ -117,6 +117,7 @@ async function ckStep() {
   ckBusy = true; ckUI();
   let r;
   try { r = await post("chicken/step"); } catch (e) { ckBusy = false; ckUI(); return; }
+  try {   // окно закрыли во время анимации — не оставляем ckBusy навсегда
   const lanes = $("#ck-w").children;
   if (r.dead) {   // машина влетает в полосу, курицу сбивает
     ckPlaceHen(r.dead);
@@ -136,6 +137,7 @@ async function ckStep() {
   if (r.pay != null) return ckDone(r);
   CK = { ...CK, ...r };
   ckDraw(); ckBusy = false; ckUI();
+  } catch (e) { ckBusy = false; if (r.dead || r.pay != null) CK = { ...CK, active: false }; }
 }
 async function ckCash() {
   if (ckBusy || !CK.active || !CK.step) return;
@@ -144,7 +146,8 @@ async function ckCash() {
 }
 async function ckDone(r) {
   setStars(r.stars); H.ok();
-  CK = { ...CK, ...r, active: false };
+  CK = { ...CK, ...r, active: false }; ckBusy = false;
+  if (!$("#ck-w")) return;
   ckPlaceHen(r.step);
   $("#ck-res").className = "wres win"; $("#ck-res").textContent = `x${r.mult.toFixed(2).replace(".", ",")} · +⭐ ${fmt(r.pay)}`;
   coinShower($("#ck-road"), Math.min(70, 10 + r.mult * 4));
