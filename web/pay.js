@@ -277,7 +277,7 @@ function pinPad(title, sub, opts = {}) {
     const finish = x => { if (fin) return; fin = true; done(x); };
     const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9, opts.forgot ? "?" : "", 0, "<"];
     const el = openSheet(`<div class="pin">
-        <div class="pin-ic">${ic("lock")}</div><b class="pin-t">${title}</b><span class="pin-s">${sub || ""}</span>
+        <div class="pin-ic">${ic("lock")}</div><b class="pin-t">${title}</b><span class="pin-sub">${sub || ""}</span>
         <div class="pin-dots">${"<i></i>".repeat(6)}</div>
         <div class="pin-kb">${keys.map(k => k === "" ? "<span></span>" : k === "?" ? `<button class="pin-f" data-k="?">Забыл?</button>`
           : `<button data-k="${k}">${k === "<" ? ic("back") : k}</button>`).join("")}</div></div>`, "pin-s");
