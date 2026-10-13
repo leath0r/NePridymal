@@ -1,6 +1,8 @@
 """Кредиты банка казино на 3 дня, вернуть надо с комиссией 10%.
 - под залог подарка: 50% ценности; не вернул — подарок переходит банку и выставляется на маркет;
-- без залога: до ⭐ 5000 (с 5 уровня, один за раз); не вернул — долг списывается с баланса, даже в минус."""
+- без залога: с 5 уровня, один за раз; лимит растёт с кредитной историей: ⭐ 10 000 + 10 000 за каждый вовремя возвращённый
+  (до ⭐ 100 000), просрочка сбрасывает на 10 000 — иначе твинки брали бы 100 000 «бесплатной лотереей»;
+  не вернул — долг списывается с баланса, даже в минус."""
 from settings import conf
 import asyncio
 import math
@@ -19,7 +21,8 @@ TERM = 3 * 86400
 MAX_LOANS = 3
 MIN_VALUE = 100
 WARN = 12 * 3600           # напомнить за 12 часов до срока
-CASH_MAX = 5000            # кредит без залога
+CASH_STEP = conf("loans.cash_step", 10_000)   # кредит без залога: первый лимит и прибавка за каждый возвращённый
+CASH_MAX = conf("loans.cash_max", 100_000)    # потолок
 CASH_LEVEL = 5
 
 
@@ -37,6 +40,13 @@ db.execute(f"UPDATE gifts SET owner=-({LOAN_OWNER}+(SELECT user FROM loans l WHE
            "WHERE id IN (SELECT gift FROM loans WHERE status='open' AND gift IS NOT NULL)")
 
 
+def cash_limit(uid):
+    """Лимит кредита без залога: 10 000 + 10 000 за каждый возвращённый после последней просрочки, до 100 000."""
+    lost = q1("SELECT MAX(closed) m FROM loans WHERE user=? AND gift IS NULL AND status='lost'", uid)["m"] or 0
+    ok = q1("SELECT COUNT(*) n FROM loans WHERE user=? AND gift IS NULL AND status='repaid' AND closed>?", uid, lost)["n"]
+    return min(CASH_MAX, CASH_STEP * (1 + ok))
+
+
 def terms(value):
     principal = int(value * LTV)
     return principal, math.ceil(principal * (1 + FEE))
@@ -51,17 +61,18 @@ def loan_out(r):
 @app.get(R + "/loans")
 def loans(uid=Depends(auth)):
     return {"loans": [loan_out(r) for r in q("SELECT * FROM loans WHERE user=? AND status='open' ORDER BY until", uid)],
-            "ltv": LTV, "fee": FEE, "term": TERM, "max": MAX_LOANS, "now": now(), "cashMax": CASH_MAX, "cashLevel": CASH_LEVEL,
+            "ltv": LTV, "fee": FEE, "term": TERM, "max": MAX_LOANS, "now": now(), "cashMax": cash_limit(uid), "cashCap": CASH_MAX, "cashStep": CASH_STEP, "cashLevel": CASH_LEVEL,
             "stars": bal(uid)}
 
 
 @app.post(R + "/loans/cash")
 async def take_cash(req: Request, uid=Depends(auth)):
     amount = int((await req.json()).get("amount", 0))
-    if not 100 <= amount <= CASH_MAX:
-        err(f"сумма от ⭐ 100 до ⭐ {CASH_MAX}")
     t = now()
     with tx():
+        lim = cash_limit(uid)
+        if not 100 <= amount <= lim:
+            err(f"сейчас можно до ⭐ {lim:,}".replace(",", " ") + " — каждый вовремя возвращённый кредит поднимает лимит")
         u = q1("SELECT xp, stars FROM users WHERE id=?", uid)
         if level(u["xp"]) < CASH_LEVEL:
             err(f"кредит без залога — с {CASH_LEVEL} уровня")

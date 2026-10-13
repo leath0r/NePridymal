@@ -986,6 +986,9 @@ def buy(gid: int, uid=Depends(auth)):
             err("уже продано")
         if g["owner"] == uid:
             err("это твой лот")
+        import loans
+        if g["owner"] != 0 and loans.stars_locked(uid):   # иначе твинк в кредит «покупает» подарок у своего основного аккаунта
+            err("пока не закрыт кредит без залога, покупать у игроков нельзя (подарки банка — можно)")
         u = q1("SELECT stars FROM users WHERE id=?", uid)
         if u["stars"] < g["price"]:
             err("Не хватает звёзд")

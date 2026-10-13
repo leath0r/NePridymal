@@ -6,11 +6,14 @@ async function loansHTML() {
   if (!L) return "";
   const t = L.now, cash = L.loans.find(x => !x.gift), lvlOk = ME.lv.level >= L.cashLevel;
   return `<div class="cashl">
-      <div class="cashl-h"><span class="pic y">${ic("coins")}</span><div class="grow"><b>Кредит без залога</b><span>до ⭐ ${fmt(L.cashMax)} на ${L.term / 86400} дня · вернуть +${Math.round(L.fee * 100)}%</span></div></div>
+      <div class="cashl-h"><span class="pic y">${ic("coins")}</span><div class="grow"><b>Кредит без залога</b><span>твой лимит ⭐ ${fmt(L.cashMax)} из ${short(L.cashCap)} · на ${L.term / 86400} дня · вернуть +${Math.round(L.fee * 100)}%</span></div></div>
       ${cash ? `<div class="hint" style="font-size:13px;margin-top:10px">У тебя уже есть кредит без залога — сначала верни его.</div>`
         : !lvlOk ? `<div class="hint" style="font-size:13px;margin-top:10px">${ic("lock")} Доступен с ${L.cashLevel} уровня</div>`
         : L.stars < 0 ? `<div class="hint tl" style="font-size:13px;margin-top:10px">Сначала закрой минус на балансе</div>`
-        : `<div class="jpbuy cashl-b">${[500, 1000, 2500, L.cashMax].map(n => `<button data-act="loan-cash" data-v="${n}"><b>⭐ ${short(n)}</b><span>вернуть ${short(Math.ceil(n * (1 + L.fee)))}</span></button>`).join("")}</div>`}
+        : `<div class="jpbuy cashl-b">${Array.from({ length: Math.round(L.cashCap / L.cashStep) }, (_, i) => (i + 1) * L.cashStep).map(n => n <= L.cashMax
+            ? `<button data-act="loan-cash" data-v="${n}"><b>⭐ ${short(n)}</b><span>вернуть ${short(Math.ceil(n * (1 + L.fee)))}</span></button>`
+            : `<button class="off" disabled><b>⭐ ${short(n)}</b><span>${ic("lock")}</span></button>`).join("")}</div>
+          ${L.cashMax < L.cashCap ? `<div class="hint" style="font-size:12px;margin-top:6px">Вернул кредит вовремя — лимит +⭐ ${short(L.cashStep)}. Просрочка сбрасывает лимит до ⭐ ${short(L.cashStep)}.</div>` : ""}`}
       <div class="hint" style="font-size:11.5px;margin-top:8px">Не вернёшь в срок — долг спишется с баланса, даже если он уйдёт в минус. Пока кредит открыт, звёзды в обменах отдавать нельзя.</div>
     </div>
     <div class="sec-t" style="margin-top:14px">${ic("wallet")}Мои кредиты</div>

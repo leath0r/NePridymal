@@ -269,3 +269,5 @@
 .auto-btn.run .ic{animation:none}
 .auto-btn:not(.run) .ic{animation:auspin 6s linear infinite}
 @keyframes auspin{to{transform:rotate(360deg)}}
+
+.cashl-b{grid-template-columns:repeat(5,1fr)}.cashl-b b{font-size:14px}.cashl-b button.off{opacity:.4}.cashl-b button.off .ic{width:13px;height:13px;color:var(--hint)}

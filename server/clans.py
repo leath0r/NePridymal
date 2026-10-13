@@ -327,6 +327,9 @@ async def clan_donate(req: Request, uid=Depends(auth)):
         err("взнос от ⭐ 100")
     with tx():
         cid = my_clan_id(uid) or err("ты не в клане")
+        import loans
+        if loans.stars_locked(uid):   # казну глава раздаёт участникам — иначе кредит уходит на основной аккаунт
+            err("пока не закрыт кредит без залога, вносить в казну нельзя")
         if bal(uid) < amount:
             err("Не хватает звёзд")
         before = clan_level(q1("SELECT treasury FROM clans WHERE id=?", cid)["treasury"])
