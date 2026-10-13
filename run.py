@@ -158,6 +158,87 @@ def _no_window():
     return {"creationflags": 0x08000000} if SYSTEM == "windows" else {}
 
 
+# ---------------- HTTPS по IP без домена (Let's Encrypt, короткоживущий сертификат) ----------------
+LEGO_VER = "5.5.2"
+CERTS = os.path.join(DATA, "certs")
+
+
+def lego_path():
+    """ACME-клиент lego (один бинарник под Windows / Linux / macOS); скачиваем один раз, сверяем SHA-256."""
+    import hashlib, zipfile
+    exe = os.path.join(BIN, "lego.exe" if SYSTEM == "windows" else "lego")
+    if os.path.exists(exe):
+        return exe
+    arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
+    if not arch or SYSTEM not in ("linux", "darwin", "windows"):
+        return None
+    name = f"lego_v{LEGO_VER}_{SYSTEM}_{arch}." + ("zip" if SYSTEM == "windows" else "tar.gz")
+    base = f"https://github.com/go-acme/lego/releases/download/v{LEGO_VER}/"
+    os.makedirs(BIN, exist_ok=True)
+    say(f"Скачиваю lego ({name}) — один раз…")
+    tmp = os.path.join(BIN, name)
+    urllib.request.urlretrieve(base + name, tmp)
+    sums = urllib.request.urlopen(base + f"lego_{LEGO_VER}_checksums.txt", timeout=30).read().decode()
+    want = next((l.split()[0] for l in sums.splitlines() if l.strip().endswith(name)), None)
+    got = hashlib.sha256(open(tmp, "rb").read()).hexdigest()
+    if want != got:
+        os.remove(tmp)
+        say("lego: контрольная сумма не совпала — не использую")
+        return None
+    if name.endswith(".zip"):
+        with zipfile.ZipFile(tmp) as z:
+            z.extract("lego.exe", BIN)
+    else:
+        with tarfile.open(tmp) as t:
+            t.extract("lego", BIN)
+    os.remove(tmp)
+    os.chmod(exe, os.stat(exe).st_mode | stat.S_IEXEC)
+    return exe
+
+
+def public_ip():
+    """Внешний IPv4 этого компьютера (None — если его нет: домашняя сеть за роутером, мобильный интернет и т. п.)."""
+    import ipaddress
+    for url in ("https://api.ipify.org", "https://ipv4.icanhazip.com", "https://ifconfig.me/ip"):
+        try:
+            ip = urllib.request.urlopen(url, timeout=10).read().decode().strip()
+            if ipaddress.ip_address(ip).is_global and ipaddress.ip_address(ip).version == 4:
+                return ip
+        except Exception:
+            continue
+    return None
+
+
+def ip_cert(ip, quiet=False):
+    """Получить / продлить сертификат на IP. lego сам ненадолго слушает порт 80 (проверка Let's Encrypt).
+    Возвращает (crt, key) или None. Повторный вызов продлевает, только если пора (сертификат живёт ~6 дней)."""
+    exe = lego_path()
+    if not exe:
+        return None
+    if SYSTEM == "linux" and hasattr(os, "geteuid") and os.geteuid() != 0:
+        if not quiet:
+            say("Сертификат на IP: нужны порты 80 и 443, а для них на Linux нужен root — запусти: sudo ./start.sh")
+        return None
+    if SYSTEM == "windows":   # входящие 80/443 в брандмауэре (нужны права администратора; без них — как получится)
+        _run(["netsh", "advfirewall", "firewall", "add", "rule", "name=NePridymal HTTPS", "dir=in", "action=allow",
+              "protocol=TCP", "localport=80,443"], check=False)
+    crt, key = os.path.join(CERTS, "certificates", f"{ip}.crt"), os.path.join(CERTS, "certificates", f"{ip}.key")
+    cmd = [exe, "run", "--accept-tos", "--server", "letsencrypt", "--domains", ip, "--profile", "shortlived",
+           "--http", "--http.address", ":80", "--path", CERTS, "--log.format", "text", "--log.level", "warn"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180, **_no_window())
+    except Exception as e:
+        r = None
+        err = str(e)
+    if os.path.exists(crt) and os.path.exists(key) and (r is None or r.returncode == 0 or os.path.getsize(crt)):
+        return crt, key
+    if not quiet:
+        out = (r.stderr or r.stdout).strip().splitlines()[-1:] if r else [err]
+        say("Сертификат на IP не получился: " + (out[0][:200] if out else "?") +
+            "\n(нужен публичный IP и открытые порты 80 и 443 — на VPS обычно так и есть)")
+    return None
+
+
 # ---------------- бэкапы ----------------
 def backup(db_path):
     """Горячая копия SQLite → gzip в data/backups, храним BACKUP_KEEP последних."""
@@ -188,14 +269,31 @@ def serve():
     os.chdir(server)
     sys.path.insert(0, server)
     import uvicorn
-    uvicorn.run("app:app", host="127.0.0.1", port=int(os.environ["PORT"]), workers=1, log_level="warning")
+    tls = {"ssl_certfile": os.environ["SSL_CERT"], "ssl_keyfile": os.environ["SSL_KEY"]} if os.environ.get("SSL_CERT") else {}
+    uvicorn.run("app:app", host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ["PORT"]), workers=1,
+                log_level="warning", **tls)
 
 
 def supervise(env):
     """Сторож: туннель + сервер; сервер упал / завершился после импорта базы — поднимаем снова. Плюс бэкапы."""
     port = int(env.get("PORT") or 8795)
     fixed = env.get("PUBLIC_URL", "").rstrip("/")
-    tunnel, public = (None, fixed) if fixed else start_tunnel(port)
+    mode = (env.get("HTTPS") or "auto").lower()      # auto | ip | tunnel  (PUBLIC_URL — свой домен/прокси)
+    tunnel, public, tls, ip = None, fixed, None, None
+    if not fixed and mode in ("auto", "ip"):
+        ip = public_ip()
+        if ip:
+            say(f"Публичный IP: {ip} — получаю сертификат Let's Encrypt на него (домен не нужен)…")
+            tls = ip_cert(ip)
+        if tls:
+            public, port = f"https://{ip}", 443
+            say("Сертификат готов — игра будет по постоянному адресу, туннель не нужен.")
+        elif mode == "ip":
+            sys.exit("Режим HTTPS=ip, но сертификат на IP получить не удалось (см. выше).")
+        else:
+            say("Без публичного IP — включаю бесплатный туннель Cloudflare (адрес будет меняться при перезапуске).")
+    if not public:
+        tunnel, public = start_tunnel(port)
     if not public:
         sys.exit("Не удалось поднять туннель Cloudflare. Проверь интернет и запусти снова.")
     os.makedirs(DATA, exist_ok=True)
@@ -204,6 +302,17 @@ def supervise(env):
                  "ADMIN_IDS": env.get("ADMIN_IDS", ""), "SERVE_WEB": "1", "WEB_DIR": os.path.join(ROOT, "web"),
                  "DB_PATH": db_path, "SETTINGS": os.path.join(ROOT, "settings.toml"), "PORT": str(port),
                  "PYTHONIOENCODING": "utf-8"}
+    if tls:
+        child_env.update(HOST="0.0.0.0", SSL_CERT=tls[0], SSL_KEY=tls[1])
+    renew = {"at": time.time(), "busy": False}
+    def renew_cert(child_ref):   # в фоне: lego может подождать; продлил — перезапускаем сервер с новым сертификатом
+        before = os.path.getmtime(tls[0])
+        try:
+            if ip_cert(ip, quiet=True) and os.path.getmtime(tls[0]) != before:
+                say("Сертификат продлён — перезапускаю сервер")
+                child_ref[0].terminate()
+        finally:
+            renew["busy"] = False
     say("Собираю фронтенд…")
     subprocess.check_call([sys.executable, os.path.join(ROOT, "build.py")], **_no_window())
     last_backup, fails = time.time(), 0
@@ -214,8 +323,12 @@ def supervise(env):
             say("Окно не закрывай — пока оно открыто, игра работает (или включи автозапуск: python run.py --install). Ctrl+C — стоп.\n")
         started = time.time()
         child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--serve"], env=child_env, **_no_window())
+        ref = [child]
         while child.poll() is None:
             time.sleep(2)
+            if tls and not renew["busy"] and time.time() - renew["at"] >= 12 * 3600:
+                renew.update(at=time.time(), busy=True)
+                threading.Thread(target=renew_cert, args=(ref,), daemon=True).start()
             if time.time() - last_backup >= BACKUP_EVERY:
                 last_backup = time.time()
                 try:
