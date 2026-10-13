@@ -6,10 +6,18 @@
 Object.assign(ICONS, {
   xfer: '<path d="M7 3l1.1 2.8 3 .2-2.3 1.9.7 2.9L7 9.2l-2.5 1.6.7-2.9L2.9 6l3-.2Z" fill="currentColor" stroke-width="1"/><path d="M17 12.6l1.1 2.8 3 .2-2.3 1.9.7 2.9-2.5-1.6-2.5 1.6.7-2.9-2.3-1.9 3-.2Z" fill="currentColor" stroke-width="1"/><path d="M12.6 3.6a8.6 8.6 0 0 1 7.8 7.2"/><path d="m18.3 9.3 2.1 1.6 1.7-2.1"/><path d="M11.4 20.4a8.6 8.6 0 0 1-7.8-7.2"/><path d="m5.7 14.7-2.1-1.6-1.7 2.1"/>',
   scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M3 12h18"/>',
+  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
   qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3"/>',
 });
 
 const PAY = { info: null, friends: null, busy: false, seq: 0 };
+// адрес кошелька NP + 20 символов: показываем группами по 4, копируем слитно
+const payAddrFmt = a => a ? "NP " + a.slice(2).match(/.{1,4}/g).join(" ") : "";
+const payAddrLike = v => /^NP[0-9A-Z]{20}$/.test(String(v || "").toUpperCase().replace(/[\s-]/g, ""));
+async function payByAddr(a) {
+  try { const u = await api("pay/addr/" + enc(String(a).replace(/[\s-]/g, ""))); openPaySend(u.id, 0); return true; }
+  catch (e) { return false; }
+}
 const payTime = ts => new Date(ts * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 function payDay(ts) {
   const d = new Date(ts * 1000), t = new Date(), y = new Date(Date.now() - 864e5);
@@ -66,13 +74,14 @@ async function openPay(el) {
       <div class="pay-hl">${ic("xfer")}<span>Кошелёк</span><em>id ${ME.id}</em></div>
       <div class="pay-bal"><span class="pay-st">⭐</span><span class="pay-num">0</span></div>
       <div class="pay-sub">звёзд на балансе</div>
+      ${r.addr ? `<button class="pay-addr" data-act="pay-addr-copy" data-a="${esc(r.addr)}"><span>${payAddrFmt(r.addr)}</span>${ic("copy")}</button>` : ""}
       <div class="pay-wk"><span class="in">+${short(w.in)} ⭐<small>получено за 7 дн</small></span><span>−${short(w.out)} ⭐<small>отправлено за 7 дн</small></span></div>
       <div class="pay-acts">
         <button data-act="pay-scan"><span class="pay-ic">${ic("scan")}</span><b>Сканировать</b><small>QR друга</small></button>
         <button data-act="pay-recv"><span class="pay-ic">${ic("qr")}</span><b>Получить</b><small>мой QR</small></button>
       </div></div>
     ${r.on === false ? `<div class="adm-warn">Переводы временно отключены администрацией</div>` : ""}
-    <div class="pay-find">${ic("search")}<input class="pay-q" placeholder="Кому перевести: имя или @username" autocomplete="off"></div>
+    <div class="pay-find">${ic("search")}<input class="pay-q" placeholder="Имя, @username или адрес NP…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
     <div class="pay-peers">${payPeers()}</div>
     <div class="sec-t">История переводов</div>
     ${payHistory(r.history)}
@@ -88,6 +97,12 @@ async function openPay(el) {
     t = setTimeout(async () => {
       const box = el.querySelector(".pay-peers");
       if (v.length < 2) { box.innerHTML = payPeers(); return; }
+      if (payAddrLike(v)) {   // вставили адрес кошелька — ищем владельца
+        const u = await api("pay/addr/" + enc(v.replace(/[\s-]/g, ""))).catch(() => null);
+        if (my !== PAY.seq || !el.isConnected) return;
+        box.innerHTML = u ? payPeer(u, "по адресу") : `<div class="hint pay-empty">Кошелёк с таким адресом не найден</div>`;
+        return;
+      }
       const list = await api("users/search?qs=" + enc(v)).catch(() => []);
       if (my !== PAY.seq || !el.isConnected) return;   // пока ждали ответ, запрос уже поменялся
       box.innerHTML = list.map(u => payPeer(u)).join("") || `<div class="hint pay-empty">Никого не нашли</div>`;
@@ -107,6 +122,7 @@ function openPayRecv(amt = 0) {
         <div class="pay-rt">${amt ? "Отсканируй, чтобы перевести мне" : "Отсканируй, чтобы перевести мне звёзды"}</div>
         ${amt ? `<div class="pay-ramt"><span class="pay-st">⭐</span>${fmt(amt)}</div>` : ""}
         <div class="inv-code pay-code">${qr}<span class="inv-logo">${avaHTML(ME, 48)}</span></div>
+        ${PAY.info && PAY.info.addr ? `<button class="pay-raddr" data-act="pay-addr-copy" data-a="${esc(PAY.info.addr)}"><small>Адрес кошелька</small><span>${payAddrFmt(PAY.info.addr)}</span>${ic("copy")}</button>` : ""}
         <div class="pay-rbtns"><button class="pay-link" data-act="pay-amt" data-v="${amt}">${amt ? "Изменить сумму" : "Указать сумму"}</button>
           ${amt ? `<button class="pay-link" data-act="pay-amt-clear">Без суммы</button>` : ""}</div>
       </div></div>
@@ -128,6 +144,7 @@ function payScan() {
   if (inTg && tg.showScanQrPopup && (!tg.isVersionAtLeast || tg.isVersionAtLeast("6.4"))) {
     tg.showScanQrPopup({ text: "Наведи камеру на QR-код игрока" }, text => {
       const p = payParse(text);
+      if (!p && payAddrLike(text)) { H.ok(); setTimeout(() => payByAddr(text), 60); return true; }
       if (!p) { H.err(); return false; }   // чужой QR — сканер остаётся открытым
       H.ok();
       setTimeout(() => openPaySend(p.id, p.amt), 60);
@@ -135,7 +152,8 @@ function payScan() {
     });
     return;
   }
-  promptM("Перевод по id", "Сканер QR работает в Telegram на телефоне. Здесь можно ввести id игрока:", "", "Дальше").then(v => {
+  promptM("Перевод по адресу", "Сканер QR работает в Telegram на телефоне. Здесь можно ввести адрес кошелька (NP…) или id игрока:", "", "Дальше").then(v => {
+    if (payAddrLike(v)) { payByAddr(v); return; }
     const id = parseInt(v, 10); if (id > 0) openPaySend(id, 0);
   });
 }
@@ -186,6 +204,10 @@ Object.assign(ACT, {
   pay: () => openPay(),
   "pay-scan": () => payScan(),
   "pay-recv": () => openPayRecv(0),
+  "pay-addr-copy": el => {
+    const a = el.dataset.a, ok = () => { H.ok(); toast("Адрес кошелька скопирован", "ok"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(a).then(ok, () => copyFallback(a, ok)); else copyFallback(a, ok);
+  },
   "pay-to": el => openPaySend(+el.dataset.id),
   "pay-amt": async el => {
     const v = await promptM("Сумма", "Сколько звёзд попросить? QR обновится с этой суммой", el.dataset.v !== "0" ? el.dataset.v : "", "Готово");

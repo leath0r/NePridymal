@@ -49,7 +49,41 @@ CREATE INDEX IF NOT EXISTS transfers_src ON transfers(src, ts);
 CREATE INDEX IF NOT EXISTS transfers_dst ON transfers(dst, ts);
 CREATE TABLE IF NOT EXISTS pay_pin(user INTEGER PRIMARY KEY, hash TEXT, salt TEXT, ts INTEGER, fails INTEGER DEFAULT 0, lock INTEGER DEFAULT 0,
   code TEXT, code_until INTEGER DEFAULT 0, code_fails INTEGER DEFAULT 0, code_ts INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS pay_addr(user INTEGER PRIMARY KEY, addr TEXT UNIQUE NOT NULL, ts INTEGER);
 """)
+
+# ---------------- адрес кошелька (как в крипте): NP + 16 случайных символов + 4 символа контрольной суммы ----------------
+# Случайный, а не из id: по адресу не узнать Telegram-аккаунт, подобрать чужой нельзя (80 бит). Контрольная сумма ловит опечатки.
+ADDR_ABC = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"   # base32 Крокфорда: без I, L, O, U — их не спутать
+
+
+def _addr_sum(body):
+    h = hashlib.sha256(("np:" + body).encode()).digest()
+    return "".join(ADDR_ABC[b % 32] for b in h[:4])
+
+
+def addr_norm(s):
+    """Приводим ввод к виду NP…: регистр, пробелы/дефисы, O→0, I/L→1. None — если это не похоже на адрес."""
+    s = "".join(str(s or "").upper().split()).replace("-", "").translate(str.maketrans("OIL", "011"))
+    if not (len(s) == 22 and s.startswith("NP") and all(c in ADDR_ABC for c in s[2:])):
+        return None
+    return s
+
+
+def addr_of(uid):
+    r = q1("SELECT addr FROM pay_addr WHERE user=?", uid)
+    if r:
+        return r["addr"]
+    while True:
+        body = "".join(secrets.choice(ADDR_ABC) for _ in range(16))
+        a = "NP" + body + _addr_sum(body)
+        with tx():
+            r = q1("SELECT addr FROM pay_addr WHERE user=?", uid)
+            if r:
+                return r["addr"]
+            if not q1("SELECT 1 FROM pay_addr WHERE addr=?", a):
+                db.execute("INSERT INTO pay_addr(user,addr,ts) VALUES(?,?,?)", (uid, a, now()))
+                return a
 
 # ---------------- пароль кошелька (6 цифр, как в WeChat): без него переводы не проходят ----------------
 # Храним только PBKDF2-хэш с солью. 5 неверных подряд — блок переводов на 15 минут. Забыл — бот присылает код сброса в личку.
@@ -132,7 +166,7 @@ def pay_home(uid=Depends(auth)):
     wk = now() - 7 * 86400
     week = {"in": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE dst=? AND ts>=?", uid, wk)["s"],
             "out": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE src=? AND ts>=?", uid, wk)["s"]}
-    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out, "pin": has_pin(uid)}
+    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out, "pin": has_pin(uid), "addr": addr_of(uid)}
 
 
 @app.get(R + "/pay/peer/{tid}")
@@ -142,6 +176,24 @@ def pay_peer(tid: int, uid=Depends(auth)):
     u = q1("SELECT * FROM users WHERE id=?", tid)
     if not u or u["banned"]:
         err("игрок не найден")
+    return user_brief(u)
+
+
+@app.get(R + "/pay/addr/{a}")
+def pay_addr(a: str, uid=Depends(auth)):
+    n = addr_norm(a)
+    if not n:
+        err("это не адрес кошелька: он начинается с NP и состоит из 22 символов")
+    if _addr_sum(n[2:18]) != n[18:]:
+        err("в адресе опечатка — проверь символы")
+    r = q1("SELECT user FROM pay_addr WHERE addr=?", n)
+    if not r:
+        err("кошелёк с таким адресом не найден")
+    if r["user"] == uid:
+        err("это твой адрес — дай его другу")
+    u = q1("SELECT * FROM users WHERE id=?", r["user"])
+    if not u or u["banned"]:
+        err("кошелёк с таким адресом не найден")
     return user_brief(u)
 
 
