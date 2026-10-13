@@ -37,6 +37,7 @@ SYSTEM = platform.system().lower()          # linux / darwin / windows
 SERVICE = "nepridymal"
 BACKUP_EVERY, BACKUP_KEEP = 6 * 3600, 28
 HEADLESS = not sys.stdin or not sys.stdin.isatty()   # автозапуск: спрашивать некого
+DRY = "--dry-run" in sys.argv                         # --install --dry-run: показать, что будет установлено, ничего не меняя
 
 
 def say(msg):
@@ -181,6 +182,8 @@ def backup(db_path):
 # ---------------- сервер ----------------
 def serve():
     """Дочерний процесс: сам сервер игры (окружение готовит сторож)."""
+    if sys.stdout is None or sys.stderr is None:   # Windows-автозапуск (pythonw): консоли нет — пишем в общий лог
+        _log_to_file()
     server = os.path.join(ROOT, "server")
     os.chdir(server)
     sys.path.insert(0, server)
@@ -261,6 +264,10 @@ def install():
             path, ctl = f"/etc/systemd/system/{SERVICE}.service", ["systemctl"]
         else:
             path, ctl = os.path.expanduser(f"~/.config/systemd/user/{SERVICE}.service"), ["systemctl", "--user"]
+        if os.path.exists(path) and f"WorkingDirectory={ROOT}\n" not in open(path).read():   # чужая служба с тем же именем
+            raise RuntimeError(f"служба {SERVICE} уже есть ({path}) и запускает игру из другой папки — не трогаю её")
+        if DRY:
+            return f"[проверка] {path}:\n{unit}"
         if not shutil.which("systemctl"):
             raise RuntimeError("нет systemd — добавь в crontab строку: @reboot " + f"{py} {script} >> {log} 2>&1")
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -286,6 +293,8 @@ def install():
   <key>EnvironmentVariables</key><dict><key>PYTHONUNBUFFERED</key><string>1</string></dict>
 </dict></plist>
 """
+        if DRY:
+            return f"[проверка] {path}:\n{plist}"
         os.makedirs(os.path.dirname(path), exist_ok=True)
         _run(["launchctl", "unload", path], check=False)
         open(path, "w").write(plist)
@@ -293,6 +302,8 @@ def install():
         return f"агент launchd {label} ({path}); лог: {log}"
     if SYSTEM == "windows":
         # при входе в Windows, без окна; лог пишет сам run.py (pythonw без консоли)
+        if DRY:
+            return f'[проверка] schtasks /Create /F /TN NePridymal /SC ONLOGON /RL LIMITED /TR "\\"{py}\\" \\"{script}\\""'
         _run(["schtasks", "/Create", "/F", "/TN", "NePridymal", "/SC", "ONLOGON", "/RL", "LIMITED",
               "/TR", f'"{py}" "{script}"'])
         _run(["schtasks", "/Run", "/TN", "NePridymal"], check=False)
