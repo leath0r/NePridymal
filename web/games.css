@@ -10,11 +10,14 @@
 .gcard{position:relative;overflow:hidden;isolation:isolate;border-radius:24px;padding:14px;min-height:196px;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;
   background:radial-gradient(140% 110% at 80% 0%,var(--k1),var(--k2) 75%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 14px 30px -16px var(--k1);transition:transform .15s}
 .gcard:active{transform:scale(.96)}
+/* ~20 карточек: за краем экрана не рисуем и не анимируем (FPS на вкладке «Игры» проседал) */
+.gcard{content-visibility:auto;contain-intrinsic-size:auto 196px}
 .gcard.wide{grid-column:1/-1;min-height:170px;padding-right:46%}
-.gc-bg{position:absolute;inset:0;z-index:-2;transform-origin:78% 30%;background:repeating-conic-gradient(from 0deg at 78% 30%,rgba(255,255,255,.07) 0 7deg,transparent 7deg 20deg);animation:gcspin 40s linear infinite}
+.gc-bg{position:absolute;inset:0;z-index:-2;transform-origin:78% 30%;background:repeating-conic-gradient(from 0deg at 78% 30%,rgba(255,255,255,.07) 0 7deg,transparent 7deg 20deg);transform:scale(1.6)}
+.gcard.wide .gc-bg{animation:gcspin 40s linear infinite}   /* крутим лучи только у большой карточки: слой 1,6× на каждой карточке — дорого */
 @keyframes gcspin{from{transform:rotate(0) scale(1.6)}to{transform:rotate(1turn) scale(1.6)}}
 .gc-glow{position:absolute;right:-10%;top:-12%;width:75%;aspect-ratio:1;border-radius:50%;z-index:-1;background:radial-gradient(circle,rgba(255,255,255,.45),transparent 62%);filter:blur(10px)}
-.gc-img{position:absolute;right:6%;top:8%;width:52%;object-fit:contain;filter:drop-shadow(0 14px 18px rgba(0,0,0,.45));animation:bob 3.2s ease-in-out infinite}
+.gc-img{position:absolute;right:6%;top:8%;width:52%;object-fit:contain;filter:drop-shadow(0 14px 18px rgba(0,0,0,.45));animation:bob 3.2s ease-in-out infinite;will-change:transform}
 .gcard.wide .gc-img{width:36%;right:7%;top:50%;translate:0 -50%}
 .gc-t{font-size:21px;font-weight:900;color:#fff;letter-spacing:-.01em;text-shadow:0 2px 6px rgba(0,0,0,.25)}
 .gc-s{font-size:12.5px;color:rgba(255,255,255,.82);margin-top:2px;line-height:1.3}

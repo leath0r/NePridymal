@@ -1,17 +1,24 @@
 """Запуск NePridymal одной командой (Windows / Linux / macOS).
 
-Первый запуск спросит токен бота (и, по желанию, твой Telegram ID для админки) и сохранит их в .env.
-Дальше: поднимает бесплатный HTTPS-туннель Cloudflare (Telegram открывает игру только по https),
-собирает фронтенд, ставит боту кнопку «Играть» и запускает сервер. Остановить — Ctrl+C.
+  start.bat / ./start.sh        — первый запуск: спросит токен бота и твой Telegram ID, предложит автозапуск
+  python run.py --install       — включить автозапуск (systemd / launchd / Планировщик Windows)
+  python run.py --uninstall     — выключить автозапуск
+  python run.py --status        — работает ли автозапуск, где логи
+
+Что делает: поднимает бесплатный HTTPS-туннель Cloudflare (Telegram открывает игру только по https),
+собирает фронтенд, ставит боту кнопку «Играть», запускает сервер и следит за ним — упал или перезапустился
+после импорта базы из админки — поднимает снова. Раз в 6 часов кладёт бэкап базы в data/backups.
 
 Свой домен с HTTPS? Впиши в .env PUBLIC_URL=https://твой-домен (сервер слушает 127.0.0.1:PORT) — туннель не нужен.
 """
 import atexit
+import gzip
 import json
 import os
 import platform
 import re
 import shutil
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -24,12 +31,19 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 ENV = os.path.join(ROOT, ".env")
 DATA = os.path.join(ROOT, "data")
 BIN = os.path.join(ROOT, "bin")
+LOGS = os.path.join(DATA, "logs")
+BACKUPS = os.path.join(DATA, "backups")
+SYSTEM = platform.system().lower()          # linux / darwin / windows
+SERVICE = "nepridymal"
+BACKUP_EVERY, BACKUP_KEEP = 6 * 3600, 28
+HEADLESS = not sys.stdin or not sys.stdin.isatty()   # автозапуск: спрашивать некого
 
 
 def say(msg):
     print(msg, flush=True)
 
 
+# ---------------- настройки (.env) ----------------
 def load_env():
     env = {}
     if os.path.exists(ENV):
@@ -60,7 +74,11 @@ def tg(token, method, **params):
 
 
 def setup(env):
-    """Спрашиваем токен (пока не подойдёт) и ID админа."""
+    """Спрашиваем токен (пока не подойдёт) и ID админа. В фоне (автозапуск) — только проверяем, что всё есть."""
+    if HEADLESS:
+        if not env.get("BOT_TOKEN") or not env.get("BOT_USERNAME"):
+            sys.exit("Нет .env с токеном бота — сначала запусти start.bat / ./start.sh вручную.")
+        return env
     while True:
         token = env.get("BOT_TOKEN") or input("\nВставь токен бота от @BotFather и нажми Enter:\n> ").strip()
         try:
@@ -82,9 +100,9 @@ def setup(env):
 
 # ---------------- туннель Cloudflare ----------------
 def cloudflared_path():
-    sysname, arch = platform.system().lower(), platform.machine().lower()
+    arch = platform.machine().lower()
     arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(arch, "arm" if arch.startswith("arm") else "386")
-    exe = os.path.join(BIN, "cloudflared.exe" if sysname == "windows" else "cloudflared")
+    exe = os.path.join(BIN, "cloudflared.exe" if SYSTEM == "windows" else "cloudflared")
     if os.path.exists(exe):
         return exe
     found = shutil.which("cloudflared")
@@ -92,9 +110,9 @@ def cloudflared_path():
         return found
     os.makedirs(BIN, exist_ok=True)
     base = "https://github.com/cloudflare/cloudflared/releases/latest/download/"
-    name = {"windows": f"cloudflared-windows-{arch}.exe", "linux": f"cloudflared-linux-{arch}", "darwin": f"cloudflared-darwin-{arch}.tgz"}.get(sysname)
+    name = {"windows": f"cloudflared-windows-{arch}.exe", "linux": f"cloudflared-linux-{arch}", "darwin": f"cloudflared-darwin-{arch}.tgz"}.get(SYSTEM)
     if not name:
-        sys.exit(f"Не знаю, где взять cloudflared для {sysname}. Поставь его сам: https://github.com/cloudflare/cloudflared")
+        sys.exit(f"Не знаю, где взять cloudflared для {SYSTEM}. Поставь его сам: https://github.com/cloudflare/cloudflared")
     say(f"Скачиваю cloudflared ({name}) — один раз…")
     tmp = exe + ".part"
     urllib.request.urlretrieve(base + name, tmp)
@@ -109,10 +127,12 @@ def cloudflared_path():
 
 
 def start_tunnel(port):
+    """Возвращает (процесс, https-адрес). Адрес случайный и меняется, только если туннель перезапустился."""
     exe = cloudflared_path()
     say("Поднимаю HTTPS-туннель…")
     p = subprocess.Popen([exe, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{port}"],
-                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                         **_no_window())
     atexit.register(p.terminate)
     url, deadline = None, time.time() + 90
     while time.time() < deadline:
@@ -126,36 +146,231 @@ def start_tunnel(port):
             url = m.group(0)
             break
     if not url:
-        sys.exit("Не удалось поднять туннель Cloudflare. Проверь интернет и запусти снова.")
+        p.terminate()
+        return None, None
     threading.Thread(target=lambda: [None for _ in p.stdout], daemon=True).start()   # читаем лог, чтобы туннель не встал
-    return url
+    return p, url
+
+
+def _no_window():
+    """На Windows дочерние процессы без чёрного окна."""
+    return {"creationflags": 0x08000000} if SYSTEM == "windows" else {}
+
+
+# ---------------- бэкапы ----------------
+def backup(db_path):
+    """Горячая копия SQLite → gzip в data/backups, храним BACKUP_KEEP последних."""
+    if not os.path.exists(db_path):
+        return
+    os.makedirs(BACKUPS, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%d-%H%M")
+    tmp = os.path.join(BACKUPS, f"game-{stamp}.db")
+    src, dst = sqlite3.connect(db_path), sqlite3.connect(tmp)
+    src.backup(dst)
+    dst.close()
+    src.close()
+    with open(tmp, "rb") as f, gzip.open(tmp + ".gz", "wb", 6) as g:
+        shutil.copyfileobj(f, g)
+    os.remove(tmp)
+    old = sorted(f for f in os.listdir(BACKUPS) if f.startswith("game-") and f.endswith(".db.gz"))
+    for f in old[:-BACKUP_KEEP]:
+        os.remove(os.path.join(BACKUPS, f))
+    say(f"Бэкап базы: data/backups/game-{stamp}.db.gz")
+
+
+# ---------------- сервер ----------------
+def serve():
+    """Дочерний процесс: сам сервер игры (окружение готовит сторож)."""
+    server = os.path.join(ROOT, "server")
+    os.chdir(server)
+    sys.path.insert(0, server)
+    import uvicorn
+    uvicorn.run("app:app", host="127.0.0.1", port=int(os.environ["PORT"]), workers=1, log_level="warning")
+
+
+def supervise(env):
+    """Сторож: туннель + сервер; сервер упал / завершился после импорта базы — поднимаем снова. Плюс бэкапы."""
+    port = int(env.get("PORT") or 8795)
+    fixed = env.get("PUBLIC_URL", "").rstrip("/")
+    tunnel, public = (None, fixed) if fixed else start_tunnel(port)
+    if not public:
+        sys.exit("Не удалось поднять туннель Cloudflare. Проверь интернет и запусти снова.")
+    os.makedirs(DATA, exist_ok=True)
+    db_path = os.environ.get("DB_PATH") or os.path.join(DATA, "game.db")
+    child_env = {**os.environ, "BOT_TOKEN": env["BOT_TOKEN"], "BOT_USERNAME": env["BOT_USERNAME"],
+                 "ADMIN_IDS": env.get("ADMIN_IDS", ""), "SERVE_WEB": "1", "WEB_DIR": os.path.join(ROOT, "web"),
+                 "DB_PATH": db_path, "SETTINGS": os.path.join(ROOT, "settings.toml"), "PORT": str(port),
+                 "PYTHONIOENCODING": "utf-8"}
+    say("Собираю фронтенд…")
+    subprocess.check_call([sys.executable, os.path.join(ROOT, "build.py")], **_no_window())
+    last_backup, fails = time.time(), 0
+    while True:
+        child_env["APP_URL"] = public + "/np/"   # бот ставит кнопку «Играть» на этот адрес при каждом старте сервера
+        say(f"\nИгра запущена: {public}/np/\nОткрой бота @{env['BOT_USERNAME']} в Telegram → кнопка «Играть».")
+        if not HEADLESS:
+            say("Окно не закрывай — пока оно открыто, игра работает (или включи автозапуск: python run.py --install). Ctrl+C — стоп.\n")
+        started = time.time()
+        child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--serve"], env=child_env, **_no_window())
+        while child.poll() is None:
+            time.sleep(2)
+            if time.time() - last_backup >= BACKUP_EVERY:
+                last_backup = time.time()
+                try:
+                    backup(db_path)
+                except Exception as e:
+                    say(f"Бэкап не удался: {e}")
+            if tunnel and tunnel.poll() is not None:   # туннель умер — новый адрес, сервер перезапустим с ним
+                say("Туннель оборвался — поднимаю заново…")
+                tunnel, url = start_tunnel(port)
+                if url:
+                    public = url
+                child.terminate()
+        fails = fails + 1 if time.time() - started < 30 else 0
+        wait = min(60, 3 * fails) or 2
+        say(f"Сервер остановился (код {child.returncode}) — перезапуск через {wait} с…")
+        time.sleep(wait)
+
+
+# ---------------- автозапуск ----------------
+def _python():
+    """Python из venv; на Windows — pythonw (без окна)."""
+    if SYSTEM == "windows":
+        w = os.path.join(ROOT, "venv", "Scripts", "pythonw.exe")
+        return w if os.path.exists(w) else sys.executable
+    v = os.path.join(ROOT, "venv", "bin", "python")
+    return v if os.path.exists(v) else sys.executable
+
+
+def _run(cmd, check=True):
+    r = subprocess.run(cmd, capture_output=True, text=True, **_no_window())
+    if check and r.returncode:
+        raise RuntimeError((r.stderr or r.stdout).strip()[:300])
+    return r
+
+
+def install():
+    py, script, log = _python(), os.path.abspath(__file__), os.path.join(LOGS, "run.log")
+    os.makedirs(LOGS, exist_ok=True)
+    if SYSTEM == "linux":
+        root = hasattr(os, "geteuid") and os.geteuid() == 0
+        unit = (f"[Unit]\nDescription=NePridymal (Telegram Mini App)\nAfter=network-online.target\nWants=network-online.target\n\n"
+                f"[Service]\nWorkingDirectory={ROOT}\nExecStart={py} {script}\nRestart=always\nRestartSec=5\n"
+                f"StandardOutput=append:{log}\nStandardError=append:{log}\nEnvironment=PYTHONUNBUFFERED=1\n\n"
+                f"[Install]\nWantedBy={'multi-user.target' if root else 'default.target'}\n")
+        if root:
+            path, ctl = f"/etc/systemd/system/{SERVICE}.service", ["systemctl"]
+        else:
+            path, ctl = os.path.expanduser(f"~/.config/systemd/user/{SERVICE}.service"), ["systemctl", "--user"]
+        if not shutil.which("systemctl"):
+            raise RuntimeError("нет systemd — добавь в crontab строку: @reboot " + f"{py} {script} >> {log} 2>&1")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").write(unit)
+        _run(ctl + ["daemon-reload"])
+        _run(ctl + ["enable", "--now", SERVICE])
+        if not root:   # чтобы пользовательская служба жила и без входа в систему
+            _run(["loginctl", "enable-linger", os.environ.get("USER", "")], check=False)
+        return f"служба systemd {SERVICE} ({path}); лог: {log}"
+    if SYSTEM == "darwin":
+        label = "com.nepridymal.game"
+        path = os.path.expanduser(f"~/Library/LaunchAgents/{label}.plist")
+        plist = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>{label}</string>
+  <key>ProgramArguments</key><array><string>{py}</string><string>{script}</string></array>
+  <key>WorkingDirectory</key><string>{ROOT}</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>{log}</string>
+  <key>StandardErrorPath</key><string>{log}</string>
+  <key>EnvironmentVariables</key><dict><key>PYTHONUNBUFFERED</key><string>1</string></dict>
+</dict></plist>
+"""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        _run(["launchctl", "unload", path], check=False)
+        open(path, "w").write(plist)
+        _run(["launchctl", "load", "-w", path])
+        return f"агент launchd {label} ({path}); лог: {log}"
+    if SYSTEM == "windows":
+        # при входе в Windows, без окна; лог пишет сам run.py (pythonw без консоли)
+        _run(["schtasks", "/Create", "/F", "/TN", "NePridymal", "/SC", "ONLOGON", "/RL", "LIMITED",
+              "/TR", f'"{py}" "{script}"'])
+        _run(["schtasks", "/Run", "/TN", "NePridymal"], check=False)
+        return f"задача Планировщика «NePridymal» (при входе в Windows); лог: {log}"
+    raise RuntimeError(f"автозапуск для {SYSTEM} не умею")
+
+
+def uninstall():
+    if SYSTEM == "linux":
+        for ctl, path in ((["systemctl"], f"/etc/systemd/system/{SERVICE}.service"),
+                          (["systemctl", "--user"], os.path.expanduser(f"~/.config/systemd/user/{SERVICE}.service"))):
+            if os.path.exists(path):
+                _run(ctl + ["disable", "--now", SERVICE], check=False)
+                os.remove(path)
+                _run(ctl + ["daemon-reload"], check=False)
+    elif SYSTEM == "darwin":
+        path = os.path.expanduser("~/Library/LaunchAgents/com.nepridymal.game.plist")
+        if os.path.exists(path):
+            _run(["launchctl", "unload", "-w", path], check=False)
+            os.remove(path)
+    elif SYSTEM == "windows":
+        _run(["schtasks", "/End", "/TN", "NePridymal"], check=False)
+        _run(["schtasks", "/Delete", "/F", "/TN", "NePridymal"], check=False)
+    return "автозапуск выключен"
+
+
+def status():
+    if SYSTEM == "linux":
+        for ctl in (["systemctl"], ["systemctl", "--user"]):
+            r = _run(ctl + ["is-active", SERVICE], check=False) if shutil.which("systemctl") else None
+            if r and r.stdout.strip() in ("active", "activating"):
+                return f"работает ({' '.join(ctl)}); лог: {os.path.join(LOGS, 'run.log')}"
+    elif SYSTEM == "darwin":
+        if _run(["launchctl", "list", "com.nepridymal.game"], check=False).returncode == 0:
+            return f"работает (launchd); лог: {os.path.join(LOGS, 'run.log')}"
+    elif SYSTEM == "windows":
+        if _run(["schtasks", "/Query", "/TN", "NePridymal"], check=False).returncode == 0:
+            return f"включён (Планировщик Windows); лог: {os.path.join(LOGS, 'run.log')}"
+    return "автозапуск не включён"
+
+
+def _log_to_file():
+    """В фоне (автозапуск на Windows — pythonw без консоли) пишем вывод в data/logs/run.log; больше 5 МБ — начинаем заново."""
+    os.makedirs(LOGS, exist_ok=True)
+    path = os.path.join(LOGS, "run.log")
+    if os.path.exists(path) and os.path.getsize(path) > 5 * 1024 * 1024:
+        os.replace(path, path + ".1")
+    f = open(path, "a", encoding="utf-8", buffering=1)
+    sys.stdout = sys.stderr = f
 
 
 def main():
     if sys.version_info < (3, 11):
         sys.exit("Нужен Python 3.11 или новее.")
+    args = sys.argv[1:]
+    if "--serve" in args:
+        return serve()
+    if "--install" in args or "--uninstall" in args or "--status" in args:
+        try:
+            say(install() if "--install" in args else uninstall() if "--uninstall" in args else status())
+        except Exception as e:
+            sys.exit(f"Не получилось: {e}")
+        return
+    if HEADLESS and (SYSTEM == "windows" or sys.stdout is None or not sys.stdout.isatty()):
+        if SYSTEM == "windows":
+            _log_to_file()
     env = setup(load_env())
-    port = int(env.get("PORT") or 8795)
-    public = env.get("PUBLIC_URL", "").rstrip("/") or start_tunnel(port)
-    app_url = public + "/np/"
-
-    say("Собираю фронтенд…")
-    subprocess.check_call([sys.executable, os.path.join(ROOT, "build.py")])
-
-    os.makedirs(DATA, exist_ok=True)
-    os.environ.update({
-        "BOT_TOKEN": env["BOT_TOKEN"], "BOT_USERNAME": env["BOT_USERNAME"], "ADMIN_IDS": env.get("ADMIN_IDS", ""),
-        "APP_URL": app_url, "SERVE_WEB": "1", "WEB_DIR": os.path.join(ROOT, "web"),
-        "DB_PATH": os.environ.get("DB_PATH") or os.path.join(DATA, "game.db"),
-        "SETTINGS": os.path.join(ROOT, "settings.toml"),
-    })
-    server = os.path.join(ROOT, "server")
-    os.chdir(server)
-    sys.path.insert(0, server)
-    say(f"\nИгра запущена: {app_url}\nОткрой бота @{env['BOT_USERNAME']} в Telegram → кнопка «Играть».\n"
-        "Окно не закрывай — пока оно открыто, игра работает. Остановить — Ctrl+C.\n")
-    import uvicorn
-    uvicorn.run("app:app", host="127.0.0.1", port=port, workers=1, log_level="warning")
+    if not HEADLESS and env.get("AUTOSTART_ASKED") != "1":
+        env["AUTOSTART_ASKED"] = "1"
+        save_env(env)
+        if input("\nВключить автозапуск — игра сама стартует после перезагрузки и работает без открытого окна? [Y/n] ").strip().lower() in ("", "y", "д", "да", "yes"):
+            try:
+                say("Автозапуск включён: " + install())
+                say("Игра уже работает в фоне — это окно можно закрыть.")
+                return
+            except Exception as e:
+                say(f"Автозапуск не включился ({e}) — запускаю в этом окне.")
+    supervise(env)
 
 
 if __name__ == "__main__":

@@ -2,8 +2,10 @@
 .lv-tick{display:flex;align-items:center;gap:8px;width:100%;margin:0 0 12px;padding:7px 10px;border-radius:14px;border:1px solid color-mix(in srgb,var(--gold) 22%,transparent);
   background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 10%,var(--card)),var(--card));color:inherit;font:inherit;text-align:left;overflow:hidden;cursor:pointer}
 .lv-on{display:inline-flex;align-items:center;gap:6px;flex:none;font-size:12px;font-weight:700;color:#4ade80;white-space:nowrap}
-.lv-on i{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 0 #4ade8088;animation:lvPulse 1.8s infinite}
-@keyframes lvPulse{70%{box-shadow:0 0 0 7px #4ade8000}100%{box-shadow:0 0 0 0 #4ade8000}}
+.lv-on i{position:relative;width:7px;height:7px;border-radius:50%;background:#4ade80}
+/* пульс — кольцом-псевдоэлементом через transform/opacity (анимация тени перерисовывалась каждый кадр) */
+.lv-on i::after{content:"";position:absolute;inset:0;border-radius:50%;background:#4ade8088;animation:lvPulse 1.8s infinite}
+@keyframes lvPulse{0%{transform:scale(1);opacity:1}70%,100%{transform:scale(3);opacity:0}}
 .lv-track{flex:1;min-width:0;overflow:hidden;-webkit-mask:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
 .lv-run{display:inline-flex;gap:18px;white-space:nowrap;animation:lvRun 40s linear infinite;will-change:transform}
 @keyframes lvRun{to{transform:translateX(-50%)}}
