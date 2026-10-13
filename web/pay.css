@@ -136,15 +136,18 @@ html.lite .pay-ok .ic path{stroke-dashoffset:0;animation:none}
 @keyframes pay-draw{to{stroke-dashoffset:0}}
 
 /* пароль кошелька */
-.pin{display:flex;flex-direction:column;align-items:center;text-align:center;padding:6px 0 4px}
+.sheet.pin-s{display:flex;flex-direction:column;padding:calc(var(--top) + 8px) 16px calc(18px + var(--bot));overflow:hidden}
+.sheet.pin-s .sbal{display:none}
+/* на весь экран, как в WeChat: сверху замок, заголовок и точки, клавиатура прижата к низу */
+.pin{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;text-align:center;padding:6vh 0 0}
 .pin-ic{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--gold)}
 .pin-ic .ic{width:24px;height:24px}
 .pin-t{margin-top:10px;font-size:19px}.pin-s{margin-top:4px;font-size:13px;color:var(--hint);max-width:300px}
-.pin-dots{display:flex;gap:14px;margin:22px 0 20px}
+.pin-dots{display:flex;gap:16px;margin:28px 0 20px}
 .pin-dots i{width:14px;height:14px;border-radius:50%;border:2px solid var(--hint);transition:background .1s,border-color .1s}
 .pin-dots i.on{background:var(--text);border-color:var(--text)}
-.pin-kb{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:320px}
-.pin-kb button{height:58px;border-radius:16px;background:var(--card2);font-size:24px;font-weight:700;color:var(--text);display:grid;place-items:center}
+.pin-kb{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:360px;margin-top:auto}
+.pin-kb button{height:62px;border-radius:16px;background:var(--card2);font-size:24px;font-weight:700;color:var(--text);display:grid;place-items:center}
 .pin-kb button:active{transform:scale(.94);background:var(--card)}
 .pin-kb button .ic{width:24px;height:24px}
 .pin-kb .pin-f{font-size:13px;font-weight:600;color:var(--hint);background:none}
