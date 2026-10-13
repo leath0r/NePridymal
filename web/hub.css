@@ -232,3 +232,6 @@ html.lite .pr-c-ic img{animation:none}
 .adm-arr{display:inline-flex;color:var(--hint);margin:0 -4px}.adm-arr .ic{width:14px;height:14px}
 
 .adm-odd-all{margin-bottom:10px;gap:6px}.adm-odd-all .drange{display:block;margin:2px 0 0;padding:0;height:28px}.adm-odd-all .adm-oc{flex-wrap:wrap}
+
+#fps{position:fixed;left:6px;top:calc(var(--top,0px) + 6px);z-index:9999;padding:2px 7px;border-radius:8px;background:rgba(0,0,0,.6);color:#9ff;font:700 11px/1.4 ui-monospace,monospace;pointer-events:auto}
+#fps.hi{color:#7dffb8}#fps.lo{color:#ff8a8a}

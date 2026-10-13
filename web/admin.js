@@ -13,12 +13,49 @@ const admKv = (k, v) => `<div class="row kv"><div class="grow"><div class="s">${
     b.id = "adm-btn"; b.className = "adm-btn"; b.dataset.act = "adm"; b.innerHTML = ic("lock");
     $("#me-btn").before(b);
   };
-  const t = setInterval(() => { if (ME) { clearInterval(t); add(); } }, 500);
+  const t = setInterval(() => { if (ME) { clearInterval(t); add(); if (ME.admin) fpsMeter(); } }, 500);
 })();
 
+// счётчик FPS — только для админов: средний FPS и самый долгий кадр за 0,5 с (рывки). Тап — спрятать (запоминается).
+function fpsMeter(force) {
+  let off = false; try { off = localStorage.getItem("fpsOff") === "1"; } catch (e) {}
+  if (force) { off = false; try { localStorage.removeItem("fpsOff"); } catch (e) {} }
+  if (off || $("#fps")) return;
+  const el = document.createElement("div"); el.id = "fps"; document.body.appendChild(el);
+  el.onclick = () => { el.remove(); try { localStorage.setItem("fpsOff", "1"); } catch (e) {} };
+  let n = 0, t0 = performance.now(), prev = t0, worst = 0;
+  (function f(now) {
+    if (!el.isConnected) return;
+    n++; worst = Math.max(worst, now - prev); prev = now;
+    if (now - t0 >= 500) {
+      const fps = Math.round(n * 1000 / (now - t0));
+      el.textContent = `${fps} fps · ${Math.round(worst)} мс`;
+      el.className = fps >= 100 ? "hi" : fps >= 55 ? "" : "lo";
+      n = 0; t0 = now; worst = 0;
+    }
+    requestAnimationFrame(f);
+  })(t0);
+}
+
+async function admDbImport(f) {
+  const mb = (f.size / 1048576).toFixed(1);
+  if (!/\.(db|gz)$/i.test(f.name)) return toast("Нужен файл .db или .db.gz");
+  if (!await confirmM("Заменить базу?", `Файл «${esc(f.name)}» (${mb} МБ) заменит ВСЮ текущую базу: игроков, балансы, подарки. Текущая сохранится в backups/ на сервере.`, "Дальше")) return;
+  if (!await confirmM("Точно?", "Всё, что игроки сделали после этой копии, пропадёт. Игра перезапустится.", "Да, импортировать")) return;
+  toast(`Загружаю ${mb} МБ…`);
+  const headers = { "Content-Type": "application/octet-stream" };
+  if (inTg) headers["X-Init-Data"] = tg.initData; else if (DEV_USER) headers["X-Dev-User"] = DEV_USER;
+  let r, d = null;
+  try { r = await fetch("api/admin/db/import", { method: "POST", headers, body: f }); d = await r.json().catch(() => null); }
+  catch (e) { return toast("Нет связи с сервером", "err"); }
+  if (!r.ok) { H.err(); return toast(d && d.detail || (r.status === 413 ? "Файл слишком большой" : "Ошибка импорта"), "err"); }
+  H.ok(); toast(`Импортировано: ${fmt(d.users)} игроков. Перезапуск…`, "ok");
+  setTimeout(() => location.reload(), 8000);   // сервис поднимается за ~5–7 с
+}
 function openAdmin() {
+  fpsMeter(true);   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -131,6 +168,15 @@ async function admRender(el = topSheet()) {
     body.innerHTML = `<textarea id="adm-bc" rows="5" placeholder="Текст сообщения всем игрокам"></textarea>
       <button class="btn" data-act="adm-bc" style="margin-top:10px" ${st.running ? "disabled" : ""}>${ic("send")}Отправить всем</button>
       <div class="hint" style="font-size:12.5px;text-align:center;margin-top:10px">${st.total ? `Последняя рассылка: отправлено ${st.sent} из ${st.total}, ошибок ${st.failed}${st.running ? " · идёт…" : ""}` : "Сообщение придёт от бота с кнопкой «Открыть». Заблокированным не отправляется."}</div>`;
+  } else if (ADM.tab === "db") {
+    body.innerHTML = `<div class="box adm-odd"><div class="adm-oh"><b>${ic("download")}Экспорт</b></div>
+        <div class="adm-os">Свежая копия базы (игроки, звёзды, подарки, всё) — бот пришлёт файл .db.gz тебе в личку. Игру не останавливает.</div>
+        <div class="adm-oc"><button class="btn sm gold" data-act="adm-db-exp">${ic("send")}Прислать базу в Telegram</button></div></div>
+      <div class="box adm-odd" style="margin-top:10px"><div class="adm-oh"><b>${ic("upload")}Импорт</b><span class="adm-tag red">заменяет всё</span></div>
+        <div class="adm-os">Файл .db или .db.gz (например, из экспорта или ежедневного бэкапа). Текущая база перед заменой сохранится в backups/ на сервере. После импорта игра перезапустится — секунд 10.</div>
+        <div class="adm-oc"><label class="btn sm ghost" style="margin-left:auto">${ic("upload")}Выбрать файл<input type="file" id="adm-db-file" accept=".db,.gz,application/gzip,application/octet-stream" hidden></label></div></div>
+      <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Только владелец (ADMIN_IDS в .env)</div>`;
+    body.querySelector("#adm-db-file").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) admDbImport(f); };
   } else {
     const r = await api("admin/log");
     body.innerHTML = `<div class="box">${r.log.map(x => `<div class="row kv"><div class="grow"><div class="t">${esc(x.action)}${x.target ? " · " + x.target : ""}</div><div class="s">${esc(x.detail || "")}</div></div><span class="hint" style="font-size:12px">${admDate(x.ts)}</span></div>`).join("") || `<div class="hint" style="padding:14px">Действий пока нет</div>`}</div>`;
@@ -282,6 +328,11 @@ Object.assign(ACT, {
     const on = el.dataset.v === "1";
     if (!on && !await confirmM("Выключить переводы?", "Игроки не смогут переводить звёзды друг другу, пока не включишь обратно.", "Выключить")) return;
     await post("admin/pay", { on }); H.ok(); toast(on ? "Переводы включены" : "Переводы выключены", "ok"); admRender();
+  },
+  "adm-db-exp": async el => {
+    el.disabled = true;
+    try { const r = await post("admin/db/export"); H.ok(); toast(`Бот прислал базу: ${fmt(r.users)} игроков, ${fmt(r.kb)} КБ`, "ok"); }
+    finally { el.disabled = false; }
   },
   "adm-odds-all": async () => {
     const v = parseFloat(topSheet().querySelector("#adm-oall-n").value.replace(",", "."));
