@@ -219,23 +219,25 @@ function profileHTML(p, tab = "show") {
   } else body = show.length ? `<div class="showcase">${show.map((g, i) => `<div class="sc${i === 0 ? " main" : ""}" data-act="gift" data-k="${reg({ g, mine: isMe, owner: p })}">${giftHTML(g)}<div class="cap">${giftName(g)}<span>⭐ ${short(g.value)}</span></div></div>`).join("")}</div>
       ${!p.pinned.length && isMe ? `<button class="btn ghost" style="margin-top:12px" data-act="edit-profile">${ic("pin")}Выбрать подарки для витрины</button>` : ""}`
     : emptyHTML("gift", isMe ? "Открой первый кейс — тут будет витрина" : "Витрина пуста");
-  // шапка: баннер — фоном, поверх него аватар, имя, теги; лишнее (значки достижений, дата, полоса уровня) — убрано
-  return `<div class="phero">${bannerHTML(p)}
-    <div class="phead v5">${avaHTML(p, 76, { ring: true, p: prog })}
-      <div class="ph-main">
-        <div class="pname"><h2>${esc(p.name)}</h2></div>
-        <div class="ph-tags"><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}${p.title ? `<span class="ptitle" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</span>` : ""}</div>
-        ${p.username ? `<div class="un">@${esc(p.username)}</div>` : ""}
-      </div>
-    </div></div>
-    ${p.badges && p.badges.length ? `<div class="pbadges"></div>` : ""}
-    ${p.bio ? `<div class="bio pbio">${esc(p.bio)}</div>` : ""}
-    <div class="pnums">
-      <div><b>⭐ ${short(p.worth)}</b><span>состояние</span></div>
-      <div><b>${p.gifts.length}</b><span>подарков</span></div>
-      <div><b>${p.cols}</b><span>коллекций</span></div>
-      <div><b>${p.friends}</b><span>друзей</span></div>
+  // шапка профиля в духе X / Telegram / Discord: обложка во всю ширину; аватар слева наполовину на обложке (в «вырезе» цвета фона);
+  // справа от аватара на обложке — теги; ниже слева имя, @ник, описание и цифры строкой. Свои классы pf-* — старые .phead-правила не влияют.
+  return `<div class="pf">
+    <div class="pf-cover">${bannerHTML(p)}</div>
+    <div class="pf-row">
+      <div class="pf-ava">${avaHTML(p, 88, { ring: true, p: prog })}</div>
+      <div class="pf-tags"><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}</div>
     </div>
+    <div class="pname"><h2>${esc(p.name)}</h2></div>
+    <div class="pf-sub">${p.username ? `<span>@${esc(p.username)}</span>` : ""}${p.title ? `<span class="pf-title" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</span>` : ""}</div>
+    ${p.badges && p.badges.length ? `<div class="pbadges"></div>` : ""}
+    ${p.bio ? `<div class="pf-bio">${esc(p.bio)}</div>` : ""}
+    <div class="pf-stats">
+      <span><b>⭐ ${short(p.worth)}</b> состояние</span>
+      <span><b>${fmt(p.gifts.length)}</b> ${plural(p.gifts.length, ["подарок", "подарка", "подарков"])}</span>
+      <span><b>${fmt(p.cols)}</b> ${plural(p.cols, ["коллекция", "коллекции", "коллекций"])}</span>
+      <span ${isMe ? 'data-act="friends"' : ""}><b>${fmt(p.friends)}</b> ${plural(p.friends, ["друг", "друга", "друзей"])}</span>
+    </div>
+  </div>
     <div class="pacts">${isMe
       ? `<button class="btn ghost" data-act="edit-profile">${ic("edit")}Изменить</button><button class="btn ghost" data-act="friends">${ic("users")}Друзья</button><button class="btn" data-act="invite">${ic("send")}Позвать</button><button class="btn ghost pset" data-act="settings" aria-label="Настройки">${ic("gear")}</button>`
       : `<button class="btn ${REL[3]}" data-act="fr" data-id="${p.id}" data-v="${REL[2]}">${ic(REL[0])}${REL[1]}</button><button class="btn ghost" data-act="trade-new" data-id="${p.id}">${ic("swap")}Обмен</button><button class="btn ghost" data-act="duel-new" data-id="${p.id}">${ic("target")}Дуэль</button>${p.rel === "friend" ? `<button class="btn ghost pset" data-act="gift-stars" data-to="${p.id}" aria-label="Подарить звёзды">${ic("giftbox")}</button>` : ""}`}</div>

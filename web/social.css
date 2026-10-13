@@ -359,47 +359,32 @@ details.locked[open]>summary{margin-bottom:12px}
 .psheet .banner i:nth-child(2n){animation-duration:11s;animation-direction:alternate-reverse}
 @keyframes bdrift{to{translate:0 -6px;rotate:6deg}}
 
-/* ================= профиль v4: аватар слева, наполовину на баннере; теги справа от аватара — поверх баннера ================= */
-.phead.v4{margin-top:-58px;position:relative;z-index:1;text-align:left}
-.ph-top{display:flex;align-items:flex-start;gap:12px;padding:0 2px}
-.ph-top>.ava{--s:96px;flex:none;isolation:isolate}
-/* свечение за аватаром — статичное (вращающийся размытый градиент тормозил на слабых телефонах) */
-.ph-top>.ava::before{content:"";position:absolute;inset:-7px;border-radius:50%;z-index:-1;pointer-events:none;
-  background:conic-gradient(from 210deg,#ffd23f,#ff6fb5,#7c6bff,#3fd6ff,#ffd23f);filter:blur(9px);opacity:.5}
-.ph-tags{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding-top:14px}
-.ph-tags .plv,.ph-tags .vipb,.ph-tags .ctag{margin:0;box-shadow:0 4px 12px -4px rgba(0,0,0,.5)}
-.ph-tags .ctag{background:rgba(0,0,0,.5);color:#fff}
-.ph-tags .pbadges{display:flex;flex-wrap:wrap;gap:5px;margin:0;justify-content:flex-start;flex-basis:100%}
-.ph-tags .pbadges span{width:26px;height:26px;border-radius:9px}
-.ph-tags .pbadges .ic{width:15px;height:15px}
-.ph-tags .pbadges.chosen{padding:0;margin:0}
-.ph-tags .pbadges.chosen .pbadge{background:rgba(0,0,0,.5);color:#fff;padding:3px 9px 3px 6px;font-size:11px}
-.phead.v4 .pname{justify-content:flex-start;margin-top:10px}
-.phead.v4 h2{text-shadow:none}
-.phead.v4 .ptitle{margin:6px 0 2px}
-.phead.v4 .pstatus{text-align:left;margin-top:4px;padding:0;max-width:none}
-.phead.v4 .un{color:var(--hint);font-size:13.5px;margin-top:4px}
-.phead.v4 .bio{margin-top:10px;padding:9px 14px;border-radius:14px;background:var(--card);font-size:14px;max-width:100%}
-
-/* ================= профиль v5: баннер — фон шапки, всё поверх него; без перегруза ================= */
-.phero{position:relative;margin:calc(-8px - var(--top)) -16px 0;padding:calc(var(--top) + 96px) 16px 14px;isolation:isolate}
-.phero>.banner{position:absolute;inset:0;margin:0;height:auto;z-index:-1}
-.phero>.banner::after{content:"";position:absolute;inset:0;height:auto;background:linear-gradient(180deg,transparent 30%,color-mix(in srgb,var(--bg) 70%,transparent) 72%,var(--bg))}
-.phead.v5{display:flex;align-items:center;gap:12px;margin:0;text-align:left}
-.phead.v5>.ava{--s:76px;flex:none;box-shadow:0 6px 20px rgba(0,0,0,.4)}
-.ph-main{flex:1;min-width:0}
-.phead.v5 .pname{justify-content:flex-start;margin:0}
-.phead.v5 h2{font-size:22px;text-shadow:0 1px 8px rgba(0,0,0,.35)}
-.phead.v5 .ph-tags{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:5px;padding:0}
-.phead.v5 .ph-tags>span{margin:0;font-size:11.5px;padding:2px 8px;border-radius:8px;box-shadow:none}
-.phead.v5 .ph-tags .ctag{background:rgba(0,0,0,.45);color:#fff}
-.phead.v5 .ph-tags .ptitle{display:inline-flex;align-items:center;gap:4px;background:rgba(0,0,0,.45);color:var(--gold)}
-.phead.v5 .ph-tags .ptitle .ic{width:12px;height:12px}
-.phead.v5 .un{color:var(--hint);font-size:13px;margin-top:4px}
-.phead.v5 .pstatus{text-align:left;margin:3px 0 0;padding:0;max-width:none;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pbadges.chosen{justify-content:flex-start;padding:0;margin-top:2px}
-.pbio{margin-top:10px;padding:9px 13px;border-radius:14px;background:var(--card);font-size:14px;white-space:pre-wrap;word-break:break-word}
-.pnums{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;margin-top:12px;border-radius:16px;background:var(--card);padding:10px 4px}
-.pnums>div{display:flex;flex-direction:column;align-items:center;min-width:0}
-.pnums>div+div{border-left:1px solid var(--sep)}
-.pnums b{font-size:16px;font-weight:900;white-space:nowrap}.pnums span{font-size:11px;color:var(--hint)}
+/* ================= профиль (pf): как в X / Telegram / Discord ================= */
+.pf{text-align:left}
+.pf-cover{position:relative;margin:calc(-8px - var(--top)) -16px 0;height:calc(150px + var(--top));overflow:hidden}
+.pf-cover>.banner{position:absolute;inset:0;margin:0;height:auto}
+.pf-cover>.banner::after{content:"";position:absolute;inset:0;height:auto;background:linear-gradient(180deg,rgba(0,0,0,.18),transparent 40%,rgba(0,0,0,.28))}
+/* аватар слева, наполовину на обложке; вырез цвета фона отделяет его от обложки */
+.pf-row{display:flex;align-items:flex-start;gap:10px;margin-top:-48px;position:relative;z-index:1}
+.pf-ava{flex:none;padding:4px;border-radius:50%;background:var(--bg);line-height:0}
+.pf-ava .ava{--s:88px}
+/* теги справа от аватара — поверх обложки, над её нижним краем */
+.pf-tags{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;padding-top:10px}
+.pf-tags>span{margin:0;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 9px;border-radius:12px;font-size:12px;font-weight:800;
+  background:rgba(10,10,20,.5);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);letter-spacing:.02em}
+.pf-tags>.plv{background:linear-gradient(135deg,#ffe17a,#ffab2e);color:#3a2800;box-shadow:0 4px 12px -4px rgba(255,171,46,.7)}
+.pf-tags .ic{width:13px;height:13px}
+.pf-tags>.vipb{background:linear-gradient(135deg,#fff0a8,#ffc94d);color:#3a2300;box-shadow:none}
+/* имя и подписи — слева */
+.pf .pname{display:flex;align-items:center;justify-content:flex-start;gap:6px;margin:10px 0 0}
+.pf .pname h2{margin:0;font-size:24px;font-weight:900;letter-spacing:-.01em;line-height:1.15;text-shadow:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pf .pstatus{text-align:left;margin:4px 0 0;padding:0;max-width:none;font-size:14px;line-height:1.35}
+.pf-sub{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-top:3px;font-size:14px;color:var(--hint)}
+.pf-title{display:inline-flex;align-items:center;gap:4px;color:var(--gold);font-weight:700}
+.pf-title .ic{width:14px;height:14px}
+.pf .pbadges,.pf .pbadges.chosen{justify-content:flex-start;padding:0;margin-top:10px}
+.pf-bio{margin-top:10px;font-size:15px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+/* цифры строкой, как «подписчики» в X */
+.pf-stats{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;font-size:14px;color:var(--hint)}
+.pf-stats b{color:var(--text);font-weight:800}
+.pf-stats [data-act]{cursor:pointer}
