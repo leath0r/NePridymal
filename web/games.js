@@ -325,6 +325,7 @@ function upgDraw(result, marks) {
     : t0 ? `<img src="${A.model(t0.col, t0.model, 256)}" alt=""><b>${ch.toFixed(ch < 10 ? 1 : 0)}%</b><span>шанс</span>` : `<b class="hint">—</b><span>шанс</span>`);
   const C = 2 * Math.PI * 47;
   $("#u-arc").style.strokeDasharray = `${C * ch / 100} ${C}`;
+  $("#u-arc").style.transform = `rotate(${90 - ch * 1.8}deg)`;   // сектор шанса — по центру снизу (как на кейс-сайтах), а не от 12 часов вбок
   $("#u-ring").className = "uring" + (result ? " " + result : "");
   const go = $("#u-go"), bad = UP.ts.length && upTV() < 1.2 * upSV();
   go.disabled = !(UP.gs.length && UP.ts.length) || UP.busy || bad;
@@ -365,7 +366,7 @@ async function upgGo() {
   catch (e) { UP.busy = false; upgDraw(undefined, true); return; }
   const arc = r.chance / 100 * 360;
   const stop = r.win ? Math.random() * arc * .9 + arc * .05 : arc + 4 + Math.random() * (352 - arc);
-  const start = UP.angle, to = start - (start % 360) + 360 * 5 + stop;
+  const start = UP.angle, to = start - (start % 360) + 360 * 5 + (180 - arc / 2) + stop;   // сектор начинается в 180° − arc/2 (центр снизу)
   const needle = $("#u-needle"), t0 = performance.now(), dur = UP.fast ? 700 : 4300;
   let lastTick = start;
   await new Promise(done => (function f(now) {
