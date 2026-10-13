@@ -274,7 +274,7 @@ function openUpgrade() {
       <svg viewBox="0 0 120 120"><defs><linearGradient id="u-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7dffb8"/><stop offset="1" stop-color="#16c88d"/></linearGradient></defs>
         <g class="ticks">${RING_TICKS}</g>
         <circle cx="60" cy="60" r="47" class="trk"/><circle cx="60" cy="60" r="47" class="arc" id="u-arc"/>
-        <g id="u-needle"><path d="M60 15.5 L55 6 L65 6 Z" fill="#fff"/><circle cx="60" cy="13" r="1.6" fill="#16c88d"/></g></svg>
+        <g id="u-needle"><path d="M60 16 L57.6 6.5 L62.4 6.5 Z" fill="#fff"/></g></svg>
       <div class="uc" id="u-center"></div>
     </div>
     <div class="upair">
@@ -365,7 +365,8 @@ async function upgGo() {
   try { r = await post("upgrade", { gids: UP.gs.map(g => g.id), targets: UP.ts.map(t => ({ col: t.col, model: t.model })) }); }
   catch (e) { UP.busy = false; upgDraw(undefined, true); return; }
   const arc = r.chance / 100 * 360;
-  const stop = r.win ? Math.random() * arc * .9 + arc * .05 : arc + 4 + Math.random() * (352 - arc);
+  const m = Math.min(6, arc * .2);   // отступ от краёв сектора: стрелка не встаёт «на линию»
+  const stop = r.win ? m + Math.random() * (arc - 2 * m) : arc + 7 + Math.random() * (346 - arc);
   const start = UP.angle, to = start - (start % 360) + 360 * 5 + (180 - arc / 2) + stop;   // сектор начинается в 180° − arc/2 (центр снизу)
   const needle = $("#u-needle"), t0 = performance.now(), dur = UP.fast ? 700 : 4300;
   let lastTick = start;
