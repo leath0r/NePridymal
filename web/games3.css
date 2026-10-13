@@ -143,3 +143,6 @@
 .biz-bar div::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.28) 0 6px,transparent 6px 13px);animation:bizstripes 1s linear infinite}
 @keyframes bizstripes{to{background-position:26px 0}}
 .biz.full .ba{color:#4cf0a0;font-weight:800}
+
+.biz .bsell{margin-top:4px;padding:2px 8px;border:0;background:none;color:var(--hint);font:inherit;font-size:11.5px;font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.bizsell-s .btn{width:100%}.bizsell-s .bs-t{display:flex;flex-direction:column;align-items:center;gap:2px}.bizsell-s .bs-t small{font-weight:600;opacity:.75;font-size:12px}

@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS inbox(id INTEGER PRIMARY KEY, user INTEGER, text TEXT
 CREATE INDEX IF NOT EXISTS inbox_user ON inbox(user, id);
 """)
 
-HIST = {**NAMES, "case": "Кейс", "admin": "Начисление от администрации", "bizbuy": "Покупка бизнеса", "buy": "Покупка звёзд", "buy_gift": "Звёзды в подарок", "style": "Оформление профиля", "cashback": "Кэшбэк недели", "clan": "Клан",
+HIST = {**NAMES, "case": "Кейс", "admin": "Начисление от администрации", "bizbuy": "Покупка бизнеса", "bizsell": "Продажа бизнеса", "buy": "Покупка звёзд", "buy_gift": "Звёзды в подарок", "style": "Оформление профиля", "cashback": "Кэшбэк недели", "clan": "Клан",
         "clandep": "Взнос в казну клана", "clanspend": "Казна клана", "crypto": "Крипта", "daily": "Бонус дня", "div": "Дивиденды", "fee": "Комиссия",
         "futures": "Фьючерсы", "gift": "Подарки", "income": "Доход", "jackpot": "Розыгрыш", "loan": "Кредит", "lucky": "Удачный момент",
         "mkbank": "Маркет казино", "onboard": "Старт новичка", "present": "Подарок другу", "quest": "Задания", "ref": "Реферал",

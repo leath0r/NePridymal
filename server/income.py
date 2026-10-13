@@ -87,6 +87,23 @@ def biz_upgrade(bid, level):
     return int(BIZ_MAP[bid][3] * 0.5 * 1.6 ** (level - 1))
 
 
+BIZ_SELL = conf("economy.biz_sell", 0.5)   # продажа: 50% вложенного — купить и сразу продать всегда в убыток (не «станок»)
+
+
+def biz_invested(bid, level):
+    """Сколько игрок заплатил за бизнес этого уровня: цена + все улучшения."""
+    return BIZ_MAP[bid][3] + sum(biz_upgrade(bid, lv) for lv in range(1, level))
+
+
+def biz_sell_price(bid, level):
+    return int(biz_invested(bid, level) * BIZ_SELL)
+
+
+def biz_down_price(bid, level):
+    """Продать последнее улучшение (уровень level → level-1)."""
+    return int(biz_upgrade(bid, level - 1) * BIZ_SELL) if level > 1 else None
+
+
 def _biz_rows(uid, t):
     own = {r["bid"]: r for r in q("SELECT * FROM biz WHERE user=?", uid)}
     out, ready = [], 0
@@ -100,7 +117,9 @@ def _biz_rows(uid, t):
             item.update(income=inc, accrued=acc, cap=inc * BIZ_CAP // 3600, full=t - r["ts"] >= BIZ_CAP,
                         shiftIn=max(0, (r["shift_ts"] or 0) + SHIFT_EVERY - t),
                         upgrade=biz_upgrade(bid, r["level"]) if r["level"] < BIZ_MAX else None,
-                        next=biz_income(bid, r["level"] + 1) if r["level"] < BIZ_MAX else None)
+                        next=biz_income(bid, r["level"] + 1) if r["level"] < BIZ_MAX else None,
+                        sell=biz_sell_price(bid, r["level"]), down=biz_down_price(bid, r["level"]),
+                        prev=biz_income(bid, r["level"] - 1) if r["level"] > 1 else None)
         else:
             item.update(income=biz_income(bid, 1))
         out.append(item)
@@ -227,6 +246,35 @@ def biz_buy(bid: str, uid=Depends(auth)):
         event(uid, "bizbuy", -cost)
         lvl = add_xp(uid, max(10, cost // 50))
     return {"ok": True, "stars": bal(uid), "levelup": lvl}
+
+
+@app.post(R + "/biz/{bid}/sell")
+async def biz_sell(bid: str, req: Request, uid=Depends(auth)):
+    """Продажа: what=all — бизнес целиком за 50% вложенного; what=level — последнее улучшение за 50% его цены.
+    Накопленный доход перед этим выплачивается (с налогом), как при прокачке."""
+    what = (await req.json()).get("what")
+    if bid not in BIZ_MAP or what not in ("all", "level"):
+        err("нет такого бизнеса")
+    t = now()
+    with tx():
+        r = q1("SELECT * FROM biz WHERE user=? AND bid=?", uid, bid) or err("этот бизнес уже не твой")
+        lv = r["level"]
+        if what == "level" and lv <= 1:
+            err("это первый уровень — можно продать только бизнес целиком")
+        got = biz_sell_price(bid, lv) if what == "all" else biz_down_price(bid, lv)
+        acc = int(biz_income(bid, lv) * min(t - r["ts"], BIZ_CAP) / 3600)
+        tax = int(acc * INCOME_TAX)
+        if what == "all":
+            db.execute("DELETE FROM biz WHERE user=? AND bid=?", (uid, bid))
+        else:
+            db.execute("UPDATE biz SET level=level-1, ts=? WHERE user=? AND bid=?", (t, uid, bid))
+        db.execute("UPDATE users SET stars=stars+? WHERE id=?", (got + acc - tax, uid))
+        if acc:
+            event(uid, "income", acc)
+        if tax:
+            event(uid, "fee", -tax)
+        event(uid, "bizsell", got)
+    return {"ok": True, "got": got, "income": acc - tax, "stars": bal(uid)}
 
 
 @app.post(R + "/biz/{bid}/shift")
