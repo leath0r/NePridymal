@@ -809,7 +809,7 @@ def collections(uid=Depends(auth)):
 
 @app.post(R + "/gifts/sell")
 async def sell_many(req: Request, uid=Depends(auth)):
-    ids = [int(x) for x in (await req.json()).get("ids", [])][:200]
+    ids = list(dict.fromkeys(int(x) for x in (await req.json()).get("ids", [])))[:200]   # повторы — один раз
     if not ids:
         err("ничего не выбрано")
     total = 0
@@ -1033,8 +1033,8 @@ async def crash_bet(req: Request, uid=Depends(auth)):
     amount = int(body.get("amount", 0))
     auto = body.get("auto")
     auto = round(float(auto), 2) if auto else None
-    if auto is not None and auto < 1.01:
-        err("автовывод от 1.01x")
+    if auto is not None and not 1.01 <= auto <= 10000:   # «not …» — чтобы NaN/Infinity из JSON тоже отсекались
+        err("автовывод от 1.01x до 10000x")
     if not 10 <= amount <= 1_000_000:
         err("ставка от 10 до 1 000 000 ⭐")
     if CR["phase"] != "bet" or time.time() > CR["until"] - 0.2:
