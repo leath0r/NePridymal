@@ -16,7 +16,7 @@ STARTS = {   # id карточки в «Играх» → какие POST нач�
     "battle": [r"/battles", r"/battles/\d+/join", r"/battles/\d+/bot"], "avia": [r"/avia"], "chicken": [r"/chicken/start"],
     "jroul": [r"/jroul/bet"], "rlt": [r"/rlt"], "tower": [r"/tower/start"], "slots": [r"/slots"], "dice": [r"/dice"], "limbo": [r"/limbo"],
     "101": [r"/rooms", r"/rooms/\d+/join"], "blackjack": [r"/bj/start"], "starfall": [r"/starfall/bet"], "hilo": [r"/hilo/start"],
-    "craft": [r"/craft"],
+    "craft": [r"/craft"], "stack": [r"/stack/start"],
 }
 _RX = [(gid, re.compile("^" + re.escape(R) + p + "$")) for gid, ps in STARTS.items() for p in ps]
 _C = {"t": 0, "v": {}}
