@@ -68,7 +68,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["fees", "Комиссии"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -183,6 +183,8 @@ async function admRender(el = topSheet()) {
       <div class="box">${d.recent.map(pair).join("") || `<div class="hint" style="padding:14px">Переводов пока не было</div>`}</div>
       <div class="disc">Если двое постоянно перекидывают звёзды только друг другу — это может быть один человек с двух аккаунтов. Нажми на пару, чтобы открыть карточку отправителя.</div>`;
     starify(body);
+  } else if (ADM.tab === "tickets") {   // тикеты поддержки (tickets.js / tickets.py)
+    await admTickets(body);
   } else if (ADM.tab === "fees") {   // все комиссии и налоги (fees.py)
     const d = await api("admin/fees"), ed = d.canEdit, P = v => String(+(v * 100).toFixed(3)).replace(".", ",");
     const groups = [...new Set(d.items.map(i => i.group))];

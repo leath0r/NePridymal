@@ -120,6 +120,7 @@ const P_MENU = () => [
   ["history", "receipt", "История", ""],
   ["friends", "users", "Друзья", ""],
   ["go-clan", "crown", ME.clan ? "Мой клан" : "Кланы", ME.clanChat || ""],
+  ["support", "support", "Поддержка", (ME.tickets && ME.tickets.unread) || ""],
   ["idea", "megaphone", "Идеи", ""],
   ["settings", "gear", "Настройки", ""],
 ];

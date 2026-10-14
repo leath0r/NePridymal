@@ -893,6 +893,10 @@ document.addEventListener("click", e => {
   if (gq && typeof openPresentClaim === "function") setTimeout(() => openPresentClaim(gq), 500);
   const cq = new URLSearchParams(location.search).get("clan");   // приглашение в клан из бота
   if (cq && typeof openClan === "function") setTimeout(() => openClan(+cq), 500);
+  const tq = new URLSearchParams(location.search).get("ticket");   // ответ поддержки из бота
+  if (tq && typeof tkOpen === "function") setTimeout(() => tkOpen(+tq), 500);
+  const aq = new URLSearchParams(location.search).get("aticket");  // админу: новый тикет из бота
+  if (aq && typeof tkAdmOpen === "function") setTimeout(() => tkAdmOpen(+aq), 500);
   setTimeout(() => { const b = $("#boot"); if (b) { b.classList.add("out"); setTimeout(() => b.remove(), 400); } }, 250);
   setInterval(() => { if (TAB === "cases" && !bgOff()) loadFeed(); }, 12000);
   setInterval(() => { if (!bgOff()) loadMe().catch(() => {}); }, 20000);
