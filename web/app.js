@@ -482,17 +482,21 @@ async function doOpenInner(sheet, id, c, n) {
 
 // ============================================================ ЕЖЕДНЕВКА
 const DAILY_KEYS = { 2: "Охота на Пепе", 3: "Удача", 5: "Охота на Сердце", 7: "Роскошь" };
+// как на сервере (STREAK_KEYS): ключ на 2, 3, 5, 7 день, дальше «Роскошь» каждые 7 дней (14, 21, 28…)
+const dailyKey = d => DAILY_KEYS[d] || (d > 7 && d % 7 === 0 ? DAILY_KEYS[7] : null);
 function openDaily() {
-  const next = Math.min(ME.streak + 1, 7);
-  const days = [1, 2, 3, 4, 5, 6, 7].map(d => `<div style="flex:1;text-align:center;padding:8px 0;border-radius:12px;background:${d <= ME.streak && ME.dailyIn ? "color-mix(in srgb,var(--gold) 22%,transparent)" : "var(--card)"};${d === next && !ME.dailyIn ? "box-shadow:inset 0 0 0 2px var(--gold)" : ""}">
-    <div style="font-size:11px" class="hint">день ${d}</div><b style="font-size:13px">${short((300 + 100 * d) * (ME.promo ? 2 : 1))}</b>${DAILY_KEYS[d] ? `<div class="dkey">${ic("lock")}</div>` : ""}</div>`).join("");
+  const next = ME.streakNext || ME.streak + 1, cur = ME.dailyIn ? ME.streak : next;
+  const w0 = Math.floor((Math.max(1, cur) - 1) / 7) * 7;   // показываем текущую неделю серии: 1–7, 8–14, 15–21…
+  const pay = d => (300 + 100 * Math.min(d, 7)) * (ME.promo ? 2 : 1);
+  const days = [1, 2, 3, 4, 5, 6, 7].map(i => w0 + i).map(d => `<div style="flex:1;text-align:center;padding:8px 0;border-radius:12px;background:${d <= ME.streak && ME.dailyIn ? "color-mix(in srgb,var(--gold) 22%,transparent)" : "var(--card)"};${d === next && !ME.dailyIn ? "box-shadow:inset 0 0 0 2px var(--gold)" : ""}">
+    <div style="font-size:11px" class="hint">день ${d}</div><b style="font-size:13px">${short(pay(d))}</b>${dailyKey(d) ? `<div class="dkey">${ic("lock")}</div>` : ""}</div>`).join("");
   openSheet(`<div style="text-align:center;padding-top:10px"><div style="font-size:72px">⭐</div><h2 style="margin:4px 0">Ежедневный бонус</h2>
-    <p class="hint" style="margin:0 0 14px">Заходи каждый день — награда растёт до 7 дня. На 2, 3, 5 и 7 день — <b>ключ от кейса</b>${ME.promo ? " · сегодня x2" : ""}</p></div>
+    <p class="hint" style="margin:0 0 14px">Заходи каждый день — награда растёт до 7 дня. На 2, 3, 5 и 7 день — <b>ключ от кейса</b>, дальше ключ «Роскошь» каждые 7 дней${ME.promo ? " · сегодня x2" : ""}</p></div>
     <div id="shop-box"></div>
     <div class="sec-t">${ic("calendar")}Бонус дня</div>
     <div style="display:flex;gap:4px">${days}</div>
     <div class="btns" style="margin-top:16px">${ME.dailyIn ? `<button class="btn ghost" disabled>Через ${clock(ME.dailyIn)}</button>`
-      : `<button class="btn gold" data-act="claim-daily">Забрать ⭐ ${(300 + 100 * next) * (ME.promo ? 2 : 1)}${DAILY_KEYS[next] ? " + ключ" : ""}</button>`}</div>
+      : `<button class="btn gold" data-act="claim-daily">Забрать ⭐ ${pay(next)}${dailyKey(next) ? " + ключ" : ""}</button>`}</div>
     <div class="sec-t">Ещё звёзды</div>
     <div class="box">
       <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">+${fmt(ME.refBonus)} ⭐ тебе и ему</div></div><span class="pill">${ME.refs}</span></div>

@@ -642,6 +642,7 @@ def me(uid=Depends(auth)):
     t = now()
     return {**user_brief(u), "stars": u["stars"], "lv": level_info(u["xp"]), "refs": u["refs"],
             "freeIn": max(0, u["last_free"] + free_every(u) - t), "vip": u["vip_until"] if is_vip(u) else 0, "dailyIn": max(0, u["last_daily"] + DAILY_EVERY - t),
+            "streakNext": u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1,   # какой день серии будет при следующем заборе
             "streak": u["streak"], "refLink": f"https://t.me/{BOT_NAME}?start=ref_{uid}", "refBonus": REF_BONUS,
             "disclaimer": DISCLAIMER, "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
