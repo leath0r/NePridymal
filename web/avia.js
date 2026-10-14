@@ -129,14 +129,19 @@ async function avGo() {
   if (!$("#av-w")) return avEnd(r, bet);
   $("#av-sc").classList.remove("flying");
   // заход на посадку
+  // заход на посадку одинаковый при любом исходе — заранее не видно, сядет или нет
+  await avMove(shipX - 150, 180, 8);
   if (r.landed) {
-    await avMove(shipX - 60, 178, 8);
     await avMove(shipX + 16, 207, 0);
     $("#av-p").classList.remove("fly"); $("#av-p").classList.add("landed"); H.ok();
   } else {
-    // корабль на том же месте, что и при посадке: исход виден только в последний момент — самолёт не дотягивает и падает перед кормой
-    await avMove(shipX - 60, 178, 8);
-    await avMove(shipX - 40, 262, 52);
+    // промах должен читаться как промах: раньше самолёт (86 px) падал носом на корму — выглядело «чуть не сел»
+    if (Math.random() < .5) {
+      await avMove(shipX - 145, 262, 58);   // недолёт: клюёт носом, в воду с зазором ~60 px до кормы
+    } else {
+      await avMove(shipX + 200, 172, 2);    // перелёт: проносится над палубой…
+      await avMove(shipX + 245, 262, 55);   // …и падает за носом корабля (корабль 170 px)
+    }
     const sc = $("#av-sc"), pr = $("#av-p").getBoundingClientRect(), sr = sc.getBoundingClientRect();
     sc.style.setProperty("--sx", pr.left - sr.left + pr.width / 2 + "px"); sc.classList.add("splash");
     $("#av-p").classList.add("sunk"); H.err();
