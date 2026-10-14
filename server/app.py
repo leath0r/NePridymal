@@ -471,12 +471,14 @@ async def bot_loop():
     offset = 0
     while True:
         try:
-            res = await tg_call("getUpdates", offset=offset, timeout=50, allowed_updates=["message", "pre_checkout_query", "managed_bot"])
+            res = await tg_call("getUpdates", offset=offset, timeout=50, allowed_updates=["message", "pre_checkout_query", "managed_bot", "callback_query"])
             for upd in res.get("result", []):
                 offset = upd["update_id"] + 1
                 m = upd.get("message")
                 if upd.get("managed_bot"):   # игрок создал бота-франшизу / сменил токен (franchise.py)
                     await franchise.on_managed(upd["managed_bot"])
+                elif upd.get("callback_query"):   # кнопки под опросом (polls.py)
+                    await polls.on_callback(upd["callback_query"])
                 elif upd.get("pre_checkout_query"):   # оплата Telegram Stars (shop.py)
                     await shop.on_pre_checkout(upd["pre_checkout_query"])
                 elif m and m.get("successful_payment"):
@@ -2260,6 +2262,7 @@ import stack  # noqa: E402,F401 — «Стопка»: игра на ловкос
 import franchise  # noqa: E402 — франшиза: свои боты игроков с этой же игрой (Managed Bots)
 import refs  # noqa: E402 — реферальная программа: уровни друзей, рубежи, доля с покупок, недельный топ
 import flash  # noqa: E402 — ивенты раз в ~2 часа: «Удача ×3/×5», «Раздача ⭐»
+import polls  # noqa: E402 — опросы в боте с кнопками «Да»/«Нет», итоги админам
 import fees  # noqa: E402 — все комиссии и налоги из админки (переписывает ставки модулей)
 
 

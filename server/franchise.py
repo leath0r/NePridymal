@@ -270,7 +270,7 @@ async def _setup(b):
     """Вебхук + кнопка «Играть» + описание — как у главного бота."""
     tok = b["token"]
     r = await tg_call("setWebhook", _token=tok, url=f"{APP_URL}api/tg/{b['id']}", secret_token=b["secret"],
-                      allowed_updates=["message", "pre_checkout_query"], drop_pending_updates=True)
+                      allowed_updates=["message", "pre_checkout_query", "callback_query"], drop_pending_updates=True)
     if not r.get("ok"):
         print("franchise setWebhook", b["id"], r, flush=True)
     await A.bot_setup(tok)
@@ -496,7 +496,9 @@ async def _handle(bid, upd):
     VIA_BOT.set(bid)            # ссылки (реф, кланы, подарки) — на этого бота
     m = upd.get("message")
     try:
-        if m and m.get("text", "").startswith("/"):
+        if upd.get("callback_query"):   # кнопки под опросом (polls.py)
+            await A.polls.on_callback(upd["callback_query"])
+        elif m and m.get("text", "").startswith("/"):
             await A.on_command(m)
     except Exception as e:
         print("franchise update", bid, e, flush=True)
@@ -658,7 +660,7 @@ async def admin_main_set(req: Request, aid=Depends(admin)):
                 if not can_pay(bid):
                     err("Для оплат — только бот, владелец которого админ: настоящие звёзды копятся у владельца бота")
                 r = await tg_call("setWebhook", _token=b["token"], url=f"{APP_URL}api/tg/{bid}", secret_token=b["secret"],
-                                  allowed_updates=["message", "pre_checkout_query"])   # без drop: не терять апдейты
+                                  allowed_updates=["message", "pre_checkout_query", "callback_query"])   # без drop: не терять апдейты
                 if not r.get("ok"):
                     err("Telegram не принял вебхук этого бота — попробуй позже")
                 if bid not in cur["pay_ok"]:
