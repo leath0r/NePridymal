@@ -6,23 +6,36 @@ const admBytes = b => b >= 1e9 ? (b / 1e9).toFixed(1).replace(".", ",") + " ГБ
 const admSgn = v => `<b class="${v >= 0 ? "tw" : "tl"}">${v >= 0 ? "+" : "−"}⭐ ${fmt(Math.abs(v))}</b>`;
 const admKv = (k, v) => `<div class="row kv"><div class="grow"><div class="s">${k}</div></div>${v}</div>`;
 
-(function admButton() {
-  const add = () => {
-    if (!ME || !ME.admin || $("#adm-btn")) return;
+// замочек админки и счётчик FPS спрятаны: админ 5 раз подряд жмёт «Топ» — появляются, ещё 5 раз — исчезают (запоминается на устройстве)
+const admShown = () => { try { return localStorage.getItem("admShow") === "1"; } catch (e) { return false; } };
+function admShow(on) {
+  try { localStorage.setItem("admShow", on ? "1" : "0"); } catch (e) {}
+  if (!on) { const b = $("#adm-btn"), f = $("#fps"); if (b) b.remove(); if (f) f.remove(); return; }
+  if (!$("#adm-btn")) {
     const b = document.createElement("button");
     b.id = "adm-btn"; b.className = "adm-btn"; b.dataset.act = "adm"; b.innerHTML = ic("lock");
     $("#me-btn").before(b);
-  };
-  const t = setInterval(() => { if (ME) { clearInterval(t); add(); if (ME.admin) fpsMeter(); } }, 500);
+  }
+  fpsMeter();
+}
+(function admButton() {
+  const t = setInterval(() => { if (ME) { clearInterval(t); if (ME.admin && admShown()) admShow(true); } }, 500);
+  let n = 0, last = 0;
+  document.addEventListener("click", e => {
+    if (!ME || !ME.admin || !e.target.closest || !e.target.closest('[data-tab="top"]')) return;
+    const now = Date.now(); n = now - last < 1200 ? n + 1 : 1; last = now;
+    if (n < 5) return;
+    n = 0;
+    const on = !admShown(); admShow(on);
+    H.imp("heavy"); toast(on ? "Админка видна" : "Админка скрыта", "ok");
+  }, true);
 })();
 
-// счётчик FPS — только для админов: средний FPS и самый долгий кадр за 0,5 с (рывки). Тап — спрятать (запоминается).
-function fpsMeter(force) {
-  let off = false; try { off = localStorage.getItem("fpsOff") === "1"; } catch (e) {}
-  if (force) { off = false; try { localStorage.removeItem("fpsOff"); } catch (e) {} }
-  if (off || $("#fps")) return;
+// счётчик FPS — только для админов: средний FPS и самый долгий кадр за 0,5 с (рывки). Тап — спрятать до перезапуска.
+function fpsMeter() {
+  if ($("#fps")) return;
   const el = document.createElement("div"); el.id = "fps"; document.body.appendChild(el);
-  el.onclick = () => { el.remove(); try { localStorage.setItem("fpsOff", "1"); } catch (e) {} };
+  el.onclick = () => el.remove();
   let n = 0, t0 = performance.now(), prev = t0, worst = 0;
   (function f(now) {
     if (!el.isConnected) return;
@@ -53,7 +66,7 @@ async function admDbImport(f) {
   setTimeout(() => location.reload(), 8000);   // сервис поднимается за ~5–7 с
 }
 function openAdmin() {
-  fpsMeter(true);   // открыл админку — счётчик снова виден
+  if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
     <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
