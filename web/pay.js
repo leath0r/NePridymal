@@ -14,6 +14,10 @@ const PAY = { info: null, friends: null, busy: false, seq: 0 };
 // адрес кошелька NP + 20 символов: показываем группами по 4, копируем слитно
 const payAddrFmt = a => a ? "NP " + a.slice(2).match(/.{1,4}/g).join(" ") : "";
 const payAddrLike = v => /^NP[0-9A-Z]{20}$/.test(String(v || "").toUpperCase().replace(/[\s-]/g, ""));
+function payCopy(a, msg) {
+  const ok = () => { H.ok(); toast(msg, "ok"); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(a).then(ok, () => copyFallback(a, ok)); else copyFallback(a, ok);
+}
 async function payByAddr(a) {
   const n = String(a).replace(/[\s-]/g, "");
   try { const u = await api("pay/addr/" + enc(n)); openPaySend(u.id, 0, n); return true; }
@@ -207,20 +211,23 @@ Object.assign(ACT, {
   pay: () => openPay(),
   "pay-scan": () => payScan(),
   "pay-recv": () => openPayRecv(0),
-  "pay-addr-copy": async el => {
-    // пасхалка: 5 нажатий подряд (без пауз дольше 1.5 с) — копируется анонимный адрес
+  "pay-addr-copy": el => {
+    // пасхалка: 5 нажатий подряд (без пауз дольше 1.5 с) — анонимный адрес.
+    // Копируем синхронно, прямо в обработчике тапа: после await Telegram на Android не даёт писать в буфер обмена.
     const t = Date.now(); PAY.taps = t - (PAY.tapT || 0) < 1500 ? (PAY.taps || 0) + 1 : 1; PAY.tapT = t;
-    let a = el.dataset.a, msg = "Адрес кошелька скопирован";
-    if (PAY.taps >= 5) {
-      PAY.taps = 0;
-      try { a = (PAY.anon = PAY.anon || (await api("pay/anon")).addr); } catch (e) { return; }
-      msg = "🕶 Анонимный адрес скопирован — отправитель не узнает, кому переводит";
-      if (typeof eggFound === "function") setTimeout(() => eggFound("anon"), 1500);
-      H.imp("heavy");
-    }
-    const ok = () => { H.ok(); toast(msg, "ok"); };
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(a).then(ok, () => copyFallback(a, ok)); else copyFallback(a, ok);
+    if (PAY.taps === 3 && !PAY.anon) api("pay/anon").then(r => { PAY.anon = r.addr; }).catch(() => {});   // подгружаем заранее
+    if (PAY.taps < 5) return payCopy(el.dataset.a, "Адрес кошелька скопирован");
+    PAY.taps = 0; H.imp("heavy");
+    const show = a => {
+      payCopy(a, "🕶 Анонимный адрес скопирован");
+      openSheet(`<div class="pay-anon-s">${payAva({ anon: true }, 72)}<h3>Анонимный адрес</h3>
+        <p class="hint">Кто переведёт на него звёзды, увидит получателя как «Неизвестный пользователь». Звёзды придут тебе.</p>
+        <button class="pay-raddr" data-act="pay-copy" data-a="${esc(a)}"><small>Нажми, чтобы скопировать</small><span>${payAddrFmt(a)}</span>${ic("copy")}</button></div>`, "pay-an");
+      if (typeof eggFound === "function") setTimeout(() => eggFound("anon"), 1200);
+    };
+    if (PAY.anon) show(PAY.anon); else api("pay/anon").then(r => show(PAY.anon = r.addr)).catch(() => {});
   },
+  "pay-copy": el => payCopy(el.dataset.a, "Адрес скопирован"),
   "pay-to": el => openPaySend(+el.dataset.id, 0, el.dataset.addr || ""),
   "pay-amt": async el => {
     const v = await promptM("Сумма", "Сколько звёзд попросить? QR обновится с этой суммой", el.dataset.v !== "0" ? el.dataset.v : "", "Готово");

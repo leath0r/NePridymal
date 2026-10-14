@@ -162,3 +162,8 @@ html.lite .pay-ok .ic path{stroke-dashoffset:0;animation:none}
 .pay-raddr .ic{width:16px;height:16px;color:#c47a00}
 .ava.pay-anon{--ac:#3a3550}
 .ava.pay-anon span{color:#ffffffb3;font-weight:900}
+.pay-anon-s{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:8px 4px 4px}
+.pay-anon-s h3{margin:4px 0 0}
+.pay-anon-s .hint{margin:0;font-size:13px}
+.pay-anon-s .pay-raddr{background:var(--card);color:var(--text)}
+.pay-anon-s .pay-raddr small{color:var(--hint)}
