@@ -28,7 +28,6 @@ function stkX(c, off, i, w, e) {
   const s = (Math.floor(off * 2 * d / 10000) + Math.floor(e * 2 * d / p)) % (2 * d);
   return -c.OVER + (s < d ? s : 2 * d - s);
 }
-const stkHue = i => (196 + i * 11) % 360;
 const stkLeft = s => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600); return d ? `${d} д ${h} ч` : `${h} ч ${Math.floor(s % 3600 / 60)} мин`; };
 
 async function openStack() {
@@ -84,61 +83,97 @@ function stkScene(el) {
 function stkBg(S) {
   const c = document.createElement("canvas"); c.width = S.cv.width; c.height = S.cv.height;
   const x = c.getContext("2d"); x.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
-  for (let i = 0; i < 46; i++) {
+  for (let i = 0; i < 60; i++) {
     const r = Math.random();
-    x.globalAlpha = .25 + r * .55; x.fillStyle = "#fff";
-    x.beginPath(); x.arc(Math.random() * S.w, Math.random() * S.h, .6 + r * 1.2, 0, 7); x.fill();
+    x.globalAlpha = .18 + r * .5; x.fillStyle = r > .85 ? "#ffe9b0" : "#fff";
+    x.beginPath(); x.arc(Math.random() * S.w, Math.random() * S.h, .5 + r * 1.1, 0, 7); x.fill();
   }
   return c;
 }
 
-function stkBlock(ctx, x, y, w, hue, alpha = 1) {
+// ---------------- вид: объёмные коробки (косоугольная проекция). Логика по-прежнему одномерная — по x ----------------
+const STK_DX = 16, STK_DY = 9;   // глубина коробки на экране: вправо-вверх
+const stkSc = (S, c) => (S.w - STK_DX - 8) / (c.F + 2 * c.OVER);   // масштаб с запасом под боковую грань
+const stkPal = i => { const h = (205 + i * 4.5) % 360; return { top: `hsl(${h} 88% 70%)`, front: `hsl(${h} 78% 55%)`, frontLo: `hsl(${h} 74% 44%)`, side: `hsl(${h} 70% 36%)` }; };
+
+// коробка-подарок: передняя грань x..x+w, y..y+h, сверху и справа — грани глубины
+function stkBox(ctx, x, y, w, pal, alpha = 1, h = STK_BH) {
   if (w <= 0) return;
   ctx.globalAlpha = alpha;
-  const g = ctx.createLinearGradient(0, y, 0, y + STK_BH);
-  g.addColorStop(0, `hsl(${hue} 85% 66%)`); g.addColorStop(1, `hsl(${hue} 75% 46%)`);
-  ctx.fillStyle = g;
-  const r = Math.min(5, w / 2);
-  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, STK_BH - 2, r) : ctx.rect(x, y, w, STK_BH - 2); ctx.fill();
-  ctx.fillStyle = `hsl(${hue} 95% 82%)`; ctx.fillRect(x + r, y, Math.max(0, w - 2 * r), 3);   // блик сверху
-  if (w > 18) { ctx.fillStyle = "rgba(255,255,255,.38)"; ctx.fillRect(x + w / 2 - Math.min(5, w * .06), y, Math.min(10, w * .12), STK_BH - 2); }   // лента подарка
+  // верх
+  ctx.fillStyle = pal.top;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + STK_DX, y - STK_DY); ctx.lineTo(x + w + STK_DX, y - STK_DY); ctx.lineTo(x + w, y); ctx.closePath(); ctx.fill();
+  // бок
+  ctx.fillStyle = pal.side;
+  ctx.beginPath(); ctx.moveTo(x + w, y); ctx.lineTo(x + w + STK_DX, y - STK_DY); ctx.lineTo(x + w + STK_DX, y - STK_DY + h); ctx.lineTo(x + w, y + h); ctx.closePath(); ctx.fill();
+  // перед
+  const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, pal.front); g.addColorStop(1, pal.frontLo);
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  // лента подарка: по переду и по верху, если коробка достаточно широкая
+  if (w > 22) {
+    const rw = Math.min(8, w * .1), rx = x + w / 2 - rw / 2;
+    ctx.fillStyle = "rgba(255,255,255,.42)"; ctx.fillRect(rx, y, rw, h);
+    ctx.fillStyle = "rgba(255,255,255,.5)";
+    ctx.beginPath(); ctx.moveTo(rx, y); ctx.lineTo(rx + STK_DX, y - STK_DY); ctx.lineTo(rx + rw + STK_DX, y - STK_DY); ctx.lineTo(rx + rw, y); ctx.closePath(); ctx.fill();
+  }
+  // тонкие грани — читается объём даже на одном цвете
+  ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x + .5, y + .5); ctx.lineTo(x + w - .5, y + .5); ctx.stroke();
+  ctx.strokeStyle = "rgba(0,0,0,.18)";
+  ctx.beginPath(); ctx.moveTo(x, y + h - .5); ctx.lineTo(x + w, y + h - .5); ctx.stroke();
   ctx.globalAlpha = 1;
 }
 
 function stkDraw(now) {
   const S = STK.S; if (!S || !S.w) return;
   const ctx = S.ctx, run = STK.run, c = run ? run.cfg : { F: 1000, OVER: 160, W0: 340 };
-  const sc = S.w / (c.F + 2 * c.OVER), px = x => (x + c.OVER) * sc;
+  const sc = stkSc(S, c), px = x => (x + c.OVER) * sc;
   const n = run ? run.tower.length - 1 : 0;
   // камера плавно едет за верхушкой: верхний блок держим на ~55% высоты
   const want = Math.max(0, (n + 2) * STK_BH - S.h * .55);
   S.cam += (want - S.cam) * .14;
-  const hue = stkHue(n);
+  // фон: спокойная ночь, с высотой медленно уходит в фиолетовый
+  const hb = 225 + Math.min(60, n * .8);
   const g = ctx.createLinearGradient(0, 0, 0, S.h);
-  g.addColorStop(0, `hsl(${(hue + 200) % 360} 55% 14%)`); g.addColorStop(1, `hsl(${(hue + 230) % 360} 60% 26%)`);
+  g.addColorStop(0, `hsl(${hb + 20} 55% 9%)`); g.addColorStop(1, `hsl(${hb} 58% 21%)`);
   ctx.fillStyle = g; ctx.fillRect(0, 0, S.w, S.h);
   if (!S.bg) S.bg = stkBg(S);
-  ctx.globalAlpha = .9; ctx.drawImage(S.bg, 0, (S.cam * .25) % S.h - S.h, S.w, S.h); ctx.drawImage(S.bg, 0, (S.cam * .25) % S.h, S.w, S.h); ctx.globalAlpha = 1;
-  const yOf = k => S.h - 30 - (k + 1) * STK_BH + S.cam;
-  // пьедестал
-  const by = yOf(-1) + STK_BH - 2;
-  if (by < S.h) { ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(px(c.F / 2 - c.W0 * .75), by, c.W0 * 1.5 * sc, S.h - by); }
+  const sh = (S.cam * .25) % S.h;
+  ctx.drawImage(S.bg, 0, sh - S.h, S.w, S.h); ctx.drawImage(S.bg, 0, sh, S.w, S.h);
+  const yOf = k => S.h - 34 - (k + 1) * STK_BH + S.cam;
   const tower = run ? run.tower : [[(c.F - c.W0) / 2, c.W0]];
-  const k0 = Math.max(0, Math.floor((S.cam - 40) / STK_BH) - 1);
-  for (let k = k0; k < tower.length; k++) { const y = yOf(k); if (y > S.h) continue; if (y < -STK_BH) break; stkBlock(ctx, px(tower[k][0]), y, tower[k][1] * sc, stkHue(k)); }
-  // едущий блок
-  if (run && run.live) {
-    const e = Math.max(0, Math.floor((now || performance.now()) - run.t0)), w = tower[tower.length - 1][1];
-    stkBlock(ctx, px(stkX(c, run.off[n], n + 1, w, e)), yOf(n + 1), w * sc, stkHue(n + 1));
+  // мягкое свечение у верхушки
+  const tt = tower[tower.length - 1], gx = px(tt[0] + tt[1] / 2) + STK_DX / 2, gy = yOf(tower.length - 1);
+  const rg = ctx.createRadialGradient(gx, gy, 0, gx, gy, S.w * .55);
+  rg.addColorStop(0, `hsla(${(205 + n * 4.5) % 360} 90% 65% / .22)`); rg.addColorStop(1, "hsla(0 0% 0% / 0)");
+  ctx.fillStyle = rg; ctx.fillRect(0, 0, S.w, S.h);
+  // пьедестал: широкая тёмная плита с тенью
+  const by = yOf(-1);
+  if (by < S.h + STK_BH) {
+    const pw = c.W0 * 1.35 * sc, pxl = px(c.F / 2) - pw / 2;
+    ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.ellipse(pxl + pw / 2 + STK_DX / 2, by + STK_BH + 6, pw * .62, 9, 0, 0, 7); ctx.fill();
+    stkBox(ctx, pxl, by, pw, { top: "#3b4565", front: "#2a3150", frontLo: "#1d2340", side: "#161b33" }, 1, S.h - by + 40);
   }
-  // отрезанные куски падают
-  S.falls = S.falls.filter(f => f.y < S.h + 60 && f.a > .02);
-  for (const f of S.falls) { f.vy += .55; f.y += f.vy; f.a *= .975; stkBlock(ctx, f.x, f.y, f.w, f.hue, f.a); }
-  if (S.flash > .01) {   // вспышка «идеально»
-    const t = tower[tower.length - 1], y = yOf(tower.length - 1);
-    ctx.strokeStyle = `rgba(255,255,255,${S.flash})`; ctx.lineWidth = 2;
-    const grow = (1 - S.flash) * 14;
-    ctx.strokeRect(px(t[0]) - grow, y - grow, t[1] * sc + grow * 2, STK_BH - 2 + grow * 2);
+  const k0 = Math.max(0, Math.floor((S.cam - 40) / STK_BH) - 1);
+  for (let k = k0; k < tower.length; k++) { const y = yOf(k); if (y > S.h + STK_DY) continue; if (y < -STK_BH - STK_DY) break; stkBox(ctx, px(tower[k][0]), y, tower[k][1] * sc, stkPal(k)); }
+  // едущий блок + его тень на башне
+  if (run && run.live) {
+    const e = Math.max(0, Math.floor((now || performance.now()) - run.t0)), w = tt[1];
+    const mx = px(stkX(c, run.off[n], n + 1, w, e)), my = yOf(n + 1);
+    stkBox(ctx, mx, my, w * sc, stkPal(n + 1));
+  }
+  // отрезанные куски кувыркаются вниз
+  S.falls = S.falls.filter(f => f.y < S.h + 80 && f.a > .02);
+  for (const f of S.falls) {
+    f.vy += .55; f.y += f.vy; f.x += f.vx || 0; f.rot = (f.rot || 0) + (f.vr || 0); f.a *= .975;
+    ctx.save(); ctx.translate(f.x + f.w / 2, f.y + STK_BH / 2); ctx.rotate(f.rot);
+    stkBox(ctx, -f.w / 2, -STK_BH / 2, f.w, f.pal || stkPal(f.i || 0), f.a); ctx.restore();
+  }
+  if (S.flash > .01) {   // вспышка «идеально»: светящаяся рамка по верхней грани
+    const y = yOf(tower.length - 1), x = px(tt[0]), w = tt[1] * sc, grow = (1 - S.flash) * 10;
+    ctx.strokeStyle = `rgba(255,248,214,${S.flash})`; ctx.lineWidth = 2.5; ctx.shadowColor = "#fff6c8"; ctx.shadowBlur = 12 * S.flash;
+    ctx.beginPath(); ctx.moveTo(x - grow, y + grow * .3); ctx.lineTo(x + STK_DX - grow * .3, y - STK_DY - grow * .5); ctx.lineTo(x + w + STK_DX + grow, y - STK_DY - grow * .5); ctx.lineTo(x + w + grow * .3, y + grow * .3); ctx.closePath(); ctx.stroke();
+    ctx.shadowBlur = 0;
     S.flash *= .9;
   }
 }
@@ -180,7 +215,7 @@ function stkTap(ts) {
   const n = run.tower.length - 1, [pl, pw] = run.tower[n], i = n + 1, w = pw;
   const x = stkX(c, run.off[n], i, w, e);
   run.taps.push(e); run.t0 += e;
-  const S = STK.S, sc = S.w / (c.F + 2 * c.OVER), y = S.h - 30 - (i + 1) * STK_BH + S.cam;
+  const S = STK.S, sc = stkSc(S, c), y = S.h - 34 - (i + 1) * STK_BH + S.cam;
   if (Math.abs(x - pl) <= c.PERFECT) {
     run.streak++; run.perfect++;
     const nw = run.streak >= c.GROW_AFTER ? Math.min(c.W0, pw + c.GROW) : pw;
@@ -190,12 +225,12 @@ function stkTap(ts) {
   } else {
     const lo = Math.max(x, pl), hi = Math.min(x + w, pl + pw);
     if (hi - lo <= 0) {   // мимо башни — блок падает целиком
-      S.falls.push({ x: (x + c.OVER) * sc, y, w: w * sc, vy: 0, a: 1, hue: stkHue(i) });
+      S.falls.push({ x: (x + c.OVER) * sc, y, w: w * sc, vy: 0, vx: x < pl ? -1.2 : 1.2, vr: x < pl ? -.05 : .05, a: 1, i });
       return stkOver();
     }
     // отрезанный кусок
     const cutX = x < pl ? x : hi, cutW = w - (hi - lo);
-    if (cutW > 0) S.falls.push({ x: (cutX + c.OVER) * sc, y, w: cutW * sc, vy: -1, a: 1, hue: stkHue(i) });
+    if (cutW > 0) S.falls.push({ x: (cutX + c.OVER) * sc, y, w: cutW * sc, vy: -1.5, vx: x < pl ? -1.4 : 1.4, vr: x < pl ? -.06 : .06, a: 1, i });
     run.tower.push([lo, hi - lo]); run.streak = 0;
     H.imp("light");
   }
