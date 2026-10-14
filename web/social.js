@@ -137,7 +137,7 @@ async function fillFriends(el) {
   const [fr, trades, duels] = await Promise.all([api("friends"), api("trades"), window.loadDuels ? loadDuels() : []]);
   const open = trades.filter(t => t.status === "open"), hist = trades.filter(t => t.status !== "open").slice(0, 8);
   el.querySelector("#fr-body").innerHTML = `
-    <div class="ref"><img src="${A.orig("Loot Bag", 128)}" alt=""><b>Пригласи друга</b><p>Тебе и другу по +${fmt(ME.refBonus)} ⭐ · приглашено: ${ME.refs}</p><button class="btn" data-act="invite">${ic("send")}Пригласить</button></div>
+    <div class="ref"><img src="${A.orig("Loot Bag", 128)}" alt=""><b>Пригласи друга</b><p>${ME.ref && ME.ref.on ? `До +${fmt((ME.ref.join || 0) + ME.ref.l1[1] + ME.ref.l2[1])} ⭐ за каждого друга` : "Играйте вместе"} · приглашено: ${ME.refs}</p><button class="btn" data-act="invite">${ic("send")}Пригласить</button></div>
     <label class="srch">${ic("search")}<input id="usearch" placeholder="Найти игрока по имени или @username" enterkeyhint="search"></label><div id="sres"></div>
     ${window.duelsHTML ? duelsHTML(duels) : ""}
     ${fr.incoming.length ? `<div class="sec-t">Заявки в друзья</div><div class="box">${fr.incoming.map(u => userRow(u, `<button class="ibtn green" data-act="fr" data-id="${u.id}" data-v="add">${ic("check")}</button><button class="ibtn red" data-act="fr" data-id="${u.id}" data-v="remove">${ic("x")}</button>`)).join("")}</div>` : ""}

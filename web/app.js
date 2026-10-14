@@ -500,7 +500,7 @@ function openDaily() {
       : `<button class="btn gold" data-act="claim-daily">Забрать ⭐ ${pay(next)}${dailyKey(next) ? " + ключ" : ""}</button>`}</div>
     <div class="sec-t">Ещё звёзды</div>
     <div class="box">
-      <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">+${fmt(ME.refBonus)} ⭐ тебе и ему</div></div><span class="pill">${ME.refs}</span></div>
+      <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">${ME.ref && ME.ref.on ? `до +${fmt((ME.ref.join || 0) + ME.ref.l1[1] + ME.ref.l2[1])} ⭐ за друга + топ недели` : "играйте вместе"}</div></div><span class="pill">${ME.refs}</span></div>
       ${ME.franchise ? `<div class="row tap" data-act="franchise-info"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.reward ? `Создай за 1 тап · +${fmt(ME.franchise.reward)} ⭐ за ${ME.franchise.need} игроков` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
       <div class="row tap" data-act="case" data-id="free"><span class="pic g">${ic("gift")}</span><div class="grow"><div class="t">Бесплатный кейс</div><div class="s">${ME.freeIn ? "через " + clock(ME.freeIn) : "готов"}</div></div></div>
       <div class="row"><span class="pic y">${ic("medal")}</span><div class="grow"><div class="t">Уровни</div><div class="s">За каждый новый уровень — бонус звёздами</div></div></div>
@@ -746,7 +746,7 @@ function franchiseInfo() {
 
 // ============================================================ приглашение
 function invite() {
-  const text = `Залетай в кейс-симулятор подарков 🎁 По моей ссылке оба получим по ${ME.refBonus} ⭐ (игровых)`;
+  const text = ME.refBonus ? `Залетай в кейс-симулятор подарков 🎁 По моей ссылке получишь +${ME.refBonus} ⭐ на старт (игровых)` : "Залетай в кейс-симулятор подарков 🎁";
   const url = `https://t.me/share/url?url=${enc(ME.refLink)}&text=${enc(text)}`;
   if (inTg) tg.openTelegramLink(url); else { navigator.clipboard?.writeText(ME.refLink); toast("Ссылка скопирована"); }
 }

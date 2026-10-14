@@ -238,3 +238,9 @@ html.lite .pr-c-ic img{animation:none}
 
 .bcs.off{opacity:.6}.bcs-t{white-space:pre-wrap;color:var(--text)!important;max-height:7.5em;overflow:hidden}
 .adm-sel{flex:1;min-width:120px;padding:8px 10px;border-radius:12px;background:var(--card2);color:var(--text);border:0;font:inherit;font-weight:600}
+.inv-s3{grid-template-columns:1fr 1fr 1fr}
+.inv-bar{height:5px;border-radius:3px;margin-top:6px;background:color-mix(in srgb,var(--hint) 22%,transparent);overflow:hidden}
+.inv-bar i{display:block;height:100%;border-radius:3px;background:var(--gold)}
+.inv-ms.done .inv-bar i{background:var(--green)}
+.inv-ms b{flex:none;margin-left:10px}
+.inv-pl{flex:none;width:18px;text-align:center;font-weight:700;color:var(--hint)}

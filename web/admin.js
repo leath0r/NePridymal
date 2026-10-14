@@ -68,7 +68,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -182,6 +182,41 @@ async function admRender(el = topSheet()) {
       <div class="sec-t">Последние переводы</div>
       <div class="box">${d.recent.map(pair).join("") || `<div class="hint" style="padding:14px">Переводов пока не было</div>`}</div>
       <div class="disc">Если двое постоянно перекидывают звёзды только друг другу — это может быть один человек с двух аккаунтов. Нажми на пару, чтобы открыть карточку отправителя.</div>`;
+    starify(body);
+  } else if (ADM.tab === "ref") {   // реферальная программа (refs.py)
+    const d = await api("admin/refs"), c = d.cfg, ed = d.canEdit, s = d.stats, p = s.paid7;
+    const sw = (k, title, hint) => `<div class="row kv"><div class="grow"><div class="t">${title}</div><div class="s" style="white-space:normal">${hint}</div></div>
+      ${ed ? `<button class="sw${c[k] ? " on" : ""}" data-act="adm-ref-sw" data-k="${k}" data-v="${c[k] ? 0 : 1}"></button>` : `<b>${c[k] ? "да" : "нет"}</b>`}</div>`;
+    const field = (k, title, hint, unit, text) => `<div class="adm-odd"><div class="adm-oh"><b>${title}</b>${d.changed.includes(k) ? `<span class="adm-tag">изменено</span>` : ""}</div>
+      <div class="adm-os">${hint} · по умолчанию ${text ? esc(d.defaults[k]) : fmt(d.defaults[k])}</div>
+      ${ed ? `<div class="adm-oc"><input class="adm-oi"${text ? ` style="flex:1"` : ` inputmode="numeric"`} data-k="${k}" value="${esc(String(c[k]))}">${unit ? `<span class="adm-op">${unit}</span>` : ""}
+        <button class="btn sm gold" data-act="adm-ref" data-k="${k}">${ic("check")}</button>
+        ${d.changed.includes(k) ? `<button class="btn sm ghost" data-act="adm-ref-rs" data-k="${k}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${esc(String(c[k]))} ${unit}</b></div>`}</div>`;
+    const sum = Object.values(p).reduce((a, b) => a + b, 0);
+    body.innerHTML = `<div class="sec-t">За 7 дней</div>
+      <div class="box">${admKv("Пришли по ссылкам", `<b>${fmt(s.new7)}</b>`)}${admKv("Всего по ссылкам", `<b>${fmt(s.all)}</b> из ${fmt(s.users)} (${Math.round(s.all / Math.max(1, s.users) * 100)}%)`)}
+        ${admKv(`Активных (${c.l1_level}+ ур.)`, `<b>${fmt(s.active)}</b> (${Math.round(s.active / Math.max(1, s.all) * 100)}% приглашённых)`)}
+        ${admKv("Выплачено за 7 дн", `<b>⭐ ${fmt(sum)}</b>`)}
+        <div class="hint" style="font-size:12px;padding:0 14px 10px">сразу ${fmt(p.ref || 0)} · за уровни ${fmt(p.ref_lvl || 0)} · рубежи ${fmt(p.ref_ms || 0)} · с покупок ${fmt(p.ref_buy || 0)} · топ ${fmt(p.ref_top || 0)}</div></div>
+      <div class="sec-t">Лучшие за 7 дней</div>
+      <div class="box">${d.top.map(u => `<div class="row tap" data-act="adm-user" data-id="${u.id}">${avaHTML(u, 28)}<div class="grow" style="min-width:0"><div class="t">${esc(u.name)}</div><div class="s">активных ${u.a}</div></div><b>${u.n}</b></div>`).join("") || `<div class="hint" style="padding:14px">Пусто</div>`}</div>
+      <div class="sec-t">Настройки</div>
+      <div class="box">
+        ${sw("on", "Реферальная программа", "Выключить — ссылки работают, но никаких наград")}
+        ${field("new_bonus", "Другу при входе по ссылке", "сверх стартовых звёзд", "⭐")}
+        ${field("join_bonus", "Пригласившему сразу", "мгновенная награда — её проще всего накрутить твинками", "⭐")}
+        ${field("l1_level", "Первый уровень друга", "друг дорос — пригласившему бонус ниже; он же порог «активного» друга", "ур.")}
+        ${field("l1_bonus", "Бонус за первый уровень", "", "⭐")}
+        ${field("l2_level", "Второй уровень друга", "", "ур.")}
+        ${field("l2_bonus", "Бонус за второй уровень", "", "⭐")}
+        ${field("buy_pct", "Доля с покупок друга", "% от игровых звёзд, купленных другом за Telegram Stars", "%")}
+        ${field("milestones", "Рубежи за активных друзей", "друзей:звёзд через запятую, каждый — один раз", "", true)}
+        ${sw("top_on", "Недельный топ приглашений", "Призы в понедельник за прошлую неделю — по числу друзей, ставших активными")}
+        ${field("top_prizes", "Призы топа", "за 1, 2, 3… место через запятую", "", true)}
+        ${field("top_min", "Минимум для приза", "активных друзей за неделю", "шт")}
+      </div>
+      ${ed ? "" : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Менять настройки может только владелец</div>`}
+      <div class="disc">Бонусы за уровни друга платятся только за друзей, пришедших после запуска новой программы (14.10). Рубежи считаются по всем друзьям. Награды растут с уровнем друга, а не с его ставками — накрутить оборотом нельзя.</div>`;
     starify(body);
   } else if (ADM.tab === "fr") {   // франшиза: боты игроков (franchise.py)
     const d = await api("admin/franchise"), c = d.cfg, ed = d.canEdit;
@@ -420,6 +455,12 @@ Object.assign(ACT, {
     try { const r = await post("admin/franchise/promo"); H.ok(); toast(`Отправляем ${fmt(r.total)} игрокам`, "ok"); admRender(); }
     finally { el.disabled = false; }
   },
+  "adm-ref-sw": async el => { const on = el.dataset.v === "1"; await post("admin/refs", { [el.dataset.k]: on }); H.ok(); toast(on ? "Включено" : "Выключено", "ok"); admRender(); },
+  "adm-ref": async el => {
+    const k = el.dataset.k, v = topSheet().querySelector(`.adm-oi[data-k="${k}"]`).value;
+    await post("admin/refs", { [k]: v }); H.ok(); toast("Сохранено", "ok"); admRender();
+  },
+  "adm-ref-rs": async el => { await post("admin/refs", { [el.dataset.k]: null }); H.ok(); toast("Вернули по умолчанию", "ok"); admRender(); },
   "adm-fr": async el => {
     const on = el.dataset.v === "1";
     if (!on && !await confirmM("Отключить бота?", "Его игроки не смогут войти через него — только через главного бота (аккаунт тот же).", "Отключить")) return;

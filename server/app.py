@@ -348,14 +348,17 @@ def register(tg_user, start_param="", bid=0):
             ref = p["ref"] if p else None
         if ref == uid or not (ref and q1("SELECT 1 FROM users WHERE id=?", ref)):
             ref = None
+        nb, jb = refs.bonuses(bool(ref))   # суммы — в админке «Рефералы» (refs.py)
         db.execute("INSERT INTO users(id,name,username,photo,stars,created,seen,ref_by,bot,came_bot) VALUES(?,?,?,?,?,?,?,?,?,?)",
                    (uid, name, tg_user.get("username"), tg_user.get("photo_url"),
-                    START_STARS + (REF_BONUS if ref else 0), now(), now(), ref, bid, bid))
+                    START_STARS + nb, now(), now(), ref, bid, bid))
         if ref:
-            db.execute("UPDATE users SET stars=stars+?, refs=refs+1 WHERE id=?", (REF_BONUS, ref))
-            event(ref, "ref", REF_BONUS)
+            db.execute("UPDATE users SET stars=stars+?, refs=refs+1 WHERE id=?", (jb, ref))
+            event(ref, "ref", jb)
     if ref:
-        notify(ref, f"🎉 По твоей ссылке пришёл <b>{esc(name)}</b>. Тебе +{REF_BONUS} ⭐ (игровых)")
+        L1, B1 = refs.cfg("l1_level"), refs.cfg("l1_bonus")
+        notify(ref, f"🎉 По твоей ссылке пришёл <b>{esc(name)}</b>." + (f" Тебе +{jb:,} ⭐".replace(",", " ") if jb else "")
+               + (f"\n\nКогда он дойдёт до {L1} уровня — ещё +{B1:,} ⭐".replace(",", " ") if refs.cfg("on") and B1 else ""))
     return uid, ref
 
 
@@ -527,13 +530,22 @@ async def on_command(m):
                     db.execute("INSERT OR REPLACE INTO pending_refs VALUES(?,?,?)", (uid, int(arg[4:]), now()))
         txt = ("🎁 <b>Кейс-симулятор подарков</b>\n\nОткрывай кейсы, лови редкие модели и фоны, играй в краш, плинко, башню и слоты, "
                "вызывай друзей на дуэли, торгуй на маркете и выполняй задания.\n\n"
-               f"Старт: <b>{START_STARS} ⭐</b>" + (f" + <b>{REF_BONUS} ⭐</b> за приглашение" if arg.startswith("ref_") else "")
+               f"Старт: <b>{START_STARS} ⭐</b>" + (f" + <b>{refs.cfg('new_bonus')} ⭐</b> за приглашение" if arg.startswith("ref_") and refs.cfg("on") and refs.cfg("new_bonus") else "")
                + f"\n\n<i>⚠️ {esc(DISCLAIMER)}</i>")
         await tg_call("sendMessage", chat_id=uid, text=txt, parse_mode="HTML", reply_markup=kb)
     elif cmd.startswith("/ref"):
         link = f"https://t.me/{bot_name()}?start=ref_{uid}"
-        await tg_call("sendMessage", chat_id=uid, parse_mode="HTML",
-                      text=f"Твоя ссылка:\n{link}\n\nДругу +{REF_BONUS} ⭐ и тебе +{REF_BONUS} ⭐ (игровые)")
+        c = refs.cfg
+        await tg_call("sendMessage", chat_id=uid, parse_mode="HTML", disable_web_page_preview=True,
+                      text=(f"👥 <b>Приглашай друзей</b>\n\nТвоя ссылка:\n{link}\n\n"
+                            + (f"• другу сразу +{c('new_bonus'):,} ⭐\n" if c("new_bonus") else "")
+                            + (f"• тебе сразу +{c('join_bonus'):,} ⭐\n" if c("join_bonus") else "")
+                            + (f"• друг дошёл до {c('l1_level')} ур. — тебе +{c('l1_bonus'):,} ⭐\n" if c("l1_bonus") else "")
+                            + (f"• до {c('l2_level')} ур. — ещё +{c('l2_bonus'):,} ⭐\n" if c("l2_bonus") else "")
+                            + (f"• {c('buy_pct')}% от звёзд, которые друг купит\n" if c("buy_pct") else "")
+                            + ("• призы за рубежи и недельный топ — в игре: «Пригласи друга»" if c("milestones") or c("top_on") else "")
+                            ).replace(",", " ") if c("on") else f"Твоя ссылка:\n{link}",
+                      reply_markup={"inline_keyboard": [[{"text": "📤 Отправить другу", "url": "https://t.me/share/url?url=" + urllib.parse.quote(link)}]]})
 
 
 # ============================== краш ==============================
@@ -674,7 +686,7 @@ def me(uid=Depends(auth)):
     return {**user_brief(u), "stars": u["stars"], "lv": level_info(u["xp"]), "refs": u["refs"],
             "freeIn": max(0, u["last_free"] + free_every(u) - t), "vip": u["vip_until"] if is_vip(u) else 0, "dailyIn": max(0, u["last_daily"] + DAILY_EVERY - t),
             "streakNext": u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1,   # какой день серии будет при следующем заборе
-            "streak": u["streak"], "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": REF_BONUS,
+            "streak": u["streak"], "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": refs.cfg("new_bonus") if refs.cfg("on") else 0, "ref": refs.summary(uid),
             "disclaimer": DISCLAIMER, "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
             "sparks": __import__("sparks").sparks_waiting(uid),
@@ -2241,6 +2253,7 @@ import dbtools  # noqa: E402,F401 — админка: экспорт/импор�
 import eggs  # noqa: E402,F401 — пасхалки (без звёзд, только достижение)
 import stack  # noqa: E402,F401 — «Стопка»: игра на ловкость, недельный турнир
 import franchise  # noqa: E402 — франшиза: свои боты игроков с этой же игрой (Managed Bots)
+import refs  # noqa: E402 — реферальная программа: уровни друзей, рубежи, доля с покупок, недельный топ
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------

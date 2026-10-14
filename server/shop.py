@@ -138,6 +138,10 @@ def on_paid(m):
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (stars, uid))
         event(uid, "buy", stars)
     notify(uid, (f"✅ Оплата прошла: +{stars:,} ⭐ на баланс" + (" — первая покупка, звёзд вдвое больше!" if first else "") + " Спасибо!").replace(",", " "))
+    try:
+        __import__("refs").on_buy(uid, stars)   # пригласившему — % от покупки (refs.py)
+    except Exception as e:
+        print("refs on_buy", e, flush=True)
 
 
 def gift_paid(uid, to, xtr, charge):
