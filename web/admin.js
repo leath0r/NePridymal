@@ -219,7 +219,7 @@ async function admRender(el = topSheet()) {
       <div class="disc">Бонусы за уровни друга платятся только за друзей, пришедших после запуска новой программы (14.10). Рубежи считаются по всем друзьям. Награды растут с уровнем друга, а не с его ставками — накрутить оборотом нельзя.</div>`;
     starify(body);
   } else if (ADM.tab === "fr") {   // франшиза: боты игроков (franchise.py)
-    const d = await api("admin/franchise"), c = d.cfg, ed = d.canEdit;
+    const [d, an] = await Promise.all([api("admin/franchise"), api("admin/franchise/announce").catch(() => null)]), c = d.cfg, ed = d.canEdit;
     const st = { on: "работает", off: "отключён", limit: "лимит владельца" };
     const sw = (k, title, hint) => `<div class="row kv"><div class="grow"><div class="t">${title}</div><div class="s" style="white-space:normal">${hint}</div></div>
       ${ed ? `<button class="sw${c[k] ? " on" : ""}" data-act="adm-frc-sw" data-k="${k}" data-v="${c[k] ? 0 : 1}"></button>` : `<b>${c[k] ? "да" : "нет"}</b>`}</div>`;
@@ -245,6 +245,11 @@ async function admRender(el = topSheet()) {
         ${field("promo_level", "Предлагать с уровня", "новичкам рано", "ур.")}
       </div>
       <div class="box" style="margin-top:10px">${admKv("Предложений отправлено", `<b>${fmt(d.promo.total)}</b> · за 7 дн ${fmt(d.promo.week)}`)}</div>
+      ${an ? `<div class="sec-t">Рассылка о франшизе</div>
+      <div class="box" style="padding:12px 14px;font-size:13.5px;line-height:1.45;white-space:normal">${an.text.replace(/\n/g, "<br>")}
+        <div class="hint" style="font-size:12px;margin-top:8px">Кнопки под сообщением: «🤖 Создать бота» и «Открыть игру»</div></div>
+      <div class="btns"><button class="btn gold" data-act="adm-frc-ann" data-n="${an.total}"${d.promo.running || !ed ? " disabled" : ""}>${ic("send")}Разослать всем · ${fmt(an.total)}</button></div>
+      <div class="hint" style="font-size:12px;text-align:center;margin:4px 0 10px">Всем игрокам с включёнными сообщениями от бота, кроме владельцев ботов. Текст меняется вместе с настройками выше</div>` : ""}
       <div class="btns"><button class="btn ghost" data-act="adm-frc-promo"${d.promo.running ? " disabled" : ""}>${ic("send")}${d.promo.running ? "Рассылка идёт…" : "Разослать предложение сейчас"}</button></div>
       <div class="sec-t">Боты игроков · ${d.bots.length}</div>
       <div class="box">${d.bots.map(b => `<div class="row kv">
@@ -452,6 +457,12 @@ Object.assign(ACT, {
     await post("admin/franchise/cfg", { [k]: v }); H.ok(); toast("Сохранено", "ok"); admRender();
   },
   "adm-frc-rs": async el => { await post("admin/franchise/cfg", { [el.dataset.k]: null }); H.ok(); toast("Вернули по умолчанию", "ok"); admRender(); },
+  "adm-frc-ann": async el => {
+    if (!await confirmM("Разослать всем?", `Сообщение о франшизе получат ${fmt(+el.dataset.n)} игроков. Отменить отправку будет нельзя.`, "Разослать")) return;
+    el.disabled = true;
+    try { const r = await post("admin/franchise/announce"); H.ok(); toast(`Отправляем ${fmt(r.total)} игрокам`, "ok"); admRender(); }
+    finally { el.disabled = false; }
+  },
   "adm-frc-promo": async el => {
     if (!await confirmM("Разослать предложение?", "Получат активные игроки нужного уровня с включёнными уведомлениями, кому ещё не отправляли (или давно).", "Разослать")) return;
     el.disabled = true;

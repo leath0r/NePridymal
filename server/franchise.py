@@ -476,6 +476,31 @@ async def admin_cfg(req: Request, aid=Depends(admin)):
     return {"ok": True, "cfg": {k: cfg(k) for k in DEFAULTS}}
 
 
+def _announce_targets():
+    """«Разослать всем»: все с включёнными сообщениями от бота, кроме владельцев ботов — без ограничения «раз в N дней»."""
+    return [r[0] for r in q("SELECT id FROM users WHERE banned=0 AND COALESCE(notif,1)=1 AND id NOT IN (SELECT owner FROM bots) ORDER BY seen DESC")]
+
+
+@app.get(R + "/admin/franchise/announce")
+def admin_announce_preview(aid=Depends(admin)):
+    return {"total": len(_announce_targets()), "text": promo_text()}
+
+
+@app.post(R + "/admin/franchise/announce")
+async def admin_announce(aid=Depends(admin)):
+    if aid not in OWNERS:
+        err("Рассылку может запустить только владелец")
+    if PROMO["running"]:
+        err("рассылка уже идёт")
+    if not (CAN_MANAGE["on"] and cfg("on")):
+        err("франшиза выключена или главный бот ещё не менеджер (@BotFather)")
+    ids = await asyncio.get_running_loop().run_in_executor(None, _announce_targets)
+    with tx():
+        log(aid, "frannounce", None, f"{len(ids)} игрокам")
+    asyncio.create_task(_promo_send(ids))
+    return {"ok": True, "total": len(ids)}
+
+
 @app.post(R + "/admin/franchise/promo")
 async def admin_promo(aid=Depends(admin)):
     """Разослать предложение сейчас (тем же правилам: уровень, раз в N дней, включённые уведомления)."""
@@ -520,13 +545,17 @@ def _promo_targets(limit):
 
 
 def promo_text():
-    r, c = cfg("reward"), cfg("create_reward")
-    return ("🤖 <b>Создай свой бот с этой игрой</b>\n\n"
-            "Одна кнопка — и у тебя свой бот: та же игра, кейсы, маркет и турниры, без @BotFather и без кода. "
-            "Зови друзей в своего бота и собирай свою аудиторию."
-            + (f"\n\n🎁 <b>{nf(c)} ⭐ сразу</b> за создание" if c else "")
-            + (f"\n💼 {str(cfg('cut_pct')).replace('.', ',')}% каждый день с игр и комиссий твоих игроков" if cfg("cut_pct") else "")
-            + (f"\n🎁 {'Ещё ' if c else ''}<b>{nf(r)} ⭐</b>, когда через него придут {cfg('players')} новых игроков {cfg('level')}+ уровня" if r else ""))
+    """Предложение создать бота: и авто-рассылка, и «Разослать всем» из админки. Суммы — из настроек."""
+    r, c, pct = cfg("reward"), cfg("create_reward"), cfg("cut_pct")
+    pc = str(pct).replace(".", ",")
+    perks = ([f"• <b>{nf(c)} ⭐ сразу</b> за создание (с {cfg('create_level')} уровня)"] if c else []) \
+        + ([f"• <b>{pc}% каждый день</b> от всего, что игра заработала на твоих игроках — пассивный доход, пока они играют"] if pct else []) \
+        + ([f"• ещё <b>{nf(r)} ⭐</b>, когда придут {cfg('players')} игроков {cfg('level')}+ уровня"] if r else [])
+    return ("🤖 <b>Свой бот с этой игрой" + (" — и доход каждый день</b>" if pct else "</b>") + "\n\n"
+            "Одной кнопкой создай свой бот с нашей игрой — без @BotFather и без кода. "
+            "Та же игра, тот же баланс, подарки и турниры."
+            + ("\n\n💰 <b>Что получаешь:</b>\n" + "\n".join(perks) if perks else "")
+            + "\n\nЗови друзей в своего бота — чем больше они играют, тем больше получаешь ты 👇")
 
 
 async def _promo_send(ids):
