@@ -68,7 +68,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -182,6 +182,40 @@ async function admRender(el = topSheet()) {
       <div class="sec-t">Последние переводы</div>
       <div class="box">${d.recent.map(pair).join("") || `<div class="hint" style="padding:14px">Переводов пока не было</div>`}</div>
       <div class="disc">Если двое постоянно перекидывают звёзды только друг другу — это может быть один человек с двух аккаунтов. Нажми на пару, чтобы открыть карточку отправителя.</div>`;
+    starify(body);
+  } else if (ADM.tab === "ev") {   // ивенты раз в ~2 часа (flash.py)
+    const d = await api("admin/flash"), c = d.cfg, ed = d.canEdit, now = Math.floor(Date.now() / 1000);
+    const sw = (k, title, hint) => `<div class="row kv"><div class="grow"><div class="t">${title}</div><div class="s" style="white-space:normal">${hint}</div></div>
+      ${ed ? `<button class="sw${c[k] ? " on" : ""}" data-act="adm-ev-sw" data-k="${k}" data-v="${c[k] ? 0 : 1}"></button>` : `<b>${c[k] ? "да" : "нет"}</b>`}</div>`;
+    const field = (k, title, hint, unit) => `<div class="adm-odd"><div class="adm-oh"><b>${title}</b>${d.changed.includes(k) ? `<span class="adm-tag">изменено</span>` : ""}</div>
+      <div class="adm-os">${hint}${hint ? " · " : ""}по умолчанию ${fmt(d.defaults[k])}</div>
+      ${ed ? `<div class="adm-oc"><input class="adm-oi" inputmode="numeric" data-k="${k}" value="${c[k]}"><span class="adm-op">${unit}</span>
+        <button class="btn sm gold" data-act="adm-ev" data-k="${k}">${ic("check")}</button>
+        ${d.changed.includes(k) ? `<button class="btn sm ghost" data-act="adm-ev-rs" data-k="${k}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${fmt(c[k])} ${unit}</b></div>`}</div>`;
+    const cur = d.current;
+    body.innerHTML = `<div class="box">${cur ? admKv("Сейчас идёт", `<b>${esc(d.kinds[cur.kind])}</b> · ещё ${Math.max(0, Math.ceil((cur.end - now) / 60))} мин`)
+        : admKv("Следующий ивент", d.next ? `<b>через ${Math.max(0, Math.ceil((d.next - now) / 60))} мин</b>` : "—")}</div>
+      ${ed ? `<div class="btns" style="flex-wrap:wrap">${cur ? `<button class="btn ghost" data-act="adm-ev-stop">${ic("x")}Остановить</button>`
+        : Object.entries(d.kinds).map(([k, t]) => `<button class="btn sm ghost" data-act="adm-ev-go" data-k="${k}">${esc(t)} сейчас</button>`).join("")}</div>` : ""}
+      <div class="sec-t">Настройки</div>
+      <div class="box">
+        ${sw("on", "Ивенты включены", "Автоматически примерно раз в N минут")}
+        ${field("every_min", "Как часто", "", "мин")}
+        ${field("jitter_min", "Случайный сдвиг ±", "чтобы не угадывали время", "мин")}
+        ${field("dur_min", "Длительность", "", "мин")}
+        ${field("w_luck3", "Вес «Удача ×3»", "чаще выпадает тот, у кого вес больше; 0 — не выпадает", "")}
+        ${field("w_luck5", "Вес «Удача ×5»", "", "")}
+        ${field("w_drop", "Вес «Раздача»", "", "")}
+        ${field("drop_amount", "Раздача: сколько звёзд", "каждому, кто успел", "⭐")}
+        ${field("drop_max", "Раздача: сколько игроков успеют", "", "чел")}
+        ${field("drop_level", "Раздача: с какого уровня", "и сыграл хотя бы раунд за сутки — против твинков", "ур.")}
+        ${sw("notify", "Бот пишет о начале", "Игрокам с включёнными уведомлениями, кто заходил за 3 дня")}
+        ${field("notify_gap_h", "Писать одному игроку не чаще", "иначе бота начнут блокировать", "ч")}
+      </div>
+      <div class="sec-t">Последние ивенты</div>
+      <div class="box">${d.history.map(h => `<div class="row kv"><div class="grow"><div class="t">${esc(h.title)}${h.manual ? " · вручную" : ""}</div>
+        <div class="s">${admDate(h.start)} · ${h.kind === "drop" ? `забрали ${h.claims}` : `удачных моментов ${h.lucky}`}</div></div><b>⭐ ${fmt(h.paid)}</b></div>`).join("") || `<div class="hint" style="padding:14px">Ещё не было</div>`}</div>
+      <div class="disc">«Удача ×N» умножает шанс «удачного момента» (сюрприз до 2 500 ⭐ после раунда) и даёт поймать его ещё раз за ивент. Выигрыши в играх не меняются — иначе ивент стал бы «станком».</div>`;
     starify(body);
   } else if (ADM.tab === "ref") {   // реферальная программа (refs.py)
     const d = await api("admin/refs"), c = d.cfg, ed = d.canEdit, s = d.stats, p = s.paid7;
@@ -472,6 +506,14 @@ Object.assign(ACT, {
     try { const r = await post("admin/franchise/promo"); H.ok(); toast(`Отправляем ${fmt(r.total)} игрокам`, "ok"); admRender(); }
     finally { el.disabled = false; }
   },
+  "adm-ev-sw": async el => { const on = el.dataset.v === "1"; await post("admin/flash", { [el.dataset.k]: on }); H.ok(); toast(on ? "Включено" : "Выключено", "ok"); admRender(); },
+  "adm-ev": async el => { const k = el.dataset.k; await post("admin/flash", { [k]: topSheet().querySelector(`.adm-oi[data-k="${k}"]`).value }); H.ok(); toast("Сохранено", "ok"); admRender(); },
+  "adm-ev-rs": async el => { await post("admin/flash", { [el.dataset.k]: null }); H.ok(); toast("Вернули по умолчанию", "ok"); admRender(); },
+  "adm-ev-go": async el => {
+    if (!await confirmM("Запустить ивент сейчас?", "Бот предупредит игроков (если включено).", "Запустить")) return;
+    await post("admin/flash/start", { kind: el.dataset.k }); H.ok(); toast("Ивент запущен", "ok"); admRender(); loadMe();
+  },
+  "adm-ev-stop": async () => { if (!await confirmM("Остановить ивент?", "Он закончится сразу.", "Остановить")) return; await post("admin/flash/stop"); H.ok(); toast("Остановлен", "ok"); admRender(); loadMe(); },
   "adm-ref-sw": async el => { const on = el.dataset.v === "1"; await post("admin/refs", { [el.dataset.k]: on }); H.ok(); toast(on ? "Включено" : "Выключено", "ok"); admRender(); },
   "adm-ref": async el => {
     const k = el.dataset.k, v = topSheet().querySelector(`.adm-oi[data-k="${k}"]`).value;

@@ -119,3 +119,16 @@
 .bjsc.bj21{background:linear-gradient(#ffd76a,#e8a91c);color:#3a2300;border-color:#fff3c4}
 .bjsc.bust{background:#d8344a;border-color:#ff9aa8}
 @keyframes bjsc{from{transform:scale(.5);opacity:0}}
+
+/* ивенты (flash.py) */
+.invbar.flash{position:relative;overflow:hidden;align-items:center}
+.invbar.flash.luck{background:linear-gradient(120deg,#1f9d55,#0f5f8a)}
+.invbar.flash.drop{background:linear-gradient(120deg,#d9822b,#a1306b)}
+.invbar.flash::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.18) 50%,transparent 70%);
+  transform:translateX(-100%);animation:flashShine 2.8s ease-in-out infinite;pointer-events:none}
+@keyframes flashShine{60%,100%{transform:translateX(100%)}}
+.flash-t{font-style:normal;font-variant-numeric:tabular-nums;margin-left:6px;padding:1px 7px;border-radius:8px;background:rgba(0,0,0,.25);font-size:12.5px}
+.invbar.flash .flash-btn{flex:none;white-space:nowrap}
+.invbar.flash .flash-ok{flex:none;display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;opacity:.9}
+.flash-ok .ic{width:16px;height:16px}
+.flash-next{margin:6px 2px 2px;font-size:12px;color:var(--hint);text-align:center}

@@ -350,6 +350,7 @@ async function renderCases() {
   const lvl = ME.lv.level;
   v.innerHTML = `
     ${ME.rooms ? `<button class="invbar" data-act="my-invites">${ic("userPlus")}<span><b>Тебя зовут за стол</b>${ME.rooms} ${plural(ME.rooms, ["приглашение", "приглашения", "приглашений"])} — нажми, чтобы сесть</span>${ic("chev")}</button>` : ""}
+    ${flashBar()}
     ${frBanner()}
     <div class="sec-t"><span class="live-dot"></span>Живая лента</div><div class="feed" id="feed"></div>
     <div class="promo">
@@ -722,6 +723,27 @@ async function newTrade(uid) {
   };
 }
 
+// ============================================================ ивенты раз в ~2 часа (flash.py)
+const flashLeft = s => { s = Math.max(0, s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+function flashBar() {
+  const f = ME.flash; if (!f) return "";
+  const t = Math.floor(Date.now() / 1000);
+  if (!f.kind) {   // между ивентами — подсказка, когда следующий
+    const m = Math.ceil((f.next - t) / 60);
+    return m > 0 && m <= 180 ? `<div class="flash-next">⚡ Следующий ивент примерно через ${m} мин</div>` : "";
+  }
+  if (f.end <= t) return "";
+  const drop = f.kind === "drop";
+  const act = drop ? (f.claimed ? `<span class="flash-ok">${ic("check")}Забрал</span>` : f.left ? `<span class="btn sm gold flash-btn">Забрать +${fmt(f.amount)} ⭐</span>` : `<span class="flash-ok">Разобрали</span>`) : "";
+  return `<button class="invbar flash ${drop ? "drop" : "luck"}" data-act="${drop && !f.claimed && f.left ? "flash-claim" : "flash-info"}">
+    <span><b>${esc(f.title)} <i class="flash-t" data-end="${f.end}">${flashLeft(f.end - t)}</i></b>${esc(f.desc)}${drop && f.left && !f.claimed ? ` · осталось ${f.left}` : ""}</span>${act}</button>`;
+}
+setInterval(() => {   // обратный отсчёт; ивент закончился — перерисовываем главную
+  const els = document.querySelectorAll(".flash-t"); if (!els.length) return;
+  const t = Math.floor(Date.now() / 1000);
+  els.forEach(e => { const s = +e.dataset.end - t; e.textContent = flashLeft(s); if (s <= 0 && ME.flash) { ME.flash = null; loadMe().then(() => $("#v-cases") && renderCases()); } });
+}, 1000);
+
 // ============================================================ франшиза: свой бот с этой игрой (franchise.py)
 const FR_HIDE = "frHide";   // крестик на баннере — прячем на 14 дней (только у этого игрока)
 function frBanner() {
@@ -799,6 +821,13 @@ const ACT = {
   "save-profile": () => topSheet()._save(),
   invite: () => invite(),
   "franchise-info": () => franchiseInfo(),
+  "flash-info": () => { const f = ME.flash; if (f && f.kind) toast(f.desc); },
+  "flash-claim": async el => {
+    el.disabled = true;
+    try { const r = await post("flash/claim"); H.ok(); toast(`+${fmt(r.amount)} ⭐ — забрал!`, "ok"); setStars(r.stars); coinShower(el, 30); ME.flash.claimed = true; renderCases(); }
+    catch (e) { await loadMe(); renderCases(); }
+    finally { el.disabled = false; }
+  },
   "franchise-hide": () => { try { localStorage.setItem(FR_HIDE, Date.now()); } catch (e) { } H.sel(); renderCases(); },
   franchise: () => inTg ? tg.openTelegramLink(ME.franchise.link) : window.open(ME.franchise.link),   // t.me/newbot/<главный бот> — окно создания бота
   fr: async el => { const r = await post(`friends/${el.dataset.id}/${el.dataset.v}`); H.sel(); toast({ friend: "Теперь вы друзья", outgoing: "Заявка отправлена", none: "Готово" }[r.rel] || "Готово"); await loadMe(); refreshProfileSheets(); refreshFriends(); },

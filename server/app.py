@@ -289,6 +289,7 @@ CREATE TABLE IF NOT EXISTS bigwins(id INTEGER PRIMARY KEY, user INTEGER, kind TE
 """)
 LUCKY_P = conf("economy.lucky_chance", 0.006)   # «удачный момент»: шанс сюрприза после раунда в игре (~раз в 170 раундов)
 LUCKY = ([200, 300, 500, 1000, 2500], [40, 30, 20, 8, 2])
+FLASH_LUCK = lambda: None   # flash.py: во время ивента «Удача ×N» → (N, начало ивента)
 
 
 def event(uid, kind, delta):
@@ -298,8 +299,10 @@ def event(uid, kind, delta):
         db.execute("DELETE FROM bigwins WHERE id < (SELECT MAX(id) FROM bigwins) - 200")
         if CLAN_WIN and uid in CLAN_TAG:
             CLAN_WIN(uid, kind, delta)
-    if kind in TAXABLE and random.random() < LUCKY_P:   # маленький сюрприз — не чаще раза в сутки, иначе его фармят ставками по 10 ⭐
-        if not q1("SELECT 1 FROM events WHERE user=? AND kind='lucky' AND ts>?", uid, now() - 86400):
+    fl = FLASH_LUCK() if kind in TAXABLE else None
+    if kind in TAXABLE and random.random() < LUCKY_P * (fl[0] if fl else 1):   # маленький сюрприз — не чаще раза в сутки, иначе его фармят ставками по 10 ⭐
+        # во время «Удачи ×N» (flash.py) — ещё раз за ивент, даже если сегодня уже был; всё равно не больше одного за ивент
+        if not q1("SELECT 1 FROM events WHERE user=? AND kind='lucky' AND ts>=?", uid, fl[1] if fl else now() - 86400):
             amt = random.choices(*LUCKY)[0]
             db.execute("UPDATE users SET stars=stars+?, surprise=surprise+? WHERE id=?", (amt, amt, uid))
             db.execute("INSERT INTO events VALUES(?,?,?,?)", (uid, "lucky", amt, now()))
@@ -692,6 +695,7 @@ def me(uid=Depends(auth)):
             "sparks": __import__("sparks").sparks_waiting(uid),
             "gamesOff": __import__("gates").games_state(),
             "franchise": franchise.offer(uid),
+            "flash": flash.public(uid),
             "edges": {"x": edge(tuned("games.edge", EDGE)), "mines": edge(tuned("games.mines_edge", MINES_EDGE)), "upg": edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)},   # фронт показывает иксы кубика/лимбо/мин по этим же коэффициентам
             "inbox": q1("SELECT COUNT(*) n FROM inbox WHERE user=? AND id>?", uid, u["inbox_read"] if "inbox_read" in u.keys() else 0)["n"], **counters(uid), "clanChat": CLAN_UNREAD(uid) if CLAN_UNREAD else 0, "cashback": __import__("retain").cashback_preview(uid)}
 
@@ -2254,6 +2258,7 @@ import eggs  # noqa: E402,F401 — пасхалки (без звёзд, толь
 import stack  # noqa: E402,F401 — «Стопка»: игра на ловкость, недельный турнир
 import franchise  # noqa: E402 — франшиза: свои боты игроков с этой же игрой (Managed Bots)
 import refs  # noqa: E402 — реферальная программа: уровни друзей, рубежи, доля с покупок, недельный топ
+import flash  # noqa: E402 — ивенты раз в ~2 часа: «Удача ×3/×5», «Раздача ⭐»
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------
