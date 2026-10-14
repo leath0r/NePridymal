@@ -4,3 +4,4 @@ uvicorn==0.54.0
 httpx==0.28.1
 pydantic==2.13.5
 pillow==11.0.0
+cryptography>=43   # франшиза: проверка подписи Telegram (Ed25519) для входа из ботов игроков

@@ -197,7 +197,7 @@ async def _broadcast(ids, text):
     try:
         for uid in ids:
             try:
-                r = await tg_call("sendMessage", chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
+                r = await tg_call("sendMessage", _token=__import__("franchise").token_for(uid), chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
                 BROADCAST["sent" if r.get("ok") else "failed"] += 1
             except Exception:
                 BROADCAST["failed"] += 1

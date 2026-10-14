@@ -500,6 +500,7 @@ function openDaily() {
     <div class="sec-t">Ещё звёзды</div>
     <div class="box">
       <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">+${fmt(ME.refBonus)} ⭐ тебе и ему</div></div><span class="pill">${ME.refs}</span></div>
+      ${ME.franchise ? `<div class="row tap" data-act="franchise"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.reward ? `Создай за 1 тап · +${fmt(ME.franchise.reward)} ⭐ за ${ME.franchise.need} игроков` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
       <div class="row tap" data-act="case" data-id="free"><span class="pic g">${ic("gift")}</span><div class="grow"><div class="t">Бесплатный кейс</div><div class="s">${ME.freeIn ? "через " + clock(ME.freeIn) : "готов"}</div></div></div>
       <div class="row"><span class="pic y">${ic("medal")}</span><div class="grow"><div class="t">Уровни</div><div class="s">За каждый новый уровень — бонус звёздами</div></div></div>
     </div>
@@ -772,6 +773,7 @@ const ACT = {
   "edit-profile": () => editProfile(),
   "save-profile": () => topSheet()._save(),
   invite: () => invite(),
+  franchise: () => inTg ? tg.openTelegramLink(ME.franchise.link) : window.open(ME.franchise.link),   // t.me/newbot/<главный бот> — окно создания бота
   fr: async el => { const r = await post(`friends/${el.dataset.id}/${el.dataset.v}`); H.sel(); toast({ friend: "Теперь вы друзья", outgoing: "Заявка отправлена", none: "Готово" }[r.rel] || "Готово"); await loadMe(); refreshProfileSheets(); refreshFriends(); },
   "trade-new": el => newTrade(+el.dataset.id),
   "send-trade": () => topSheet()._send(),

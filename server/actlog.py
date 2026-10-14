@@ -11,7 +11,7 @@ from collections import deque
 from fastapi import Depends, Request
 from fastapi.responses import Response
 
-from app import DB_PATH, R, app
+from app import DB_PATH, R, VIA_BOT, app
 from admin import admin
 
 KEEP_DAYS = 10
@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS actlog(id INTEGER PRIMARY KEY, ts REAL, user INTEGER,
 CREATE INDEX IF NOT EXISTS actlog_user ON actlog(user, ts);
 CREATE INDEX IF NOT EXISTS actlog_ts ON actlog(ts);
 """)
+try:   # bot — бот франшизы, через которого сделано действие (0 — главный): для разбора и отката краж
+    ldb.execute("ALTER TABLE actlog ADD COLUMN bot INTEGER DEFAULT 0")
+except sqlite3.OperationalError:
+    pass
 LLOCK = threading.Lock()
 # баланс читаем отдельным соединением только на чтение — не вмешиваемся в транзакции игры
 rdb = sqlite3.connect(f"file:{os.path.abspath(DB_PATH)}?mode=ro", uri=True, check_same_thread=False)
@@ -53,7 +57,7 @@ async def _actlog(request: Request, call_next):
             stars = r[0] if r else None
         except Exception:
             pass
-    BUF.append((t0, uid, request.url.path[len(R):], body, resp.status_code, ms, stars, detail))
+    BUF.append((t0, uid, request.url.path[len(R):], body, resp.status_code, ms, stars, detail, VIA_BOT.get()))
     return resp
 
 
@@ -64,7 +68,7 @@ def _flush():
     if rows:
         with LLOCK:
             ldb.execute("BEGIN")
-            ldb.executemany("INSERT INTO actlog(ts,user,path,body,status,ms,stars,err) VALUES(?,?,?,?,?,?,?,?)", rows)
+            ldb.executemany("INSERT INTO actlog(ts,user,path,body,status,ms,stars,err,bot) VALUES(?,?,?,?,?,?,?,?,?)", rows)
             ldb.execute("COMMIT")
 
 

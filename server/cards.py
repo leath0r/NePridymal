@@ -6,7 +6,7 @@ import random
 from fastapi import Depends, Request
 
 from app import R, app, auth, bal, check_bet, db, err, esc, event, notify, now, q, q1, tx, user_brief, add_xp
-from app import APP_URL as A_APP, BOT_NAME as A_BOT
+from app import APP_URL as A_APP, bot_name
 from app import unpin as A_unpin, cancel_trades_with as A_cancel, gift_out as A_gift_out
 
 # ============================== колоды ==============================
@@ -473,7 +473,7 @@ def _view(r, uid):
     out = {"id": r["id"], "game": r["game"], "title": GAMES[r["game"]], "stake": r["stake"], "kind": r["kind"], "maxp": r["maxp"], "public": bool(r["public"]),
            "status": r["status"], "host": r["host"], "me": uid, "pot": _pot(r) if r["status"] != "waiting" else int(r["stake"] * len(ps) * (1 - ROOM_FEE)),
            "players": [], "result": r["result"], "turn": None, "deadline": st.get("deadline"), "now": now(),
-           "link": f"https://t.me/{A_BOT}?start=room_{r['id']}"}
+           "link": f"https://t.me/{bot_name()}?start=room_{r['id']}"}
     if r["kind"] == "gifts":
         ids = [g for gs in r["escrow"].values() for g in gs] or (r["result"] or {}).get("gifts", [])
         rows = [q1("SELECT * FROM gifts WHERE id=?", g) for g in ids]
@@ -685,4 +685,4 @@ async def room_action(rid: int, action: str, req: Request, uid=Depends(auth)):
         notify(*n)
     if action in ("act", "start", "leave"):
         _ping_turn(r)
-    return {**_view(r, uid), "stars": bal(uid), "link": f"https://t.me/{A_BOT}?start=room_{rid}"}
+    return {**_view(r, uid), "stars": bal(uid), "link": f"https://t.me/{bot_name()}?start=room_{rid}"}

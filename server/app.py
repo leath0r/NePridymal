@@ -17,6 +17,7 @@ import threading
 import time
 import urllib.parse
 from collections import deque
+from contextvars import ContextVar
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -28,6 +29,8 @@ import economy as E
 TOKEN = os.environ["BOT_TOKEN"]
 APP_URL = os.environ.get("APP_URL", "https://2.27.44.210/np/")
 BOT_NAME = os.environ.get("BOT_USERNAME", "NePridymalhzbot")
+VIA_BOT = ContextVar("via_bot", default=0)        # франшиза: id дочернего бота, через которого пришёл запрос (0 — главный)
+CUR_TOKEN = ContextVar("cur_token", default=None)  # франшиза: ответы на апдейт дочернего бота — его токеном
 DEV = os.environ.get("DEV") == "1"
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "game.db"))
 WEB_DIR = os.environ.get("WEB_DIR", os.path.join(os.path.dirname(__file__), "..", "web"))
@@ -326,7 +329,7 @@ def check_init_data(init):
     return data
 
 
-def register(tg_user, start_param=""):
+def register(tg_user, start_param="", bid=0):
     uid = int(tg_user["id"])
     name = (tg_user.get("first_name", "") + " " + tg_user.get("last_name", "")).strip() or "Игрок"
     with tx():
@@ -345,9 +348,9 @@ def register(tg_user, start_param=""):
             ref = p["ref"] if p else None
         if ref == uid or not (ref and q1("SELECT 1 FROM users WHERE id=?", ref)):
             ref = None
-        db.execute("INSERT INTO users(id,name,username,photo,stars,created,seen,ref_by) VALUES(?,?,?,?,?,?,?,?)",
+        db.execute("INSERT INTO users(id,name,username,photo,stars,created,seen,ref_by,bot,came_bot) VALUES(?,?,?,?,?,?,?,?,?,?)",
                    (uid, name, tg_user.get("username"), tg_user.get("photo_url"),
-                    START_STARS + (REF_BONUS if ref else 0), now(), now(), ref))
+                    START_STARS + (REF_BONUS if ref else 0), now(), now(), ref, bid, bid))
         if ref:
             db.execute("UPDATE users SET stars=stars+?, refs=refs+1 WHERE id=?", (REF_BONUS, ref))
             event(ref, "ref", REF_BONUS)
@@ -373,10 +376,14 @@ def auth(request: Request, x_init_data: str = Header(""), x_dev_user: str = Head
             err("Аккаунт заблокирован", 403)
         request.state.uid = uid   # для журнала действий (actlog.py)
         return uid
-    data = check_init_data(x_init_data)
-    if not data or "user" not in data:
+    v = franchise.verify(x_init_data)   # главный бот — HMAC токеном, дочерние — подпись Telegram (franchise.py)
+    if not v or "user" not in v[1]:
         err("unauthorized", 401)
-    uid, _ = register(json.loads(data["user"]), data.get("start_param", ""))
+    bid, data = v
+    if bid and not franchise.active(bid):
+        err(f"Этот бот отключён — играй в @{BOT_NAME}", 403)
+    uid, _ = register(json.loads(data["user"]), data.get("start_param", ""), bid)
+    franchise.seen_via(uid, bid)
     request.state.uid = uid   # для журнала действий (actlog.py)
     if uid in BANNED:
         err("Аккаунт заблокирован", 403)
@@ -393,9 +400,17 @@ def esc(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-async def tg_call(method, **params):
-    r = await http.post(API + method, json=params, timeout=70)
+async def tg_call(method, _token=None, **params):
+    """_token — чужой бот франшизы; без него — бот текущего апдейта (вебхук франшизы) или главный."""
+    tok = _token or CUR_TOKEN.get()
+    r = await http.post(f"https://api.telegram.org/bot{tok}/{method}" if tok else API + method, json=params, timeout=70)
     return r.json()
+
+
+def bot_name():
+    """Бот, через которого игрок сейчас играет: на него — реф-ссылки, приглашения в клан, подарки, столы."""
+    b = VIA_BOT.get()
+    return franchise.username(b) if b else BOT_NAME
 
 
 def notify(uid, text, url=None):
@@ -411,7 +426,7 @@ def notify(uid, text, url=None):
 
     async def send():
         try:
-            r = await tg_call("sendMessage", chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
+            r = await tg_call("sendMessage", _token=franchise.token_for(uid), chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
             if not r.get("ok"):
                 print("notify fail", uid, r.get("description"), flush=True)
         except Exception as e:
@@ -419,14 +434,16 @@ def notify(uid, text, url=None):
     asyncio.run_coroutine_threadsafe(send(), LOOP)
 
 
-async def bot_setup():
-    await tg_call("setChatMenuButton", menu_button={"type": "web_app", "text": "Играть", "web_app": {"url": APP_URL}})
-    await tg_call("setMyCommands", commands=[{"command": "start", "description": "Играть"},
-                                             {"command": "ref", "description": "Моя реф-ссылка"}])
-    await tg_call("setMyDescription", description=(
+async def bot_setup(token=None):
+    """token — бот франшизы (настраивается так же, без /franchise)."""
+    await tg_call("setChatMenuButton", _token=token, menu_button={"type": "web_app", "text": "Играть", "web_app": {"url": APP_URL}})
+    await tg_call("setMyCommands", _token=token, commands=[{"command": "start", "description": "Играть"},
+                                                           {"command": "ref", "description": "Моя реф-ссылка"}]
+                  + ([] if token else [{"command": "franchise", "description": "Свой бот с этой игрой"}]))
+    await tg_call("setMyDescription", _token=token, description=(
         "🎁 Кейс-симулятор подарков Telegram: 29 кейсов и 20+ игр — краш, Самолётик, Курица, Пёсики, слоты, плинко, мины, "
         "битва кейсов, скретч-карты, дуэли с друзьями. Маркет, крипта, кланы, турниры недели и альбом коллекций.\n\n⚠️ " + DISCLAIMER))
-    await tg_call("setMyShortDescription", short_description="Игра-симулятор подарков: кейсы, краш, слоты, маркет. Подарки и звёзды игровые 🎁")
+    await tg_call("setMyShortDescription", _token=token, short_description="Игра-симулятор подарков: кейсы, краш, слоты, маркет. Подарки и звёзды игровые 🎁")
 
 
 async def bot_loop():
@@ -440,11 +457,13 @@ async def bot_loop():
     offset = 0
     while True:
         try:
-            res = await tg_call("getUpdates", offset=offset, timeout=50, allowed_updates=["message", "pre_checkout_query"])
+            res = await tg_call("getUpdates", offset=offset, timeout=50, allowed_updates=["message", "pre_checkout_query", "managed_bot"])
             for upd in res.get("result", []):
                 offset = upd["update_id"] + 1
                 m = upd.get("message")
-                if upd.get("pre_checkout_query"):   # оплата Telegram Stars (shop.py)
+                if upd.get("managed_bot"):   # игрок создал бота-франшизу / сменил токен (franchise.py)
+                    await franchise.on_managed(upd["managed_bot"])
+                elif upd.get("pre_checkout_query"):   # оплата Telegram Stars (shop.py)
                     await shop.on_pre_checkout(upd["pre_checkout_query"])
                 elif m and m.get("successful_payment"):
                     await asyncio.get_running_loop().run_in_executor(None, shop.on_paid, m)
@@ -459,6 +478,9 @@ async def on_command(m):
     uid, text = m["from"]["id"], m["text"]
     cmd, _, arg = text.partition(" ")
     kb = {"inline_keyboard": [[{"text": "🎁 Играть", "web_app": {"url": APP_URL}}]]}
+    if CUR_TOKEN.get() is None and (cmd.startswith("/franchise") or (cmd.startswith("/start") and arg == "franchise")):
+        await franchise.cmd(m)   # только в главном боте
+        return
     if cmd.startswith("/start") and arg.startswith("room_") and arg[5:].isdigit():
         await tg_call("sendMessage", chat_id=uid, parse_mode="HTML", text="🃏 Тебя зовут за игровой стол — жми кнопку, чтобы сесть",
                       reply_markup={"inline_keyboard": [[{"text": "🃏 Сесть за стол", "web_app": {"url": APP_URL + "?room=" + arg[5:]}}]]})
@@ -501,7 +523,7 @@ async def on_command(m):
                + f"\n\n<i>⚠️ {esc(DISCLAIMER)}</i>")
         await tg_call("sendMessage", chat_id=uid, text=txt, parse_mode="HTML", reply_markup=kb)
     elif cmd.startswith("/ref"):
-        link = f"https://t.me/{BOT_NAME}?start=ref_{uid}"
+        link = f"https://t.me/{bot_name()}?start=ref_{uid}"
         await tg_call("sendMessage", chat_id=uid, parse_mode="HTML",
                       text=f"Твоя ссылка:\n{link}\n\nДругу +{REF_BONUS} ⭐ и тебе +{REF_BONUS} ⭐ (игровые)")
 
@@ -581,6 +603,7 @@ async def startup():
     if not DEV:  # локально бот не поллит, чтобы не драться с продом за getUpdates
         asyncio.create_task(bot_loop())
         asyncio.create_task(reminder_loop())
+        asyncio.create_task(franchise.startup())
 
 
 @app.on_event("shutdown")
@@ -643,11 +666,12 @@ def me(uid=Depends(auth)):
     return {**user_brief(u), "stars": u["stars"], "lv": level_info(u["xp"]), "refs": u["refs"],
             "freeIn": max(0, u["last_free"] + free_every(u) - t), "vip": u["vip_until"] if is_vip(u) else 0, "dailyIn": max(0, u["last_daily"] + DAILY_EVERY - t),
             "streakNext": u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1,   # какой день серии будет при следующем заборе
-            "streak": u["streak"], "refLink": f"https://t.me/{BOT_NAME}?start=ref_{uid}", "refBonus": REF_BONUS,
+            "streak": u["streak"], "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": REF_BONUS,
             "disclaimer": DISCLAIMER, "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
             "sparks": __import__("sparks").sparks_waiting(uid),
             "gamesOff": __import__("gates").games_state(),
+            "franchise": franchise.offer(uid),
             "edges": {"x": edge(tuned("games.edge", EDGE)), "mines": edge(tuned("games.mines_edge", MINES_EDGE)), "upg": edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)},   # фронт показывает иксы кубика/лимбо/мин по этим же коэффициентам
             "inbox": q1("SELECT COUNT(*) n FROM inbox WHERE user=? AND id>?", uid, u["inbox_read"] if "inbox_read" in u.keys() else 0)["n"], **counters(uid), "clanChat": CLAN_UNREAD(uid) if CLAN_UNREAD else 0, "cashback": __import__("retain").cashback_preview(uid)}
 
@@ -2208,6 +2232,7 @@ import pay  # noqa: E402,F401 — переводы звёзд между игр�
 import dbtools  # noqa: E402,F401 — админка: экспорт/импорт базы (только владелец)
 import eggs  # noqa: E402,F401 — пасхалки (без звёзд, только достижение)
 import stack  # noqa: E402,F401 — «Стопка»: игра на ловкость, недельный турнир
+import franchise  # noqa: E402 — франшиза: свои боты игроков с этой же игрой (Managed Bots)
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------

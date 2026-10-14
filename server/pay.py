@@ -12,7 +12,7 @@ from fastapi import Depends, Request
 
 import loans
 import app as A
-from app import BOT_NAME, R, app, auth, bal, db, err, esc, event, kv_get, notify, now, q, q1, tg_call, tx, user_brief
+from app import BOT_NAME, R, bot_name, app, auth, bal, db, err, esc, event, kv_get, notify, now, q, q1, tg_call, tx, user_brief
 from settings import conf
 
 # настройки: по умолчанию из settings.toml, владелец меняет на лету в админке (вкладка «Переводы», хранится в kv 'paycfg')
@@ -179,7 +179,7 @@ def pay_home(uid=Depends(auth)):
     wk = now() - 7 * 86400
     week = {"in": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE dst=? AND ts>=?", uid, wk)["s"],
             "out": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE src=? AND ts>=?", uid, wk)["s"]}
-    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "feeAddr": cfg("fee_addr"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{BOT_NAME}?start=pay_{uid}", "history": out, "pin": has_pin(uid), "addr": addr_of(uid)}
+    return {"stars": bal(uid), "week": week, "fee": cfg("fee"), "feeAddr": cfg("fee_addr"), "min": cfg("min"), "max": cfg("max"), "on": cfg("on"), "link": f"https://t.me/{bot_name()}?start=pay_{uid}", "history": out, "pin": has_pin(uid), "addr": addr_of(uid)}
 
 
 @app.get(R + "/pay/peer/{tid}")
@@ -286,7 +286,8 @@ async def pin_forgot(uid=Depends(auth)):
     if r and t - (r["code_ts"] or 0) < CODE_EVERY:
         err("код уже отправлен — проверь сообщения от бота (повторно — через минуту)")
     code = f"{secrets.randbelow(10 ** 6):06d}"
-    res = await tg_call("sendMessage", chat_id=uid, parse_mode="HTML",
+    # бот, где игрок играет; protect_content — владелец бота-франшизы не перешлёт себе код (forwardMessage по message_id)
+    res = await tg_call("sendMessage", _token=__import__("franchise").token_for(uid), chat_id=uid, parse_mode="HTML", protect_content=True,
                         text=f"🔐 Код для сброса пароля кошелька: <b>{code}</b>\n\nДействует 10 минут. Никому его не сообщай — администрация никогда его не спрашивает.")
     if not res.get("ok"):
         err("бот не смог написать — открой чат с ботом, нажми «Старт» и попробуй снова")

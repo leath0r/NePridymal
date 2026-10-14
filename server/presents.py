@@ -6,7 +6,7 @@ import secrets
 
 from fastapi import Depends, Request
 
-from app import (BOT_NAME, R, app, auth, cancel_trades_with, db, err, esc, event, gift_out, in_open_trade, notify, now, own_gift,
+from app import (bot_name, R, app, auth, cancel_trades_with, db, err, esc, event, gift_out, in_open_trade, notify, now, own_gift,
                  q, q1, tx, unpin, user_brief)
 
 LINK_OWNER = 3 * 10 ** 10    # выше диапазонов сейфа (2e9+uid) и залога (2e10+uid)
@@ -67,7 +67,7 @@ async def link_gift(gid: int, req: Request, uid=Depends(auth)):
         db.execute("UPDATE gifts SET owner=? WHERE id=?", (-(LINK_OWNER + cur.lastrowid), gid))
         unpin(uid, gid)
         cancel_trades_with(gid)
-    return {"ok": True, "code": code, "link": f"https://t.me/{BOT_NAME}?start=gift_{code}"}
+    return {"ok": True, "code": code, "link": f"https://t.me/{bot_name()}?start=gift_{code}"}
 
 
 @app.get(R + "/giftlink/{code}")
@@ -102,7 +102,7 @@ def my_links(uid=Depends(auth)):
     for lk in q("SELECT * FROM gift_links WHERE sender=? ORDER BY id DESC LIMIT 20", uid):
         g = q1("SELECT * FROM gifts WHERE id=?", lk["gift"])
         out.append({"code": lk["code"], "status": lk["status"], "ts": lk["ts"], "gift": gift_out(g) if g else None,
-                    "link": f"https://t.me/{BOT_NAME}?start=gift_{lk['code']}"})
+                    "link": f"https://t.me/{bot_name()}?start=gift_{lk['code']}"})
     return {"links": out}
 
 

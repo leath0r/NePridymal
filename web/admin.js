@@ -68,7 +68,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -183,6 +183,15 @@ async function admRender(el = topSheet()) {
       <div class="box">${d.recent.map(pair).join("") || `<div class="hint" style="padding:14px">Переводов пока не было</div>`}</div>
       <div class="disc">Если двое постоянно перекидывают звёзды только друг другу — это может быть один человек с двух аккаунтов. Нажми на пару, чтобы открыть карточку отправителя.</div>`;
     starify(body);
+  } else if (ADM.tab === "fr") {   // франшиза: боты игроков (franchise.py)
+    const d = await api("admin/franchise");
+    const st = { on: "работает", off: "отключён", limit: "лимит владельца" };
+    body.innerHTML = `<div class="box">${d.bots.map(b => `<div class="row kv">
+        <div class="grow" style="min-width:0"><div class="t">@${esc(b.username || "?")}</div>
+          <div class="s" style="white-space:normal">${esc(b.oname || "id " + b.owner)} · ${admDate(b.created)} · ${st[b.status] || b.status}<br>пришло ${fmt(b.came)} · играют сейчас ${fmt(b.now)} · ${b.paid ? "награда выплачена" : `к награде ${b.progress}/${d.need}`}</div></div>
+        ${b.status === "limit" ? "" : `<button class="sw${b.status === "on" ? " on" : ""}" data-act="adm-fr" data-id="${b.id}" data-v="${b.status === "on" ? 0 : 1}"></button>`}</div>`).join("")
+        || `<div class="hint" style="padding:14px">Ботов пока нет</div>`}</div>
+      <div class="disc">Игрок создаёт бота кнопкой в игре или командой /franchise в главном боте. База общая. Награда — ⭐ ${fmt(d.reward)} один раз, когда бот приведёт ${d.need} игроков ${d.level}+ уровня. Если владелец сменит вебхук или кнопку «Играть», бот отключится сам.</div>`;
   } else if (ADM.tab === "bc") {
     const st = await api("admin/broadcast");
     body.innerHTML = `<textarea id="adm-bc" rows="5" placeholder="Текст сообщения всем игрокам"></textarea>
@@ -372,6 +381,11 @@ Object.assign(ACT, {
     const on = el.dataset.v === "1";
     if (!on && !await confirmM("Выключить переводы?", "Игроки не смогут переводить звёзды друг другу, пока не включишь обратно.", "Выключить")) return;
     await post("admin/pay", { on }); H.ok(); toast(on ? "Переводы включены" : "Переводы выключены", "ok"); admRender();
+  },
+  "adm-fr": async el => {
+    const on = el.dataset.v === "1";
+    if (!on && !await confirmM("Отключить бота?", "Его игроки не смогут войти через него — только через главного бота (аккаунт тот же).", "Отключить")) return;
+    await post("admin/franchise/" + el.dataset.id, { on }); H.ok(); toast(on ? "Бот включён" : "Бот отключён", "ok"); admRender();
   },
   "adm-db-exp": async el => {
     el.disabled = true;

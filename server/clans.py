@@ -10,7 +10,7 @@ from fastapi import Depends, Request
 import app as A
 
 import economy as E
-from app import (BOT_NAME, CLAN_TAG, CLAN_TAX, GAME_KINDS, R, app, auth, bal, db, err, esc, event, notify, now, q, q1, tx, user_brief, week_start)
+from app import (bot_name, CLAN_TAG, CLAN_TAX, GAME_KINDS, R, app, auth, bal, db, err, esc, event, notify, now, q, q1, tx, user_brief, week_start)
 
 db.executescript("""
 CREATE TABLE IF NOT EXISTS clans(id INTEGER PRIMARY KEY, name TEXT UNIQUE COLLATE NOCASE, tag TEXT UNIQUE COLLATE NOCASE,
@@ -213,7 +213,7 @@ def clan(cid: int, uid=Depends(auth)):
     return {**br, "owner": c["owner"], "created": c["created"], "descr": c["descr"] or "", "list": members, "mine": my_clan_id(uid) == cid,
             "isOwner": c["owner"] == uid, "role": role, "goals": goals, "feed": fd, "requests": reqs,
             "requested": bool(q1("SELECT 1 FROM clan_requests WHERE user=? AND clan=?", uid, cid)),
-            "invite": f"https://t.me/{BOT_NAME}?start=clan_{cid}",
+            "invite": f"https://t.me/{bot_name()}?start=clan_{cid}",
             "spend": {"boost": boost_price(len(members)), "boostPct": int(BOOST[0] * 100), "slots": slots_price(c["slots"] or MAX_MEMBERS)
                       if (c["slots"] or MAX_MEMBERS) < SLOTS_MAX else None, "slotsStep": SLOTS_STEP,
                       "keys": {k: E.CASES[k]["price"] * len(members) for k in ("luck", "lux", "cups")},
