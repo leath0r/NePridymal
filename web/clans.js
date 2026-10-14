@@ -41,7 +41,7 @@ function clanBankHTML(c) {
       <div class="clb-top"><div><span>В казне</span><b>⭐ ${fmt(c.bank)}</b></div><div><span>Налог с выигрышей</span><b>${c.tax ? pct(c.tax) : "нет"}</b></div>
         <div><span>Буст дохода</span><b class="${boost ? "tw" : ""}">${boost ? `+${sp.boostPct}% · ${Math.ceil((c.boostUntil - Date.now() / 1000) / 3600)} ч` : "выкл."}</b></div></div>
       ${owner ? `<div class="clb-sec">Налог в казну <span class="hint">— с чистого выигрыша участников в играх на звёзды</span></div>
-        <div class="seg">${[0, .01, .02, .03, .05].map(x => `<button data-act="clan-taxset" data-v="${x}" class="${Math.abs((c.tax || 0) - x) < 1e-6 ? "on" : ""}">${x ? pct(x) : "0"}</button>`).join("")}</div>
+        <div class="seg">${[...new Set([0, .01, .02, .03, .05].filter(x => x <= (sp && sp.taxMax != null ? sp.taxMax : .05)).concat(sp && sp.taxMax ? [sp.taxMax] : []))].map(x => `<button data-act="clan-taxset" data-v="${x}" class="${Math.abs((c.tax || 0) - x) < 1e-6 ? "on" : ""}">${x ? pct(x) : "0"}</button>`).join("")}</div>
         <div class="clb-sec">Потратить казну</div>
         <div class="clb-acts">
           <button data-act="clan-pay">${ic("users")}<b>Раздать участникам</b><span>поровну всем участникам</span></button>
@@ -160,7 +160,7 @@ Object.assign(ACT, {
   },
   "clan-taxset": async el => {
     const v = +el.dataset.v;
-    if (!await confirmM(v ? `Налог ${String(v * 100).replace(".", ",")}%?` : "Отменить налог?", v ? "С каждого чистого выигрыша участников в играх на звёзды эта доля уйдёт в казну клана. Участники получат уведомление." : "Выигрыши участников больше не будут облагаться.", "Применить")) return;
+    if (!await confirmM(v ? `Налог ${pctF(v)}?` : "Отменить налог?", v ? "С каждого чистого выигрыша участников в играх на звёзды эта доля уйдёт в казну клана. Участники получат уведомление." : "Выигрыши участников больше не будут облагаться.", "Применить")) return;
     await post("clans/tax", { rate: v }); H.ok(); toast("Налог обновлён", "ok"); await clanRefresh();
   },
   "clan-pay": async () => {

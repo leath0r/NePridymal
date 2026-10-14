@@ -113,7 +113,7 @@ function fillBK(el) {
     <details class="bk-how"><summary>${ic("info")}Как работают акции</summary>
       <p>Цена акции = банк / ${short(BK.supply)}. Игроки проигрывают — банк растёт и акции дорожают, выигрывают — дешевеют.</p>
       <p>Каждый день в 00:00 UTC (11:00 по Сахалину) ${Math.round(BK.divShare * 100)}% вчерашней прибыли банка делится на акции у игроков (если акций у игроков меньше ${short(BK.divFloor || 10000)} — делится как на ${short(BK.divFloor || 10000)}, остаток остаётся в банке). В убыточный для банка день дивидендов нет.</p>
-      <p>Не больше ${fmt(BK.maxPer)} акций в одни руки. Продать можно через сутки после покупки, комиссия ${Math.round(BK.sellFee * 100)}%.</p></details>
+      <p>Не больше ${fmt(BK.maxPer)} акций в одни руки. Продать можно через сутки после покупки, комиссия ${pctF(BK.sellFee)}.</p></details>
 
     <div class="seg bk-tabs">${[["holders", "Акционеры"], ["robbers", "Обыграли банк"], ["sponsors", "Спонсоры"]].map(([k, t]) => `<button data-act="bk-top" data-v="${k}" class="${k === bkTop ? "on" : ""}">${t}</button>`).join("")}</div>
     <div class="box" id="bk-top">${bkTopHTML()}</div>
@@ -133,7 +133,7 @@ Object.assign(ACT, {
   },
   "bk-sell": async () => {
     const n = BK.mine.n, got = Math.floor(n * BK.price * (1 - BK.sellFee));
-    if (!await confirmM(`Продать ${fmt(n)} ${plural(n, ["акцию", "акции", "акций"])}?`, `Получишь ⭐ ${fmt(got)} (комиссия ${Math.round(BK.sellFee * 100)}%). Дивиденды за сегодня не придут.`, "Продать")) return;
+    if (!await confirmM(`Продать ${fmt(n)} ${plural(n, ["акцию", "акции", "акций"])}?`, `Получишь ⭐ ${fmt(got)} (комиссия ${pctF(BK.sellFee)}). Дивиденды за сегодня не придут.`, "Продать")) return;
     const r = await post("bank/shares", { n: -n }); setStars(r.stars); H.ok(); toast(`Продано · +⭐ ${fmt(got)}`, "ok");
     await loadBK(); loadBank();
   },

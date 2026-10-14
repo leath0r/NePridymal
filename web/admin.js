@@ -189,7 +189,7 @@ async function admRender(el = topSheet()) {
     body.innerHTML = `<div class="box">${admKv("Комиссий за 24 ч", `<b>⭐ ${fmt(d.fees24)}</b>`)}</div>
       ${groups.map(g => `<div class="sec-t">${esc(g)}</div><div class="box">${d.items.filter(i => i.group === g).map(i => `<div class="adm-odd">
         <div class="adm-oh"><b>${esc(i.title)}</b>${i.changed ? `<span class="adm-tag">изменено</span>` : ""}</div>
-        <div class="adm-os">${i.hint ? esc(i.hint) + " · " : ""}по умолчанию ${P(i.def)}% · до ${P(i.max)}%</div>
+        <div class="adm-os">${i.hint ? esc(i.hint) + " · " : ""}по умолчанию ${P(i.def)}% · ${i.min ? `от ${P(i.min)}% ` : ""}до ${P(i.max)}%</div>
         ${ed ? `<div class="adm-oc"><input class="adm-oi" inputmode="decimal" data-k="${i.k}" value="${P(i.v)}"><span class="adm-op">%</span>
           <button class="btn sm gold" data-act="adm-fee" data-k="${i.k}">${ic("check")}</button>
           ${i.changed ? `<button class="btn sm ghost" data-act="adm-fee-rs" data-k="${i.k}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${P(i.v)}%</b></div>`}</div>`).join("")}</div>`).join("")}

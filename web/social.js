@@ -76,7 +76,7 @@ function drawSelBar() {
   if (!INV.sel || TAB !== "inv") { bar && bar.remove(); return; }
   if (!bar) { bar = document.createElement("div"); bar.id = "selbar"; bar.className = "selbar"; document.body.appendChild(bar); }
   if (!MYP) return renderInventory();   // MYP сбрасывают после апгрейда, джекпота и т. п. — подгрузим заново
-  const ids = [...INV.sel], sum = MYP.gifts.filter(g => INV.sel.has(g.id)).reduce((s, g) => s + Math.floor(g.value * .85), 0);
+  const ids = [...INV.sel], sum = MYP.gifts.filter(g => INV.sel.has(g.id)).reduce((s, g) => s + Math.floor(g.value * (1 - FEE("sell", .15))), 0);
   bar.innerHTML = `<div><b>Выбрано: ${ids.length}</b><span>продажа за ⭐ ${fmt(sum)}</span></div>
     <button class="btn sm ghost" data-act="inv-all">Все</button><button class="btn sm red" data-act="inv-sell" ${ids.length ? "" : "disabled"}>${ic("coins")}Продать</button>`;
 }
@@ -117,7 +117,7 @@ async function loadMarket() {
   }).join("")}</div>` : emptyHTML("store", MK.mine ? "У тебя нет лотов. Нажми «Продать», чтобы выставить подарок" : "Лотов не нашлось");
 }
 async function listGift(g) {
-  const v = await promptM("Цена на маркете", `${esc(g.col)} #${fmt(g.num)} · ценность ⭐ ${fmt(g.value)}. Комиссия маркета 5%.`, Math.round(g.value * 1.1), "Выставить");
+  const v = await promptM("Цена на маркете", `${esc(g.col)} #${fmt(g.num)} · ценность ⭐ ${fmt(g.value)}. Комиссия маркета ${feeP("market", .05)}.`, Math.round(g.value * 1.1), "Выставить");
   if (v == null) return;
   await post(`gift/${g.id}/list`, { price: Math.floor(+v) }); H.ok(); toast("Выставлено на маркет");
   MYP = null;
@@ -280,8 +280,8 @@ Object.assign(ACT, {
   "inv-sell": async () => {
     const ids = [...INV.sel]; if (!ids.length) return;
     if (!MYP) return renderInventory();
-    const sum = MYP.gifts.filter(g => INV.sel.has(g.id)).reduce((s, g) => s + Math.floor(g.value * .85), 0);
-    if (!await confirmM(`Продать ${ids.length} ${plural(ids.length, ["подарок", "подарка", "подарков"])}?`, `Получишь ⭐ ${fmt(sum)} (85% ценности).`, "Продать")) return;
+    const sum = MYP.gifts.filter(g => INV.sel.has(g.id)).reduce((s, g) => s + Math.floor(g.value * (1 - FEE("sell", .15))), 0);
+    if (!await confirmM(`Продать ${ids.length} ${plural(ids.length, ["подарок", "подарка", "подарков"])}?`, `Получишь ⭐ ${fmt(sum)} (${sellP()} ценности).`, "Продать")) return;
     const r = await post("gifts/sell", { ids }); setStars(r.stars); H.ok(); toast(`Продано на ⭐ ${fmt(r.paid)}`);
     INV.sel = null; renderInventory();
   },

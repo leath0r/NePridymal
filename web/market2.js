@@ -48,7 +48,7 @@ function mkShopPaint() {
 
 function mkOrdersPaint() {
   const box = $("#mk2"); if (!box) return;
-  box.innerHTML = `<div class="mk2-hero orders"><div><b>Скупка банка</b><span>Банк покупает эти коллекции дороже, чем мгновенная продажа (85%). Заказы ограничены — успей.</span></div>
+  box.innerHTML = `<div class="mk2-hero orders"><div><b>Скупка банка</b><span>Банк покупает эти коллекции дороже, чем мгновенная продажа (${sellP()}). Заказы ограничены — успей.</span></div>
       <div class="mk2-timer"><span>новые через</span><b id="mk2-left">${mkLeft(MKS.refresh - MKS.now)}</b></div></div>
     ${MKS.orders.map(o => { const left = o.qty - o.filled, done = left <= 0;
       return `<div class="mk2-ord${done ? " done" : ""}">
@@ -59,7 +59,7 @@ function mkOrdersPaint() {
             <button class="btn sm green" data-act="mk2-sell" data-o="${o.id}" data-g="${g.id}" data-p="${Math.floor(g.value * o.pct)}">⭐ ${short(Math.floor(g.value * o.pct))}</button></div>`).join("")}</div>`
           : `<div class="hint mk2-none">У тебя нет таких подарков — загляни в кейсы или на витрину</div>`}
       </div>`; }).join("")}
-    <div class="disc">Сравни: мгновенная продажа банку — 85% ценности. В скупке — 100–110%.</div>`;
+    <div class="disc">Сравни: мгновенная продажа банку — ${sellP()} ценности. В скупке — 100–110%.</div>`;
   starify(box);
 }
 

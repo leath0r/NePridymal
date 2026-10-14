@@ -147,7 +147,9 @@ const patHTML = (col, sym, pts, k = 1) => pts.map(([x, y, sz, a]) =>
   `<i class="pi" style="left:${x}%;top:${y}%;width:${sz * k}%;aspect-ratio:1;opacity:${a};-webkit-mask-image:url('${A.pat(col, sym)}');mask-image:url('${A.pat(col, sym)}')"></i>`).join("");
 // ставки комиссий из админки (fees.py); до первого /me — значения по умолчанию
 const FEE = (k, d) => (ME && ME.fees && ME.fees[k] != null ? ME.fees[k] : d);
-const feeP = (k, d) => String(+(FEE(k, d) * 100).toFixed(2)).replace(".", ",") + "%";
+const feeP = (k, d) => pctF(FEE(k, d));
+const pctF = v => String(+(v * 100).toFixed(2)).replace(".", ",") + "%";   // 0.025 → «2,5%»
+const sellP = () => pctF(1 - FEE("sell", .15));   // мгновенная продажа банку, «85%»
 
 // доход подарка: 2% ценности в сутки, легендарные ×2, эпики ×1,5
 const giftPerHour = g => g.value * .02 / 24 * (g.mp <= 5 ? 2 : g.mp <= 10 ? 1.5 : 1);
@@ -459,7 +461,7 @@ async function doOpenInner(sheet, id, c, n) {
     for (const p of plan) { const w = p.strip.children[r.win]; if (w) { w.classList.remove("cur"); w.classList.add("hitw"); } }
     H.imp("heavy"); await sleep(OPEN.fast ? 0 : 650);
   } else rouls.innerHTML = "";
-  const gifts = r.gifts, total = gifts.reduce((s, g) => s + g.value, 0), sellAll = gifts.reduce((s, g) => s + Math.floor(g.value * .85), 0);
+  const gifts = r.gifts, total = gifts.reduce((s, g) => s + g.value, 0), sellAll = gifts.reduce((s, g) => s + Math.floor(g.value * (1 - FEE("sell", .15))), 0);
   if (n === 1) {
     const g = gifts[0];
     const vt = valTier(g, sheet._ref), RAR = { gold: "Легендарный", pink: "Эпический", purple: "Редкий", blue: "Хороший", gray: "Обычный" };
@@ -657,7 +659,7 @@ function openGift(o) {
   el._o = o;
 }
 function giftSheetHTML(o, mine) {
-  const g = o.g, sell = Math.floor(g.value * .85);
+  const g = o.g, sell = Math.floor(g.value * (1 - FEE("sell", .15)));
   const pinned = MYP && MYP.pinned.some(x => x.id === g.id);
   const seller = o.seller || (o.owner && !mine ? o.owner : null);
   let acts = "";
@@ -799,7 +801,7 @@ const ACT = {
   gift: el => openGift(REG.get(el.dataset.k)),
   sell: async el => {
     const g = topSheet()._o.g;
-    if (!await confirmM("Продать подарок?", `${esc(g.col)} #${fmt(g.num)} уйдёт за ⭐ ${fmt(Math.floor(g.value * (1 - FEE("sell", .15))))} (${String(+((1 - FEE("sell", .15)) * 100).toFixed(2)).replace(".", ",")}% ценности). Хочешь дороже — выстави на маркет.`, "Продать")) return;
+    if (!await confirmM("Продать подарок?", `${esc(g.col)} #${fmt(g.num)} уйдёт за ⭐ ${fmt(Math.floor(g.value * (1 - FEE("sell", .15))))} (${sellP()} ценности). Хочешь дороже — выстави на маркет.`, "Продать")) return;
     const r = await post(`gift/${el.dataset.id}/sell`); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.paid)}`, "ok"); giftChanged();
   },
   list: async el => {

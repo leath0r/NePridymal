@@ -3,6 +3,7 @@
 const loanLeft = s => { s = Math.max(0, s); const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600); return d ? `${d} д ${h} ч` : `${h} ч ${Math.floor(s % 3600 / 60)} мин`; };
 async function loansHTML() {
   const L = await api("loans").catch(() => null);
+  if (L) LN_CFG = L;
   if (!L) return "";
   const t = L.now, cash = L.loans.find(x => !x.gift), lvlOk = ME.lv.level >= L.cashLevel;
   return `<div class="cashl">
@@ -22,10 +23,12 @@ async function loansHTML() {
         ${x.paid ? `<div class="loan-bar"><i style="width:${Math.round(x.paid / x.total * 100)}%"></i></div>` : ""}</div>
       <button class="btn sm green" data-act="loan-repay" data-id="${x.id}" data-debt="${x.debt}" data-min="${x.partMin || 100}" data-g="${x.gift ? 1 : 0}">Вернуть</button></div>`).join("")}</div>`
       : `<div class="hint" style="font-size:13px;padding:0 4px">Кредитов нет. Под залог: открой подарок в сумке и нажми «Кредит под залог».</div>`}
-    <div class="hint" style="font-size:12px;margin:8px 4px 0">Банк даёт ${Math.round(L.ltv * 100)}% ценности подарка на ${L.term / 86400} дня, вернуть — с комиссией ${Math.round(L.fee * 100)}%. Пока подарок в залоге, он не приносит доход. Не вернёшь в срок — подарок уходит банку на маркет. Не больше ${L.max} кредитов сразу.</div>`;
+    <div class="hint" style="font-size:12px;margin:8px 4px 0">Банк даёт ${Math.round(L.ltv * 100)}% ценности подарка на ${L.term / 86400} дня, вернуть — с комиссией ${pctF(L.fee)}. Пока подарок в залоге, он не приносит доход. Не вернёшь в срок — подарок уходит банку на маркет. Не больше ${L.max} кредитов сразу.</div>`;
 }
 let BK_TAB = "bank";
 const bkTabs = () => `<div class="seg bk-tabs">${[["bank", "Банк"], ["loans", "Кредиты"]].map(([k, t]) => `<button data-act="bk-tab" data-v="${k}" class="${BK_TAB === k ? "on" : ""}">${t}</button>`).join("")}</div>`;
+let LN_CFG = null;   // последние условия кредита с сервера (ltv, fee) — для подтверждений
+const lnCfg = async () => LN_CFG || (LN_CFG = await api("loans").catch(() => null)) || { ltv: .5, fee: .1 };
 const _fillBKL = fillBK;
 fillBK = function (el) {
   const body = el && el.querySelector("#bk-body"); if (!body) return;
@@ -39,13 +42,13 @@ Object.assign(ACT, {
   "bk-tab": el => { BK_TAB = el.dataset.v; H.sel(); const s = SHEETS.find(x => x._bk); if (s) fillBK(s); },
   "loans-open": () => { BK_TAB = "loans"; _openBankL(); },
   loan: async el => {
-    const g = topSheet()._o.g, got = Math.floor(g.value * .5), debt = Math.ceil(got * 1.1);
+    const ln = await lnCfg(), g = topSheet()._o.g, got = Math.floor(g.value * ln.ltv), debt = Math.ceil(got * (1 + ln.fee));
     if (!await confirmM("Кредит под залог?", `Получишь ⭐ ${fmt(got)} сейчас. Вернуть ⭐ ${fmt(debt)} в течение 3 дней — тогда ${esc(g.col)} #${fmt(g.num)} вернётся к тебе. Не вернёшь — подарок заберёт банк.`, "Взять")) return;
     const r = await post(`gift/${el.dataset.id}/loan`); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.got)} · подарок в залоге`, "ok");
     closeSheet(); if (typeof giftChanged === "function") giftChanged();
   },
   "loan-cash": async el => {
-    const n = +el.dataset.v, debt = Math.ceil(n * 1.1);
+    const ln = await lnCfg(), n = +el.dataset.v, debt = Math.ceil(n * (1 + ln.fee));
     if (!await confirmM(`Взять ⭐ ${fmt(n)}?`, `Вернуть ⭐ ${fmt(debt)} в течение 3 дней. Не вернёшь — спишем с баланса, даже в минус.`, "Взять")) return;
     const r = await post("loans/cash", { amount: n }); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.got)}`, "ok"); burstAt(el);
     const s = el.closest(".loans-sec"); if (s) s.innerHTML = await loansHTML();

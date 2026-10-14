@@ -38,6 +38,8 @@ REG = {
     "shares": ("Биржа и банк", "Продажа акций казино", "", [(BANKMOD, "SELL_FEE")], 0.2, False),
     "loan": ("Биржа и банк", "Переплата по кредиту", "вернуть 100% + столько", [(loans, "FEE")], 1.0, False),
 }
+# нижние границы: скупка банком дороже 90% ценности — «станок» на сезонных скидках кейсов (Хэллоуин −15%: кейс отдаёт 90% цены)
+MIN = {"sell": 0.10}
 
 
 def _get(k):
@@ -81,7 +83,7 @@ def _pct(v):
 def admin_fees(aid=Depends(admin)):
     t = A.now()
     fees24 = -A.q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind='fee' AND ts>=?", t - 86400)["s"]
-    items = [{"k": k, "group": g, "title": ti, "hint": h, "v": _get(k), "def": DEFAULTS[k], "max": mx,
+    items = [{"k": k, "group": g, "title": ti, "hint": h, "v": _get(k), "def": DEFAULTS[k], "max": mx, "min": MIN.get(k, 0),
               "changed": (k in CFG) if not isinstance(tgt, str) else (tgt.split(":")[1] in pay.CFG)}
              for k, (g, ti, h, tgt, mx, _) in REG.items()]
     return {"items": items, "canEdit": aid in OWNERS, "fees24": fees24}
@@ -104,8 +106,9 @@ async def admin_fees_set(req: Request, aid=Depends(admin)):
                 v = round(float(str(v).replace(",", ".").replace("%", "").strip()) / 100, 6)   # из админки приходят проценты
             except (TypeError, ValueError):
                 err("введи число процентов, например 5 или 2,5")
-            if not 0 <= v <= mx:
-                err(f"от 0 до {_pct(mx)}")
+            lo = MIN.get(k, 0)
+            if not lo <= v <= mx:
+                err(f"от {_pct(lo)} до {_pct(mx)}")
         if isinstance(tgt, str):
             pk = tgt.split(":")[1]
             pcur.pop(pk, None) if v is None else pcur.__setitem__(pk, v)
@@ -121,4 +124,8 @@ async def admin_fees_set(req: Request, aid=Depends(admin)):
     pay.CFG.clear()
     pay.CFG.update(pcur)
     _apply()
+    if "clan_max" in body:   # потолок снизили — кланы с налогом выше сразу опускаем до него
+        with tx():
+            db.execute("UPDATE clans SET tax=? WHERE tax>?", (clans.TAX_MAX, clans.TAX_MAX))
+        clans.refresh_tax()
     return {"ok": True}

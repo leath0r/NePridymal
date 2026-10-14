@@ -18,7 +18,7 @@ async function openJR() {
     <div class="betp">
       <button class="btn cta gold" data-act="jr-gifts">${ic("gift")}Поставить подарки</button>
       <div class="jrst"><label class="amtf"><span>⭐</span><input id="jr-amt" inputmode="numeric" value="500"></label><button class="btn ghost" data-act="jr-stars">Поставить звёзды</button></div>
-      <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Шанс = твой вклад / весь банк. Когда игроков двое — 45 секунд на ставки, потом колесо. Победитель забирает все подарки и звёзды (комиссия 5% только со звёзд).</div>
+      <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Шанс = твой вклад / весь банк. Когда игроков двое — 45 секунд на ставки, потом колесо. Победитель забирает все подарки и звёзды (комиссия ${feeP("jackpot", .05)} только со звёзд).</div>
     </div>
     <div class="sec-t">Участники <span id="jr-n"></span></div><div id="jr-p"></div>`, "jr-s");
   el._onClose = () => clearInterval(jrPoll);
