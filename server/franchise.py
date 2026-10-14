@@ -438,6 +438,14 @@ async def promo_loop():
         await asyncio.sleep(1800)
 
 
+FIXED = {}   # id бота → когда в последний раз сами вернули вебхук/кнопку (повтор в течение суток — отключаем)
+
+
+async def _restore(b):
+    await _setup(b)
+    FIXED[b["id"]] = now()
+
+
 async def _check(b):
     """Вебхук и кнопка «Играть» — наши? Иначе владелец мог подменить Mini App и собирать входы игроков."""
     w = await tg_call("getWebhookInfo", _token=b["token"])
@@ -478,6 +486,11 @@ async def watch_loop():
             except Exception as e:
                 print("franchise watch", b["id"], e, flush=True)
                 continue
+            if why and now() - FIXED.get(b["id"], 0) > 86400:
+                # первый раз — возвращаем сами: бывает, что Telegram не принял кнопку при создании бота (ложная тревога)
+                print("franchise restore", b["id"], b["username"], why, flush=True)
+                await _restore(b)
+                why = None
             if why:
                 with tx():
                     db.execute("UPDATE bots SET status='off' WHERE id=?", (b["id"],))

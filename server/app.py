@@ -439,7 +439,12 @@ def notify(uid, text, url=None):
 
 async def bot_setup(token=None):
     """token — бот франшизы (настраивается так же, без /franchise)."""
-    await tg_call("setChatMenuButton", _token=token, menu_button={"type": "web_app", "text": "Играть", "web_app": {"url": APP_URL}})
+    for i in range(3):   # у только что созданного бота-франшизы Telegram иногда не принимает с первого раза
+        r = await tg_call("setChatMenuButton", _token=token, menu_button={"type": "web_app", "text": "Играть", "web_app": {"url": APP_URL}})
+        if r.get("ok"):
+            break
+        print("setChatMenuButton", "франшиза" if token else "главный", r.get("description"), flush=True)
+        await asyncio.sleep(2 + 3 * i)
     await tg_call("setMyCommands", _token=token, commands=[{"command": "start", "description": "Играть"},
                                                            {"command": "ref", "description": "Моя реф-ссылка"}]
                   + ([] if token else [{"command": "franchise", "description": "Свой бот с этой игрой"}]))

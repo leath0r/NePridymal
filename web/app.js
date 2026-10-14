@@ -728,7 +728,7 @@ function frBanner() {
   const f = ME.franchise;
   if (!f || !f.banner || f.mine.length) return "";
   try { if (Date.now() - (+localStorage.getItem(FR_HIDE) || 0) < 14 * 864e5) return ""; } catch (e) { }
-  return `<button class="invbar" data-act="franchise-info">${ic("rocket")}<span><b>Свой бот с этой игрой</b>${f.reward ? `+${fmt(f.reward)} ⭐ за ${f.need} игроков · создай за 1 тап` : "создай за 1 тап — без @BotFather"}</span><span data-act="franchise-hide" style="padding:6px;opacity:.6">✕</span></button>`;
+  return `<button class="invbar" data-act="franchise-info">${ic("rocket")}<span><b>Свой бот с этой игрой</b>${f.reward ? `+${fmt(f.reward)} ⭐ за ${f.need} игроков · создай за 1 тап` : "создай за 1 тап — без @BotFather"}</span><span data-act="franchise-hide" aria-label="Скрыть" style="flex:none;align-self:flex-start;margin:-6px -8px 0 0;padding:6px 8px;font-size:15px;line-height:1;opacity:.6">✕</span></button>`;
 }
 function franchiseInfo() {
   const f = ME.franchise; if (!f) return;
