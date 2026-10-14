@@ -4,12 +4,12 @@
 //  за 7 находок — достижение «Охотник за пасхалками» (значок в профиль).
 // ============================================================
 const EGG = { seen: new Set(), taps: {} };
-async function eggFound(id) {
+async function eggFound(id, hello) {   // hello — фраза пасхалки, показываем только при первой находке
   if (EGG.seen.has(id)) return;
   EGG.seen.add(id);
   try {
     const r = await post("egg", { id });
-    if (r.new) { H.ok(); toast(`🥚 Пасхалка найдена: «${r.name}» · ${r.found} из ${r.total}`, "ok"); }
+    if (r.new) { H.ok(); toast((hello ? hello + " · " : "") + `🥚 Пасхалка «${r.name}» · ${r.found} из ${r.total}`, "ok"); }
   } catch (e) { EGG.seen.delete(id); }
 }
 // n тапов подряд по одному месту (пауза больше 1.2 с — счёт заново)
@@ -56,7 +56,7 @@ document.addEventListener("input", e => {
 (function eggTime(n = 0) {
   if (typeof ME === "undefined" || !ME) { if (n < 40) setTimeout(() => eggTime(n + 1), 500); return; }
   const d = new Date(), h = d.getHours(), m = d.getMonth(), day = d.getDate();
-  if (h >= 3 && h < 5) { toast("🦉 Совы не спят. Ты тоже?", ""); eggFound("owl"); }
-  if (d.getDay() === 5 && day === 13) { toast("🖤 Пятница, 13-е. Удачи… она тебе пригодится", ""); eggFound("fri13"); }
+  if (h >= 3 && h < 5) eggFound("owl", "🦉 Совы не спят. Ты тоже?");
+  if (d.getDay() === 5 && day === 13) eggFound("fri13", "🖤 Пятница, 13-е. Удачи… она тебе пригодится");
   if ((m === 11 && day === 31) || (m === 0 && day === 1)) { setTimeout(() => burst(innerWidth / 2, innerHeight / 3, ["#ff5c5c", "#4cf0a0", "#ffd76a", "#7cc2ff", "#fff"], 140), 300); eggFound("ny"); }
 })();
