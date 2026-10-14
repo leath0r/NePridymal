@@ -36,7 +36,7 @@ def _save(b):
 
 def _pl(uid):
     if uid == BOT:
-        return {"id": 0, "name": "Бот казино", "bot": True, "level": 0}
+        return {"id": 0, "name": "Бот", "bot": True, "level": 0}
     u = q1("SELECT * FROM users WHERE id=?", uid)
     return user_brief(u) if u else {"id": uid, "name": "?", "level": 0}
 

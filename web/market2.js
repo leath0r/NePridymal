@@ -38,17 +38,17 @@ function mkShopPaint() {
       <div class="mk2-info"><b>${esc(g.col)}</b><span>${esc(g.model)} · ${pct(g.mp)}</span>
         <div class="mk2-meta"><span>ценность ⭐ ${short(g.value)}</span><span class="tw">+⭐ ${short(Math.round(giftPerHour(g) * 24))}/день</span></div>
         <button class="btn sm gold" data-act="mk2-buy" data-id="${g.id}" ${g.sold ? "disabled" : ""}>${g.sold ? "Продано" : `Купить · ⭐ ${short(g.price)}`}</button></div></div>`;
-  box.innerHTML = `<div class="mk2-hero shop"><div><b>Витрина казино</b><span>Конкретные подарки — без рулетки. Бери нужную модель для сета, витрины или дохода.</span></div>
+  box.innerHTML = `<div class="mk2-hero shop"><div><b>Витрина банка</b><span>Конкретные подарки — без рулетки. Бери нужную модель для сета, витрины или дохода.</span></div>
       <div class="mk2-timer"><span>обновится через</span><b id="mk2-left">${mkLeft(MKS.refresh - MKS.now)}</b></div></div>
     ${jack ? card(jack, true) : ""}
     <div class="mk2-grid">${rest.map(g => card(g)).join("")}</div>
-    <div class="disc">Цена на витрине — ценность подарка +${Math.round((MKS.markup - 1) * 100)}%. Каждый лот в единственном экземпляре: кто первый купил, того и подарок. Звёзды уходят в банк казино.</div>`;
+    <div class="disc">Цена на витрине — ценность подарка +${Math.round((MKS.markup - 1) * 100)}%. Каждый лот в единственном экземпляре: кто первый купил, того и подарок. Звёзды уходят в банк игры.</div>`;
   startLottie(box); starify(box);
 }
 
 function mkOrdersPaint() {
   const box = $("#mk2"); if (!box) return;
-  box.innerHTML = `<div class="mk2-hero orders"><div><b>Скупка казино</b><span>Казино покупает эти коллекции дороже, чем мгновенная продажа (85%). Заказы ограничены — успей.</span></div>
+  box.innerHTML = `<div class="mk2-hero orders"><div><b>Скупка банка</b><span>Банк покупает эти коллекции дороже, чем мгновенная продажа (85%). Заказы ограничены — успей.</span></div>
       <div class="mk2-timer"><span>новые через</span><b id="mk2-left">${mkLeft(MKS.refresh - MKS.now)}</b></div></div>
     ${MKS.orders.map(o => { const left = o.qty - o.filled, done = left <= 0;
       return `<div class="mk2-ord${done ? " done" : ""}">
@@ -59,7 +59,7 @@ function mkOrdersPaint() {
             <button class="btn sm green" data-act="mk2-sell" data-o="${o.id}" data-g="${g.id}" data-p="${Math.floor(g.value * o.pct)}">⭐ ${short(Math.floor(g.value * o.pct))}</button></div>`).join("")}</div>`
           : `<div class="hint mk2-none">У тебя нет таких подарков — загляни в кейсы или на витрину</div>`}
       </div>`; }).join("")}
-    <div class="disc">Сравни: мгновенная продажа казино — 85% ценности. В скупке — 100–110%.</div>`;
+    <div class="disc">Сравни: мгновенная продажа банку — 85% ценности. В скупке — 100–110%.</div>`;
   starify(box);
 }
 
@@ -76,7 +76,7 @@ Object.assign(ACT, {
   },
   "mk2-sell": async el => {
     const p = +el.dataset.p;
-    if (!await confirmM("Продать казино?", `Получишь ⭐ ${fmt(p)} — это больше, чем мгновенная продажа.`, "Продать")) return;
+    if (!await confirmM("Продать банку?", `Получишь ⭐ ${fmt(p)} — это больше, чем мгновенная продажа.`, "Продать")) return;
     const r = await post(`mkorders/${el.dataset.o}/sell`, { gid: +el.dataset.g }); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.pay)}`, "ok"); coinShower(el, 24);
     MKS = await api("mkshop"); MKS._off = MKS.now - Date.now() / 1000; mkOrdersPaint();
   },

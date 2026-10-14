@@ -17,7 +17,7 @@ const gameHead = (img, t, s) => `<div class="ghead"><img src="${A.orig(img, 128)
 let hubPoll = null;
 function renderGames() {
   const v = $("#v-games");
-  v.innerHTML = `<div class="bankbar" id="bank"><span class="bk-i">${ic("wallet")}</span><div><span>Банк казино</span><b id="bank-v">—</b></div><em id="bank-d"></em></div>
+  v.innerHTML = `<div class="bankbar" id="bank"><span class="bk-i">${ic("wallet")}</span><div><span>Банк игры</span><b id="bank-v">—</b></div><em id="bank-d"></em></div>
     <div class="ghub">${GAMES.map((g, i) => `
     <div class="gcard${(typeof WIDE_GAMES !== "undefined" ? WIDE_GAMES.has(g.id) : i < 2) ? " wide" : ""}" data-act="game" data-id="${g.id}" style="--k1:${g.k[0]};--k2:${g.k[1]}">
       <div class="gc-bg"></div><div class="gc-glow"></div>

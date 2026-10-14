@@ -9,7 +9,7 @@ GAMES.push(
 );
 Object.assign(GAME_OPEN, { hilo: () => openHL(), craft: () => openCraft() });
 GAME_SECTIONS.find(s => s[0] === "Подарки")[2].push("craft");
-GAME_SECTIONS.find(s => s[0] === "Казино")[2].unshift("hilo");
+GAME_SECTIONS.find(s => s[0] === "Классика")[2].unshift("hilo");
 DGAMES.crash = ["rocket", "Краш", "Ракета общая: кто заберёт позже, но до взрыва — тот победил"];
 
 // ------------------------------------------------------------ краш-дуэль

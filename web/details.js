@@ -38,7 +38,7 @@ async function luckyShow(amount) {
   const el = document.createElement("div");
   el.className = "lucky";
   el.innerHTML = `<div class="lucky-card"><div class="lucky-rays"></div><img src="${A.orig("Lucky Locket", 256)}" alt="" onerror="this.src='${A.orig("Clover Pin", 256)}'">
-    <span>Удачный момент!</span><b>+⭐ ${fmt(amount)}</b><em>Казино дарит сюрприз — так бывает примерно раз в 170 раундов</em></div>`;
+    <span>Удачный момент!</span><b>+⭐ ${fmt(amount)}</b><em>Игра дарит сюрприз — так бывает примерно раз в 170 раундов</em></div>`;
   document.body.appendChild(el); starify(el);
   requestAnimationFrame(() => el.classList.add("on"));
   H.ok(); setTimeout(() => coinShower(el.querySelector(".lucky-card"), 50), 250);

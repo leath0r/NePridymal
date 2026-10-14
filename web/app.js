@@ -514,7 +514,7 @@ const TOPK = [["rich", "wallet", "Богачи"], ["profit", "trend", "Проф�
 const pm = n => n.won || n.lost ? `<span class="tw">+${short(n.won)}</span><span class="tl">−${short(n.lost)}</span>` : `<span class="hint">ещё не играл</span>`;
 async function renderTop() {
   const v = $("#v-top");
-  v.innerHTML = `<div class="bankbar" id="bank"><span class="bk-i">${ic("wallet")}</span><div><span>Банк казино</span><b id="bank-v">—</b></div><em id="bank-d"></em></div><div id="tme"></div>
+  v.innerHTML = `<div class="bankbar" id="bank"><span class="bk-i">${ic("wallet")}</span><div><span>Банк игры</span><b id="bank-v">—</b></div><em id="bank-d"></em></div><div id="tme"></div>
     ${topNavHTML()}
     <div id="tlist">${emptyHTML("hourglass", "Загружаем…")}</div>`;
   loadBank();
@@ -698,7 +698,7 @@ async function newTrade(uid) {
     <div class="auto"><span style="flex:1">+ звёзды от тебя</span><input id="tgs" inputmode="numeric" value="0"></div>
     <div class="sec-t">Ты хочешь получить</div>${grid(them.gifts, pickW, "w")}
     <div class="auto"><span style="flex:1">+ звёзды от него</span><input id="tws" inputmode="numeric" value="0"></div>
-    <div class="hint" style="font-size:12px;text-align:center;margin:6px 0 0">Со звёзд, которые переходят в обмене, комиссия 5% — она уходит в банк казино.</div>
+    <div class="hint" style="font-size:12px;text-align:center;margin:6px 0 0">Со звёзд, которые переходят в обмене, комиссия 5% — она уходит в банк игры.</div>
     <div class="box" style="margin-top:14px"><div class="row kv"><span class="k">Баланс</span><span class="v" id="tsum">—</span></div></div>
     <div class="btns"><button class="btn" data-act="send-trade">Предложить обмен</button></div>`);
   const all = new Map([...me.gifts, ...them.gifts].map(g => [g.id, g]));

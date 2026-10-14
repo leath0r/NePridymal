@@ -110,7 +110,7 @@ db.executescript("""
 CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS case_keys(user INTEGER, cid TEXT, n INTEGER DEFAULT 0, PRIMARY KEY(user, cid));
 """)
-PROMO_PERKS = ["Кейсы −10%", "Шансы в апгрейде выше", "Казино отдаёт 98% в мини-играх и краше",
+PROMO_PERKS = ["Кейсы −10%", "Шансы в апгрейде выше", "Мини-игры и краш отдают 98%",
                "Бесплатный кейс раз в 1,5 часа", "Бонус дня x2"]
 _PROMO = {"ts": 0, "v": None}
 
@@ -967,7 +967,7 @@ def market(sort: str = "new", col: str = "", qs: str = "", mine: int = 0, rare: 
     if mine:
         where += " AND g.owner=?"
         args.append(uid)
-    rows = q(f"""SELECT g.*, COALESCE(u.name, 'Банк казино') uname, u.photo uphoto FROM gifts g LEFT JOIN users u ON u.id=g.owner
+    rows = q(f"""SELECT g.*, COALESCE(u.name, 'Банк игры') uname, u.photo uphoto FROM gifts g LEFT JOIN users u ON u.id=g.owner
                  WHERE {where} AND (u.id IS NOT NULL OR g.owner=0) ORDER BY {order} LIMIT 400""", *args)
     items = [{**gift_out(r, True), "seller": {"id": r["owner"], "name": r["uname"], "photo": r["uphoto"]}} for r in rows]
     lim = {"legend": 5, "epic": 10, "rare": 15}.get(rare)

@@ -55,7 +55,7 @@ def _pay(day):
                 paid.append((h["user"], amount))
         db.execute("INSERT INTO div_days VALUES(?,?,?,?,?,?)", (day, profit, per, sum(a for _, a in paid), len(paid), now()))
     for u, a in paid:
-        notify(u, f"Дивиденды казино: +{a} ⭐ (игровых) за вчера.")
+        notify(u, f"Дивиденды банка: +{a} ⭐ (игровых) за вчера.")
     return paid
 
 

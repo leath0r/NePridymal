@@ -42,7 +42,7 @@ Object.assign(ACT, {
   "promo-info": () => {
     const p = ME.promo; if (!p) return;
     H.sel();
-    modal(`<h3>${ic("sparkles")} ${esc(p.title)}</h3><p class="hint" style="margin:0 0 12px">${p.until ? `Казино щедрое до конца воскресенья — ещё ${promoLeft(p)}.` : "Сегодня казино щедрое."}</p>
+    modal(`<h3>${ic("sparkles")} ${esc(p.title)}</h3><p class="hint" style="margin:0 0 12px">${p.until ? `Банк щедрый до конца воскресенья — ещё ${promoLeft(p)}.` : "Сегодня банк щедрый."}</p>
       <div class="box" style="margin-bottom:14px">${p.perks.map(x => `<div class="row kv"><span class="tw">${ic("check")}</span><div class="grow">${esc(x)}</div></div>`).join("")}</div>
       <button class="btn gold" data-m="ok">Играть</button>`);
   },

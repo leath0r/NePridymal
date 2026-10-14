@@ -194,7 +194,7 @@ Object.assign(ACT, {
   },
   "clan-kick": async el => { if (!await confirmM("Исключить игрока?", "Он сможет вступить снова через 12 часов.", "Исключить")) return; await post(`clans/kick/${el.dataset.id}`); toast("Исключён"); await clanRefresh(); },
   "clan-donate": async () => {
-    const v = await promptM("Взнос в казну", "Звёзды уйдут в банк казино и прокачают уровень клана.", "1000", "Внести");
+    const v = await promptM("Взнос в казну", "Звёзды уйдут в банк игры и прокачают уровень клана.", "1000", "Внести");
     if (v == null || !(Math.floor(+v) >= 100)) return v == null ? null : toast("Взнос от ⭐ 100");
     const r = await post("clans/donate", { amount: Math.floor(+v) }); setStars(r.stars); H.ok(); toast(`Казна: ⭐ ${fmt(r.treasury)} · уровень ${r.level}`, "ok"); await clanRefresh();
   },

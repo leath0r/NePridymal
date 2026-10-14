@@ -182,7 +182,7 @@ def _sweep():
                     event(r["user"], "fee", back_fee)
             if g:
                 db.execute("UPDATE gifts SET owner=0, price=?, listed=? WHERE id=?", (max(10, g["value"]), t, g["id"]))
-                msgs.append((r["user"], f"⌛ Срок кредита истёк — <b>{esc(g['col'])} #{g['num']}</b> перешёл банку казино и выставлен на маркет."
+                msgs.append((r["user"], f"⌛ Срок кредита истёк — <b>{esc(g['col'])} #{g['num']}</b> перешёл банку игры и выставлен на маркет."
                                         + (f" Внесённые частями ⭐ {r['paid']} вернули на баланс." if r["paid"] else "")))
         for r in q("SELECT * FROM loans WHERE status='open' AND warned=0 AND until-?<=?", t, WARN):
             db.execute("UPDATE loans SET warned=1 WHERE id=?", (r["id"],))

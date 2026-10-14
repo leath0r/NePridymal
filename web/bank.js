@@ -41,7 +41,7 @@ function bkChart(days) {
   }).join("");
   return `<div class="bkc"><svg viewBox="0 0 ${W} ${Hc}" preserveAspectRatio="none"><line x1="0" x2="${W}" y1="${mid}" y2="${mid}"/>${bars}</svg><div class="bkc-tip"></div></div>
     <div class="bk-axis"><span>${bkDate(days[0].day)}</span><span>${bkDate(days[Math.floor(days.length / 2)].day)}</span><span>сегодня</span></div>
-    <div class="bk-legend"><span><i class="up"></i>казино в плюсе</span><span><i class="dn"></i>игроки обыграли казино</span></div>`;
+    <div class="bk-legend"><span><i class="up"></i>банк в плюсе</span><span><i class="dn"></i>игроки обыграли банк</span></div>`;
 }
 function bkBindChart(el) {
   const box = el.querySelector(".bkc"); if (!box) return;
@@ -82,7 +82,7 @@ function fillBK(el) {
   const pct = v => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2).replace(".", ",") + "%";
   el.querySelector("#bk-body").innerHTML = `
     <div class="bkh">
-      <div class="bkh-top"><span class="bkh-i">${ic("bank")}</span><div><span>Банк казино</span><b>⭐ ${fmt(BK.bank)}</b></div></div>
+      <div class="bkh-top"><span class="bkh-i">${ic("bank")}</span><div><span>Банк игры</span><b>⭐ ${fmt(BK.bank)}</b></div></div>
       <div class="bkh-stats">
         <div><span>Сегодня</span><b class="${BK.today >= 0 ? "up" : "dn"}">${sgn(BK.today)}</b></div>
         <div><span>14 дней</span><b class="${d14 >= 0 ? "up" : "dn"}">${sgn(d14)}</b></div>
@@ -94,14 +94,14 @@ function fillBK(el) {
       <div class="grow"><div class="t">${BK.me > 0 ? "Ты обыграл банк" : BK.me < 0 ? "Ты занёс банку" : "Ты с банком в расчёте"}</div><div class="s">итог всех твоих игр</div></div>
       <b class="${BK.me > 0 ? "tw" : BK.me < 0 ? "tl" : ""}">${BK.me > 0 ? "+" : BK.me < 0 ? "−" : ""}⭐ ${fmt(Math.abs(BK.me))}</b></div>
 
-    <div class="sec-t">${ic("trend")}Прибыль казино по дням</div>
+    <div class="sec-t">${ic("trend")}Прибыль банка по дням</div>
     <div class="inccard">${bkChart(BK.days)}</div>
 
-    <div class="sec-t">${ic("pie")}Акции казино</div>
+    <div class="sec-t">${ic("pie")}Акции банка</div>
     <div class="bksh">
       <div class="bksh-top"><div><span>Цена акции</span><b>⭐ ${fmt(BK.price)}</b><em class="${pch >= 0 ? "up" : "dn"}">${pct(pch)} за 14 дней</em></div>
         ${spark(ps, pch >= 0, 110, 44)}</div>
-      <div class="bksh-div">${ic("coins")}<div class="grow"><b>Дивиденды через ${h} ч ${mi} мин</b><span>${Math.round(BK.divShare * 100)}% вчерашней прибыли казино делится на акции${BK.lastDiv && BK.lastDiv.total ? ` · прошлая выплата ⭐ ${String(BK.lastDiv.perShare).replace(".", ",")} на акцию` : ""}</span></div></div>
+      <div class="bksh-div">${ic("coins")}<div class="grow"><b>Дивиденды через ${h} ч ${mi} мин</b><span>${Math.round(BK.divShare * 100)}% вчерашней прибыли банка делится на акции${BK.lastDiv && BK.lastDiv.total ? ` · прошлая выплата ⭐ ${String(BK.lastDiv.perShare).replace(".", ",")} на акцию` : ""}</span></div></div>
       ${m.n ? `<div class="bks-top"><div><span>У тебя</span><b>${fmt(m.n)}</b></div><div><span>Стоимость</span><b>⭐ ${short(m.value)}</b></div><div><span>Прибыль</span><b class="${pl >= 0 ? "tw" : "tl"}">${sgn(pl)}</b></div></div>
         <div class="bks-row"><span>Дивиденды сегодня (прогноз)</span><b class="tw">+⭐ ${fmt(m.est)}</b></div>
         <div class="bks-row"><span>Получено дивидендов всего</span><b>⭐ ${fmt(m.div)}</b></div>` : ""}
@@ -112,7 +112,7 @@ function fillBK(el) {
     </div>
     <details class="bk-how"><summary>${ic("info")}Как работают акции</summary>
       <p>Цена акции = банк / ${short(BK.supply)}. Игроки проигрывают — банк растёт и акции дорожают, выигрывают — дешевеют.</p>
-      <p>Каждый день в 00:00 UTC (11:00 по Сахалину) ${Math.round(BK.divShare * 100)}% вчерашней прибыли казино делится на акции у игроков (если акций у игроков меньше ${short(BK.divFloor || 10000)} — делится как на ${short(BK.divFloor || 10000)}, остаток остаётся в банке). В убыточный для казино день дивидендов нет.</p>
+      <p>Каждый день в 00:00 UTC (11:00 по Сахалину) ${Math.round(BK.divShare * 100)}% вчерашней прибыли банка делится на акции у игроков (если акций у игроков меньше ${short(BK.divFloor || 10000)} — делится как на ${short(BK.divFloor || 10000)}, остаток остаётся в банке). В убыточный для банка день дивидендов нет.</p>
       <p>Не больше ${fmt(BK.maxPer)} акций в одни руки. Продать можно через сутки после покупки, комиссия ${Math.round(BK.sellFee * 100)}%.</p></details>
 
     <div class="seg bk-tabs">${[["holders", "Акционеры"], ["robbers", "Обыграли банк"], ["sponsors", "Спонсоры"]].map(([k, t]) => `<button data-act="bk-top" data-v="${k}" class="${k === bkTop ? "on" : ""}">${t}</button>`).join("")}</div>
@@ -128,7 +128,7 @@ Object.assign(ACT, {
     const n = +el.dataset.v;
     if (n * BK.price > ME.stars) return toast("Не хватает звёзд ⭐");
     const r = await post("bank/shares", { n }); setStars(r.stars); H.ok();
-    toast(`+${n} ${plural(n, ["акция", "акции", "акций"])} казино`, "ok");
+    toast(`+${n} ${plural(n, ["акция", "акции", "акций"])} банка`, "ok");
     await loadBK(); loadBank();
   },
   "bk-sell": async () => {

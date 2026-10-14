@@ -35,14 +35,14 @@ async function btLoad() {
   };
   box.innerHTML = `
     ${BT.open.length ? `<div class="sec-t">${ic("flame")}Открытые битвы · ${BT.open.length}</div><div class="bt-list">${BT.open.map(card).join("")}</div>`
-      : `<div class="bt-empty">${ic("swap")}<b>Открытых битв нет</b><span>Создай свою — соперник придёт, или позови бота казино</span></div>`}
+      : `<div class="bt-empty">${ic("swap")}<b>Открытых битв нет</b><span>Создай свою — соперник придёт, или позови бота</span></div>`}
     ${BT.mine.length ? `<div class="sec-t">${ic("clock")}Мои последние</div><div class="box">${BT.mine.map(b => {
       const won = b.result && b.result.winner === ME.id;
       return `<div class="row tap" data-act="bt-open" data-id="${b.id}"><img class="spi" style="width:36px;height:36px;margin:0" src="${A.orig(b.case.cover, 64)}" alt="">
         <div class="grow"><div class="t">${esc(b.case.title)} ${b.rounds > 1 ? "×" + b.rounds : ""}</div><div class="s">${b.slots} игрока · вход ⭐ ${short(b.cost)}</div></div>
         <b class="${won ? "tw" : "tl"}">${won ? "+⭐ " + short(b.result.total) : "−⭐ " + short(b.cost)}</b></div>`;
     }).join("")}</div>` : ""}
-    <div class="disc">Свободные места можно отдать боту казино — он открывает те же кейсы. Если победишь бота, его подарки тоже твои. Не нашлись соперники за 30 минут — ставка вернётся.</div>`;
+    <div class="disc">Свободные места можно отдать боту — он открывает те же кейсы. Если победишь бота, его подарки тоже твои. Не нашлись соперники за 30 минут — ставка вернётся.</div>`;
   starify(box);
 }
 
@@ -76,7 +76,7 @@ async function openBattle(id) {
     if (b.status === "done") return;
     const host = b.host === ME.id, inIt = b.players.some(p => p && p.id === ME.id);
     replaceSheet(el, btArena(b, false) + `<div class="bt-act">${b.status === "cancelled" ? `<div class="hint" style="text-align:center">Битва отменена, ставки возвращены</div>`
-      : host ? `<div class="btns"><button class="btn gold" style="flex:2" data-act="bt-bot" data-id="${b.id}">${ic("users")}Позвать бота казино</button><button class="btn ghost" style="flex:1" data-act="bt-cancel" data-id="${b.id}">Отменить</button></div>
+      : host ? `<div class="btns"><button class="btn gold" style="flex:2" data-act="bt-bot" data-id="${b.id}">${ic("users")}Позвать бота</button><button class="btn ghost" style="flex:1" data-act="bt-cancel" data-id="${b.id}">Отменить</button></div>
         <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Ждём соперников… Боты займут все свободные места, и битва начнётся сразу.</div>`
       : inIt ? `<div class="hint" style="text-align:center">Ты в битве — ждём остальных</div>`
       : `<button class="btn gold cta" data-act="bt-join" data-id="${b.id}">${ic("swap")}Вступить · ⭐ ${fmt(b.cost)}</button>`}</div>`);
@@ -136,7 +136,7 @@ async function btReveal(el, b) {
   if (winCol) winCol.querySelector(".bt-who").insertAdjacentHTML("afterbegin", `<span class="bt-crown">${ic("crown")}</span>`);
   const res = el.querySelector("#bt-res");
   const wp = b.players[ws];
-  res.innerHTML = `<div class="bt-final ${me ? "win" : "lose"}"><b>${me ? "Победа! Все подарки твои" : wp && wp.bot ? "Победил бот казино" : `Победил ${esc(wp ? wp.name : "соперник")}`}</b>
+  res.innerHTML = `<div class="bt-final ${me ? "win" : "lose"}"><b>${me ? "Победа! Все подарки твои" : wp && wp.bot ? "Победил бот" : `Победил ${esc(wp ? wp.name : "соперник")}`}</b>
       <span>Банк битвы ⭐ ${fmt(R.total)}</span></div>
     <div class="btns"><button class="btn ghost" data-act="bt-again" data-cid="${b.cid}" data-r="${b.rounds}" data-s="${b.slots}">${ic("refresh")}Ещё раз</button>${me ? `<button class="btn gold" data-act="tab-inv">${ic("bag")}В сумку</button>` : ""}</div>`;
   starify(res);

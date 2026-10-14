@@ -98,12 +98,12 @@ async def mkorder_sell(oid: int, req: Request, uid=Depends(auth)):
         if o["epoch"] != epoch():
             err("заказы обновились — посмотри новые")
         if o["filled"] >= o["qty"]:
-            err("казино уже набрало нужное количество")
+            err("банк уже набрал нужное количество")
         g = q1("SELECT * FROM gifts WHERE id=?", gid)
         if not g or g["owner"] != uid:
             err("это не твой подарок")
         if g["col"] != o["col"]:
-            err("казино покупает только эту коллекцию")
+            err("банк покупает только эту коллекцию")
         if g["price"] is not None:
             err("сначала сними подарок с маркета")
         if in_open_trade(gid):

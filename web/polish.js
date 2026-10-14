@@ -60,7 +60,7 @@ const GAME_SECTIONS = [
   ["Хиты", "flame", ["crash", "dogs", "slots", "jroul"]],
   ["С друзьями", "users", ["duels", "101", "blackjack"]],
   ["Подарки", "gift", ["upgrade", "swap"]],
-  ["Казино", "coins", ["rlt", "tower", "mines", "wheel", "dice", "limbo"]],
+  ["Классика", "coins", ["rlt", "tower", "mines", "wheel", "dice", "limbo"]],
 ];
 const _rg2 = renderGames;
 renderGames = function () {
