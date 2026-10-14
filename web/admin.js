@@ -96,7 +96,10 @@ async function admRender(el = topSheet()) {
     const s = await api("admin/sales");
     const card = (t, x) => `<div><span>${t}</span><b>${fmt(x.xtr)} <i class="adm-tg">${ic("tgplane")}</i></b><small>${x.n} покупок · ${x.buyers} чел.</small></div>`;
     const mx = Math.max(1, ...s.days.map(d => d.xtr));
-    body.innerHTML = `<div class="adm-sales">${card("Сегодня", s.today)}${card("7 дней", s.week)}${card("Всего", s.all)}</div>
+    body.innerHTML = `<div class="box"><div class="row kv"><div class="grow"><div class="t">Продажа звёзд за Telegram Stars</div>
+        <div class="s" style="white-space:normal">Пакеты, «Набор дня» и подарок звёзд другу. VIP и сундук продаются всегда</div></div>
+        ${s.canEdit ? `<button class="sw${s.shopOn ? " on" : ""}" data-act="adm-shop" data-v="${s.shopOn ? 0 : 1}"></button>` : `<b>${s.shopOn ? "вкл" : "выкл"}</b>`}</div></div>
+      <div class="adm-sales">${card("Сегодня", s.today)}${card("7 дней", s.week)}${card("Всего", s.all)}</div>
       <div class="sec-t">${ic("trend")}По дням (14 дней), Telegram Stars</div>
       <div class="adm-bars">${s.days.length ? s.days.map(d => `<div title="${d.xtr}"><i style="height:${Math.max(4, d.xtr / mx * 100)}%"></i><span>${new Date(d.day * 1000).getDate()}</span></div>`).join("") : `<div class="hint" style="padding:14px">Покупок пока нет</div>`}</div>
       <div class="sec-t">${ic("crown")}Топ покупателей</div>
@@ -343,6 +346,10 @@ Object.assign(ACT, {
     const k = el.dataset.k, inp = topSheet().querySelector(`.adm-oi[data-k="${k}"]`), v = parseFloat(inp.value.replace(",", ".").replace(/\s/g, ""));
     if (!(v >= 0)) return toast("Введи число");
     await post("admin/pay", { [k]: k === "fee" || k === "fee_addr" ? v / 100 : Math.round(v) }); H.ok(); toast("Сохранено", "ok"); admRender();
+  },
+  "adm-shop": async el => {
+    const on = el.dataset.v === "1";
+    await post("admin/shop", { on }); H.ok(); toast(on ? "Продажа звёзд включена" : "Продажа звёзд выключена", "ok"); SHOP = null; admRender();
   },
   "adm-pay-rs": async el => { await post("admin/pay", { [el.dataset.k]: null }); H.ok(); toast("Сброшено", "ok"); admRender(); },
   "adm-pay-on": async el => {

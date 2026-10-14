@@ -11,6 +11,7 @@ async function shopFill() {
   const box = $("#shop-box"); if (!box) return;
   SHOP = await api("shop").catch(() => SHOP);
   if (!SHOP || !box.isConnected) return;
+  if (!SHOP.on) { box.innerHTML = ""; return; }   // продажа звёзд выключена в админке (VIP и сундук premium.js добавит сам)
   box.innerHTML = `<div class="shop">
       <div class="shop-h"><span class="shop-ic">${STAR_SVG}</span><div><b>Купить игровые звёзды</b>
         <span>Платишь <b class="tgt">Telegram Stars</b> — получаешь игровые ⭐. Курс: 1 Telegram Star = ${fmt(SHOP.rate)} ⭐</span></div></div>
@@ -68,7 +69,7 @@ async function openQuickBuy(need) {
   if (!inTg || Date.now() - QB_T < 4000 || (QB_EL && QB_EL.isConnected)) return false;
   QB_T = Date.now();
   if (!SHOP) SHOP = await api("shop").catch(() => null);
-  if (!SHOP) return false;
+  if (!SHOP || !SHOP.on) return false;
   const lack = Math.max(1, need ? need - Math.max(0, ME.stars) : 0);
   const packs = SHOP.packs, i = Math.max(0, packs.findIndex(p => p.stars >= lack));
   const pick = packs.slice(i, i + 3).length === 3 ? packs.slice(i, i + 3) : packs.slice(-3);
@@ -97,6 +98,8 @@ ACT["qb-all"] = () => { closeSheet(); openDaily(); setTimeout(() => { const b = 
 ICONS.giftbox = '<rect x="3.5" y="9" width="17" height="11.5" rx="2"/><path d="M2.5 9h19v-3.5h-19z"/><path d="M12 5.5v15"/><path d="M12 5.5C10.5 2.5 6.5 2.5 7 4.5c.4 1.4 3 1 5 1zm0 0c1.5-3 5.5-3 5-1-.4 1.4-3 1-5 1z"/>';
 let GF_TO = null;
 async function openGiftStars(to) {
+  if (!SHOP) SHOP = await api("shop").catch(() => null);
+  if (!SHOP || !SHOP.on) return toast("Покупка звёзд сейчас недоступна");
   if (!SHOP) SHOP = await api("shop").catch(() => null);
   const fr = await api("friends").catch(() => null);
   if (!SHOP || !fr) return toast("Не удалось загрузить — попробуй ещё раз");

@@ -153,7 +153,7 @@ function seasonCard() {
     <small>${SSB.place ? `ты ${SSB.place}-й из ${SSB.players} · ${fmt(SSB.pts)} очк.` : `главный приз ⭐ ${short(SSB.prize)} — сыграй и попади в рейтинг`} · ещё ${dd} д</small></span>${ic("chev")}</button>`;
 }
 function shopCard() {   // только тем, кто ещё ни разу не покупал
-  if (!SHOP || !SHOP.first || !inTg) return "";
+  if (!SHOP || !SHOP.on || !SHOP.first || !inTg) return "";
   return `<button class="stc st-shop" data-act="qb-all"><span class="stc-i"><b>×2</b></span><span class="stc-t"><b>Первая покупка — звёзд вдвое больше</b>
     <small>1 Telegram Star = ${fmt(SHOP.rate * 2)} ⭐ на первом пополнении · бонус до ${short(SHOP.firstCap)} ⭐</small></span>${ic("chev")}</button>`;
 }

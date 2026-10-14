@@ -6,7 +6,7 @@ import json
 
 from fastapi import Depends, Request
 
-from app import R, app, auth, bal, db, err, esc, event, notify, now, q1, tg_call, tx
+from app import R, app, auth, bal, db, err, esc, event, kv_get, notify, now, q1, tg_call, tx
 
 RATE = conf("shop.rate", 1000)                       # игровых звёзд за 1 Telegram Star
 PACKS = [1, 10, 50, 100, 250, 500, 1000]   # пакеты в Telegram Stars
@@ -18,6 +18,12 @@ FIRST_CAP = conf("shop.first_cap", 250_000)    # …но бонус не бол�
 db.executescript("""
 CREATE TABLE IF NOT EXISTS payments(charge TEXT PRIMARY KEY, user INTEGER, xtr INTEGER, stars INTEGER, ts INTEGER, kind TEXT DEFAULT 'pack');
 """)
+
+
+def shop_on():
+    """Продажа игровых звёзд за Telegram Stars (пакеты, подарок другу, «Набор дня»). Владелец включает в админке → «Продажи».
+    По умолчанию выключена. VIP и сундук продаются всегда."""
+    return kv_get("shop_on", "0") == "1"
 
 
 def pack_bonus(xtr):
@@ -48,7 +54,7 @@ def pack_stars(xtr, first=False):
 @app.get(R + "/shop")
 def shop(uid=Depends(auth)):
     first = is_first(uid)
-    return {"rate": RATE, "max": CUSTOM_MAX, "bonus": {str(k): int(v * 100) for k, v in BONUS.items()},
+    return {"on": shop_on(), "rate": RATE, "max": CUSTOM_MAX, "bonus": {str(k): int(v * 100) for k, v in BONUS.items()},
             "first": first, "firstCap": FIRST_CAP,
             "packs": [{"xtr": x, "stars": pack_stars(x, first), "base": pack_stars(x), "bonus": int(pack_bonus(x) * 100)} for x in PACKS]}
 
@@ -57,6 +63,8 @@ def shop(uid=Depends(auth)):
 async def invoice(req: Request, uid=Depends(auth)):
     body = await req.json()
     xtr, to = int(body.get("xtr", 0)), int(body.get("to") or 0)
+    if not shop_on():
+        err("Покупка звёзд сейчас недоступна")
     if not 1 <= xtr <= CUSTOM_MAX:
         err(f"от 1 до {CUSTOM_MAX} Telegram Stars")
     if to:   # подарок другу: обычный пакет с бонусом пакета, без «×2 первой покупки»
@@ -82,15 +90,15 @@ async def on_pre_checkout(pq):
         p = json.loads(pq.get("invoice_payload") or "{}")
         if p.get("k"):
             import premium
-            ok = premium.validate(p, pq.get("total_amount", 0)) and pq.get("currency") == "XTR"
+            ok = premium.validate(p, pq.get("total_amount", 0)) and pq.get("currency") == "XTR" and (p.get("k") != "offer" or shop_on())
         else:
-            ok = isinstance(p.get("x"), int) and 1 <= p["x"] <= CUSTOM_MAX and int(pq.get("total_amount", 0)) == p["x"] and pq.get("currency") == "XTR"
+            ok = shop_on() and isinstance(p.get("x"), int) and 1 <= p["x"] <= CUSTOM_MAX and int(pq.get("total_amount", 0)) == p["x"] and pq.get("currency") == "XTR"
             if ok and p.get("to"):
                 ok = are_friends(int(p.get("u", 0)), int(p["to"]))
     except Exception:
         ok = False
     await tg_call("answerPreCheckoutQuery", pre_checkout_query_id=pq["id"], ok=ok,
-                  **({} if ok else {"error_message": "Пакет устарел — открой магазин заново"}))
+                  **({} if ok else {"error_message": "Пакет устарел или покупка звёзд отключена"}))
 
 
 def on_paid(m):
