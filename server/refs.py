@@ -20,6 +20,11 @@ import app as A
 from app import R, app, auth, db, err, esc, event, notify, now, q, q1, tx, user_brief, week_start
 from admin import OWNERS, admin, log
 
+
+def nf(x):
+    """12 345 — разделитель тысяч только в самом числе (замена по всей строке портила запятые в тексте и именах)."""
+    return f"{x:,}".replace(",", " ")
+
 DEFAULTS = {
     "on": True,
     "new_bonus": conf("start.ref_bonus", 2500),   # ⭐ другу при регистрации по ссылке
@@ -105,7 +110,7 @@ def _levels():
                     continue
                 db.execute("INSERT INTO ref_pay(friend,stage,ref,amount,ts) VALUES(?,?,?,?,?)", (f["id"], stage, f["ref_by"], bonus, now()))
                 if bonus:
-                    msgs.append(_pay(f["ref_by"], bonus, "ref_lvl", f"🎯 Твой друг <b>{esc(f['name'])}</b> дошёл до {L} уровня — тебе +{bonus:,} ⭐".replace(",", " ")))
+                    msgs.append(_pay(f["ref_by"], bonus, "ref_lvl", f"🎯 Твой друг <b>{esc(f['name'])}</b> дошёл до {L} уровня — тебе +{nf(bonus)} ⭐"))
     return msgs
 
 
@@ -124,7 +129,7 @@ def _milestones():
                 if q1("SELECT 1 FROM ref_ms WHERE user=? AND cnt=?", r["r"], cnt) or not q1("SELECT 1 FROM users WHERE id=? AND banned=0", r["r"]):
                     continue
                 db.execute("INSERT INTO ref_ms(user,cnt,amount,ts) VALUES(?,?,?,?)", (r["r"], cnt, amount, now()))
-                msgs.append(_pay(r["r"], amount, "ref_ms", f"🏅 У тебя {cnt} активных друзей в игре — награда <b>+{amount:,} ⭐</b>".replace(",", " ")))
+                msgs.append(_pay(r["r"], amount, "ref_ms", f"🏅 У тебя {cnt} активных друзей в игре — награда <b>+{nf(amount)} ⭐</b>"))
     return msgs
 
 
@@ -154,7 +159,7 @@ def _top_payout():
             amount = _prizes(cfg("top_prizes"))[place]
             place += 1
             db.execute("INSERT INTO ref_top(week,place,user,n,amount) VALUES(?,?,?,?,?)", (prev, place, r["ref"], r["n"], amount))
-            msgs.append(_pay(r["ref"], amount, "ref_top", f"🏆 {place} место в недельном топе приглашений ({r['n']} активных друзей) — <b>+{amount:,} ⭐</b>".replace(",", " ")))
+            msgs.append(_pay(r["ref"], amount, "ref_top", f"🏆 {place} место в недельном топе приглашений ({r['n']} активных друзей) — <b>+{nf(amount)} ⭐</b>"))
         if not place:   # пометка «неделя закрыта», даже если никто не прошёл порог
             db.execute("INSERT INTO ref_top(week,place,user,n,amount) VALUES(?,0,0,0,0)", (prev,))
     return msgs
@@ -191,7 +196,7 @@ def on_buy(uid, stars):
         if not q1("SELECT 1 FROM users WHERE id=? AND banned=0", u["ref_by"]):
             return
         _pay(u["ref_by"], amount, "ref_buy", "")
-    notify(u["ref_by"], f"💎 Твой друг <b>{esc(u['name'])}</b> пополнил баланс — тебе {cfg('buy_pct')}%: <b>+{amount:,} ⭐</b>".replace(",", " "))
+    notify(u["ref_by"], f"💎 Твой друг <b>{esc(u['name'])}</b> пополнил баланс — тебе {cfg('buy_pct')}%: <b>+{nf(amount)} ⭐</b>")
 
 
 # ============================== игроку ==============================

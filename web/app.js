@@ -501,7 +501,7 @@ function openDaily() {
     <div class="sec-t">Ещё звёзды</div>
     <div class="box">
       <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">${ME.ref && ME.ref.on ? `до +${fmt((ME.ref.join || 0) + ME.ref.l1[1] + ME.ref.l2[1])} ⭐ за друга + топ недели` : "играйте вместе"}</div></div><span class="pill">${ME.refs}</span></div>
-      ${ME.franchise ? `<div class="row tap" data-act="franchise-info"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.reward ? `Создай за 1 тап · +${fmt(ME.franchise.reward)} ⭐ за ${ME.franchise.need} игроков` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
+      ${ME.franchise ? `<div class="row tap" data-act="franchise-info"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.create || ME.franchise.reward ? `Создай за 1 тап · до +${fmt((ME.franchise.create || 0) + (ME.franchise.reward || 0))} ⭐` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
       <div class="row tap" data-act="case" data-id="free"><span class="pic g">${ic("gift")}</span><div class="grow"><div class="t">Бесплатный кейс</div><div class="s">${ME.freeIn ? "через " + clock(ME.freeIn) : "готов"}</div></div></div>
       <div class="row"><span class="pic y">${ic("medal")}</span><div class="grow"><div class="t">Уровни</div><div class="s">За каждый новый уровень — бонус звёздами</div></div></div>
     </div>
@@ -728,7 +728,7 @@ function frBanner() {
   const f = ME.franchise;
   if (!f || !f.banner || f.mine.length) return "";
   try { if (Date.now() - (+localStorage.getItem(FR_HIDE) || 0) < 14 * 864e5) return ""; } catch (e) { }
-  return `<button class="invbar" data-act="franchise-info">${ic("rocket")}<span><b>Свой бот с этой игрой</b>${f.reward ? `+${fmt(f.reward)} ⭐ за ${f.need} игроков · создай за 1 тап` : "создай за 1 тап — без @BotFather"}</span><span data-act="franchise-hide" aria-label="Скрыть" style="flex:none;align-self:flex-start;margin:-6px -8px 0 0;padding:6px 8px;font-size:15px;line-height:1;opacity:.6">✕</span></button>`;
+  return `<button class="invbar" data-act="franchise-info">${ic("rocket")}<span><b>Свой бот с этой игрой</b>${f.create || f.reward ? `до +${fmt((f.create || 0) + (f.reward || 0))} ⭐ · создай за 1 тап` : "создай за 1 тап — без @BotFather"}</span><span data-act="franchise-hide" aria-label="Скрыть" style="flex:none;align-self:flex-start;margin:-6px -8px 0 0;padding:6px 8px;font-size:15px;line-height:1;opacity:.6">✕</span></button>`;
 }
 function franchiseInfo() {
   const f = ME.franchise; if (!f) return;
@@ -738,7 +738,8 @@ function franchiseInfo() {
     <div class="box">
       <div class="row"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Та же игра</div><div class="s">Кейсы, игры, маркет и турниры — всё как здесь</div></div></div>
       <div class="row"><span class="pic g">${ic("userPlus")}</span><div class="grow"><div class="t">Общие аккаунты</div><div class="s">У игроков тот же баланс и подарки в любом боте</div></div></div>
-      ${f.reward ? `<div class="row"><span class="pic y">${ic("gift")}</span><div class="grow"><div class="t">+${fmt(f.reward)} ⭐ тебе</div><div class="s">Когда через твоего бота придут ${f.need} новых игроков и дорастут до ${f.level} уровня (один раз)</div></div></div>` : ""}
+      ${f.create ? `<div class="row"><span class="pic y">${ic("gift")}</span><div class="grow"><div class="t">+${fmt(f.create)} ⭐ сразу</div><div class="s">За создание бота${ME.lv.level < f.createLevel ? ` — придут, когда дойдёшь до ${f.createLevel} уровня` : ""} (один раз)</div></div></div>` : ""}
+      ${f.reward ? `<div class="row"><span class="pic y">${ic("crown")}</span><div class="grow"><div class="t">Ещё +${fmt(f.reward)} ⭐</div><div class="s">Когда через твоего бота придут ${f.need} новых игроков и дорастут до ${f.level} уровня (один раз)</div></div></div>` : ""}
     </div>
     ${f.mine.length ? `<div class="sec-t">Мои боты</div><div class="box">${f.mine.map(b => `<div class="row kv"><div class="grow"><div class="t">@${esc(b.username || "?")}</div><div class="s">${st[b.status] || b.status}${f.reward && b.status === "on" ? ` · игроков ${b.progress}/${f.need}` : ""}</div></div></div>`).join("")}</div>` : ""}
     <div class="btns"><button class="btn gold" data-act="franchise">${ic("rocket")}${f.mine.length ? "Создать ещё бота" : "Создать бота"}</button></div>`);

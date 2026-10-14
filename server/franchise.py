@@ -10,7 +10,8 @@
   (решение владельца игры: удобство важнее) — вместо них сторож раз в 3 минуты сверяет вебхук и кнопку «Играть» и при подмене
   отключает бота (все входы через него — 403), а actlog пишет bot у каждого действия — для отката;
 - оплата Telegram Stars, код сброса PIN — только главным ботом (дочерний мог бы переслать себе сообщение по message_id);
-- награда владельцу — один раз на аккаунт, когда его бот приведёт N новых игроков нужного уровня (против твинков).
+- награды владельцу, каждая один раз на аккаунт: create_reward — за создание бота (если сам владелец не ниже create_level:
+  иначе любой твинк создаёт бота в один тап и забирает звёзды; дорастёт — получит), reward — когда бот приведёт N игроков нужного уровня.
 """
 import asyncio
 import base64
@@ -29,9 +30,16 @@ import app as A
 from app import (ADMINS, APP_URL, BOT_NAME, CUR_TOKEN, R, TOKEN, VIA_BOT, app, db, err, esc, event, notify, now, q, q1, tg_call, tx)
 from admin import OWNERS, admin, log
 
+
+def nf(x):
+    """12 345 — разделитель тысяч только в самом числе (замена по всей строке портила запятые в тексте и именах)."""
+    return f"{x:,}".replace(",", " ")
+
 # настройки — в админке («Боты»), хранятся в kv 'frcfg'; settings.toml [franchise] — только значения по умолчанию
 DEFAULTS = {
     "on": True,                                          # франшиза включена: кнопка в игре, /franchise, подключение новых ботов
+    "create_reward": 25000,                              # ⭐ сразу за создание бота (один раз на аккаунт)…
+    "create_level": 5,                                   # …если владелец сам не ниже этого уровня (иначе — когда дорастёт)
     "reward": conf("franchise.reward", 25000),           # ⭐ владельцу, один раз на аккаунт…
     "players": conf("franchise.reward_players", 10),     # …когда бот приведёт столько новых игроков…
     "level": conf("franchise.reward_level", 5),          # …не ниже этого уровня
@@ -41,7 +49,7 @@ DEFAULTS = {
     "promo_days": 30,                                    # …не чаще раза в N дней одному игроку…
     "promo_level": 3,                                    # …и только с этого уровня (новичкам рано)
 }
-LIMITS = {"reward": (0, 1_000_000), "players": (1, 1000), "level": (1, 100), "max_per_owner": (1, 50),
+LIMITS = {"create_reward": (0, 1_000_000), "create_level": (1, 100), "reward": (0, 1_000_000), "players": (1, 1000), "level": (1, 100), "max_per_owner": (1, 50),
           "promo_days": (1, 365), "promo_level": (1, 100)}
 CFG = {}
 try:
@@ -62,6 +70,7 @@ db.executescript("""
 CREATE TABLE IF NOT EXISTS bots(id INTEGER PRIMARY KEY, username TEXT, name TEXT, token TEXT, owner INTEGER,
   secret TEXT, status TEXT DEFAULT 'on', created INTEGER, paid INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS bots_owner ON bots(owner);
+CREATE TABLE IF NOT EXISTS fr_create(owner INTEGER PRIMARY KEY, bot INTEGER, amount INTEGER, ts INTEGER);
 CREATE TABLE IF NOT EXISTS fr_promo(user INTEGER PRIMARY KEY, ts INTEGER, n INTEGER DEFAULT 1);
 """)
 for _c in ("bot", "came_bot"):   # bot — через какого бота игрок заходил последним (уведомления, ссылки); came_bot — откуда пришёл
@@ -258,9 +267,13 @@ async def on_managed(mb):
         return
     await _setup(b)
     paid = q1("SELECT 1 FROM bots WHERE owner=? AND paid=1", owner)
+    cr = cfg("create_reward") and not q1("SELECT 1 FROM fr_create WHERE owner=?", owner)
+    lvl_ok = A.level(q1("SELECT xp FROM users WHERE id=?", owner)["xp"] if q1("SELECT 1 FROM users WHERE id=?", owner) else 0) >= cfg("create_level")
     notify(owner, f"🤖 Твой бот @{esc(b['username'])} готов — в нём та же игра и тот же аккаунт.\n\nДелись ссылкой t.me/{esc(b['username'])}"
+           + ("" if not cr or lvl_ok else f"\n\n🎁 <b>{nf(cfg('create_reward'))} ⭐</b> за создание — придут, когда дойдёшь до {cfg('create_level')} уровня")
            + ("" if paid or not cfg("reward") else f"\n\n🎁 Когда через него придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня — "
-                                                    f"тебе <b>{cfg('reward'):,} ⭐</b>".replace(",", " ")))
+                                                    f"ещё <b>{nf(cfg('reward'))} ⭐</b>"))
+    await asyncio.get_running_loop().run_in_executor(None, _create_rewards)   # 25 000 за создание — сразу, если уровень позволяет
 
 
 NEW_LINK = f"https://t.me/newbot/{BOT_NAME}?name=" + urllib.parse.quote("Кейсы и подарки")   # окно создания бота, менеджер — главный
@@ -272,7 +285,9 @@ def offer(uid):
         return None
     mine = [b for b in BOTS.values() if b["owner"] == uid]
     paid = any(b["paid"] for b in mine)
+    got = q1("SELECT 1 FROM fr_create WHERE owner=?", uid)
     return {"link": NEW_LINK, "reward": 0 if paid else cfg("reward"), "need": cfg("players"), "level": cfg("level"),
+            "create": 0 if got else cfg("create_reward"), "createLevel": cfg("create_level"),
             "banner": cfg("game_promo"),
             "mine": [{"username": b["username"], "status": b["status"], "progress": _progress(b["id"], uid)} for b in mine]}
 
@@ -282,7 +297,26 @@ def _progress(bid, owner):
     return q1("SELECT COUNT(*) n FROM users WHERE came_bot=? AND id!=? AND banned=0 AND xp>=?", bid, owner, xp)["n"]
 
 
+def _create_rewards():
+    """create_reward владельцу работающего бота: один раз на аккаунт, когда владелец не ниже create_level."""
+    amount = cfg("create_reward")
+    if not amount:
+        return
+    xp = 100 * (cfg("create_level") - 1) ** 2
+    for r in q("SELECT b.owner, MIN(b.id) bot, MIN(b.username) un FROM bots b JOIN users u ON u.id=b.owner "
+               "WHERE b.status='on' AND u.banned=0 AND u.xp>=? AND b.owner NOT IN (SELECT owner FROM fr_create) GROUP BY b.owner", xp):
+        with tx():
+            if q1("SELECT 1 FROM fr_create WHERE owner=?", r["owner"]):
+                continue
+            db.execute("INSERT INTO fr_create(owner,bot,amount,ts) VALUES(?,?,?,?)", (r["owner"], r["bot"], amount, now()))
+            db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amount, r["owner"]))
+            event(r["owner"], "franchise", amount)
+        notify(r["owner"], f"🎁 За создание бота @{esc(r['un'])} — <b>+{nf(amount)} ⭐</b>"
+               + (f"\n\nКогда через него придут {cfg('players')} новых игроков {cfg('level')}+ уровня — ещё <b>{nf(cfg('reward'))} ⭐</b>" if cfg("reward") else ""))
+
+
 def _rewards():
+    _create_rewards()
     for b in list(BOTS.values()):
         if b["status"] != "on" or b["paid"]:
             continue
@@ -296,7 +330,7 @@ def _rewards():
             db.execute("UPDATE users SET stars=stars+? WHERE id=?", (reward, b["owner"]))
             event(b["owner"], "franchise", reward)
         b["paid"] = 1
-        notify(b["owner"], f"🎉 Твой бот @{esc(b['username'])} привёл {cfg('players')} игроков — тебе <b>{reward:,} ⭐</b>".replace(",", " "))
+        notify(b["owner"], f"🎉 Твой бот @{esc(b['username'])} привёл {cfg('players')} игроков — тебе <b>{nf(reward)} ⭐</b>")
 
 
 async def reward_loop():
@@ -319,9 +353,10 @@ async def cmd(m):
     paid = any(b["paid"] for b in mine)
     lines = ["🤖 <b>Свой бот с этой игрой</b>\n",
              "Жми кнопку — Telegram создаст бота за пару секунд, без @BotFather. В нём та же игра, тот же баланс и подарки у всех игроков.\n"]
+    if cfg("create_reward") and not q1("SELECT 1 FROM fr_create WHERE owner=?", uid):
+        lines.append(f"🎁 <b>{nf(cfg('create_reward'))} ⭐ сразу</b> за создание (с {cfg('create_level')} уровня, один раз)")
     if not paid and cfg("reward"):
-        lines.append(f"🎁 Когда через твоего бота придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня — "
-                     f"<b>{cfg('reward'):,} ⭐</b> (один раз на аккаунт)\n".replace(",", " "))
+        lines.append(f"🎁 Ещё <b>{nf(cfg('reward'))} ⭐</b> — когда через твоего бота придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня\n")
     for b in mine:
         st = {"on": "работает", "off": "отключён", "limit": "не подключён (лимит)"}.get(b["status"], b["status"])
         lines.append(f"• @{esc(b['username'])} — {st}" + ("" if paid or b["status"] != "on" else f", игроков: {_progress(b['id'], uid)}/{cfg('players')}"))
@@ -446,12 +481,12 @@ def _promo_targets(limit):
 
 
 def promo_text():
-    r = cfg("reward")
+    r, c = cfg("reward"), cfg("create_reward")
     return ("🤖 <b>Создай свой бот с этой игрой</b>\n\n"
             "Одна кнопка — и у тебя свой бот: та же игра, кейсы, маркет и турниры, без @BotFather и без кода. "
             "Зови друзей в своего бота и собирай свою аудиторию."
-            + (f"\n\n🎁 Когда через него придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня — "
-               f"<b>{r:,} ⭐</b> тебе".replace(",", " ") if r else ""))
+            + (f"\n\n🎁 <b>{nf(c)} ⭐ сразу</b> за создание" if c else "")
+            + (f"\n🎁 {'Ещё ' if c else ''}<b>{nf(r)} ⭐</b>, когда через него придут {cfg('players')} новых игроков {cfg('level')}+ уровня" if r else ""))
 
 
 async def _promo_send(ids):
