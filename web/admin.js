@@ -68,7 +68,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["fees", "Комиссии"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -182,6 +182,18 @@ async function admRender(el = topSheet()) {
       <div class="sec-t">Последние переводы</div>
       <div class="box">${d.recent.map(pair).join("") || `<div class="hint" style="padding:14px">Переводов пока не было</div>`}</div>
       <div class="disc">Если двое постоянно перекидывают звёзды только друг другу — это может быть один человек с двух аккаунтов. Нажми на пару, чтобы открыть карточку отправителя.</div>`;
+    starify(body);
+  } else if (ADM.tab === "fees") {   // все комиссии и налоги (fees.py)
+    const d = await api("admin/fees"), ed = d.canEdit, P = v => String(+(v * 100).toFixed(3)).replace(".", ",");
+    const groups = [...new Set(d.items.map(i => i.group))];
+    body.innerHTML = `<div class="box">${admKv("Комиссий за 24 ч", `<b>⭐ ${fmt(d.fees24)}</b>`)}</div>
+      ${groups.map(g => `<div class="sec-t">${esc(g)}</div><div class="box">${d.items.filter(i => i.group === g).map(i => `<div class="adm-odd">
+        <div class="adm-oh"><b>${esc(i.title)}</b>${i.changed ? `<span class="adm-tag">изменено</span>` : ""}</div>
+        <div class="adm-os">${i.hint ? esc(i.hint) + " · " : ""}по умолчанию ${P(i.def)}% · до ${P(i.max)}%</div>
+        ${ed ? `<div class="adm-oc"><input class="adm-oi" inputmode="decimal" data-k="${i.k}" value="${P(i.v)}"><span class="adm-op">%</span>
+          <button class="btn sm gold" data-act="adm-fee" data-k="${i.k}">${ic("check")}</button>
+          ${i.changed ? `<button class="btn sm ghost" data-act="adm-fee-rs" data-k="${i.k}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${P(i.v)}%</b></div>`}</div>`).join("")}</div>`).join("")}
+      <div class="disc">Меняется сразу, без перезапуска. Комиссии и налоги — главный доход казино и база для 0,5% владельцам ботов: если сильно снизить, банк перестанет пополняться. Преимущество казино в играх (RTP) — во вкладке «Шансы».</div>`;
     starify(body);
   } else if (ADM.tab === "ev") {   // ивенты раз в ~2 часа (flash.py)
     const d = await api("admin/flash"), c = d.cfg, ed = d.canEdit, now = Math.floor(Date.now() / 1000);
@@ -513,6 +525,8 @@ Object.assign(ACT, {
     if (!await confirmM("Запустить ивент сейчас?", "Бот предупредит игроков (если включено).", "Запустить")) return;
     await post("admin/flash/start", { kind: el.dataset.k }); H.ok(); toast("Ивент запущен", "ok"); admRender(); loadMe();
   },
+  "adm-fee": async el => { const k = el.dataset.k; await post("admin/fees", { [k]: topSheet().querySelector(`.adm-oi[data-k="${k}"]`).value }); H.ok(); toast("Сохранено", "ok"); admRender(); loadMe(); },
+  "adm-fee-rs": async el => { await post("admin/fees", { [el.dataset.k]: null }); H.ok(); toast("Вернули по умолчанию", "ok"); admRender(); loadMe(); },
   "adm-ev-stop": async () => { if (!await confirmM("Остановить ивент?", "Он закончится сразу.", "Остановить")) return; await post("admin/flash/stop"); H.ok(); toast("Остановлен", "ok"); admRender(); loadMe(); },
   "adm-ref-sw": async el => { const on = el.dataset.v === "1"; await post("admin/refs", { [el.dataset.k]: on }); H.ok(); toast(on ? "Включено" : "Выключено", "ok"); admRender(); },
   "adm-ref": async el => {

@@ -145,6 +145,10 @@ const CPAT = (() => {   // россыпь узора по карточке ке�
 })();
 const patHTML = (col, sym, pts, k = 1) => pts.map(([x, y, sz, a]) =>
   `<i class="pi" style="left:${x}%;top:${y}%;width:${sz * k}%;aspect-ratio:1;opacity:${a};-webkit-mask-image:url('${A.pat(col, sym)}');mask-image:url('${A.pat(col, sym)}')"></i>`).join("");
+// ставки комиссий из админки (fees.py); до первого /me — значения по умолчанию
+const FEE = (k, d) => (ME && ME.fees && ME.fees[k] != null ? ME.fees[k] : d);
+const feeP = (k, d) => String(+(FEE(k, d) * 100).toFixed(2)).replace(".", ",") + "%";
+
 // доход подарка: 2% ценности в сутки, легендарные ×2, эпики ×1,5
 const giftPerHour = g => g.value * .02 / 24 * (g.mp <= 5 ? 2 : g.mp <= 10 ? 1.5 : 1);
 const perHourTxt = v => v >= 100 ? fmt(Math.round(v)) : v >= 10 ? v.toFixed(1).replace(".", ",") : v.toFixed(2).replace(".", ",");
@@ -701,7 +705,7 @@ async function newTrade(uid) {
     <div class="auto"><span style="flex:1">+ звёзды от тебя</span><input id="tgs" inputmode="numeric" value="0"></div>
     <div class="sec-t">Ты хочешь получить</div>${grid(them.gifts, pickW, "w")}
     <div class="auto"><span style="flex:1">+ звёзды от него</span><input id="tws" inputmode="numeric" value="0"></div>
-    <div class="hint" style="font-size:12px;text-align:center;margin:6px 0 0">Со звёзд, которые переходят в обмене, комиссия 5% — она уходит в банк игры.</div>
+    <div class="hint" style="font-size:12px;text-align:center;margin:6px 0 0">Со звёзд, которые переходят в обмене, комиссия ${feeP("trade", .05)} — она уходит в банк игры.</div>
     <div class="box" style="margin-top:14px"><div class="row kv"><span class="k">Баланс</span><span class="v" id="tsum">—</span></div></div>
     <div class="btns"><button class="btn" data-act="send-trade">Предложить обмен</button></div>`);
   const all = new Map([...me.gifts, ...them.gifts].map(g => [g.id, g]));
@@ -795,12 +799,12 @@ const ACT = {
   gift: el => openGift(REG.get(el.dataset.k)),
   sell: async el => {
     const g = topSheet()._o.g;
-    if (!await confirmM("Продать подарок?", `${esc(g.col)} #${fmt(g.num)} уйдёт за ⭐ ${fmt(Math.floor(g.value * .85))} (85% ценности). Хочешь дороже — выстави на маркет.`, "Продать")) return;
+    if (!await confirmM("Продать подарок?", `${esc(g.col)} #${fmt(g.num)} уйдёт за ⭐ ${fmt(Math.floor(g.value * (1 - FEE("sell", .15))))} (${String(+((1 - FEE("sell", .15)) * 100).toFixed(2)).replace(".", ",")}% ценности). Хочешь дороже — выстави на маркет.`, "Продать")) return;
     const r = await post(`gift/${el.dataset.id}/sell`); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.paid)}`, "ok"); giftChanged();
   },
   list: async el => {
     const g = topSheet()._o.g;
-    const v = await promptM("Цена на маркете", `Ценность ⭐ ${fmt(g.value)}. Комиссия маркета 5%.`, Math.round(g.value * 1.1), "Выставить");
+    const v = await promptM("Цена на маркете", `Ценность ⭐ ${fmt(g.value)}. Комиссия маркета ${feeP("market", .05)}.`, Math.round(g.value * 1.1), "Выставить");
     if (v == null) return;
     await post(`gift/${el.dataset.id}/list`, { price: Math.floor(+v) }); H.ok(); toast("Выставлено на маркет", "ok"); giftChanged();
   },

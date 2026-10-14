@@ -22,7 +22,7 @@ PERKS = [   # для экрана «Привилегии богачей»
 def market_fee(uid, base):
     """Комиссия маркета для продавца: топ-1 — 1%, топ-2–3 — 2%, топ-4–10 — 3% (вместо 5%)."""
     r = RICH_RANK.get(uid)
-    f = base if not r else 0.01 if r == 1 else 0.02 if r <= 3 else 0.03
+    f = base if not r else min(base, 0.01 if r == 1 else 0.02 if r <= 3 else 0.03)   # скидка не выше общей ставки
     u = q1("SELECT vip_until FROM users WHERE id=?", uid)
     return f / 2 if u and (u["vip_until"] or 0) > now() else f   # VIP — комиссия вдвое ниже
 

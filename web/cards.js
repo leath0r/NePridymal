@@ -104,7 +104,7 @@ function tablesHTML(game) {
       <button class="btn cta" data-act="tb-new" data-g="${game}">${ic(TB.kind === "gifts" ? "gift" : "plus")}${TB.kind === "gifts" ? "Выбрать подарки и создать" : "Создать стол"}</button>
       <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">${TB.kind === "gifts"
         ? "Каждый кладёт подарки (не меньше 80% ценности ставки хозяина), победитель забирает все."
-        : "Ставка с каждого игрока, победитель забирает банк (комиссия 5%)."} На ход — 45 секунд.</div>
+        : `Ставка с каждого игрока, победитель забирает банк (комиссия ${feeP("room", .05)}).`} На ход — 45 секунд.</div>
     </div><div id="tb-lists">${emptyHTML("hourglass", "Загружаем столы…")}</div>`;
 }
 function tbInvDraw() {

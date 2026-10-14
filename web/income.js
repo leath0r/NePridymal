@@ -97,7 +97,7 @@ Object.assign(ACT, {
   inc: () => openInc(),
   "inc-collect": async el => {
     if (incLive().gifts + incLive().biz < 1) return toast("Пока накопилось меньше звезды — загляни чуть позже");
-    const r = await post("income/collect"); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.got)} дохода${r.tax ? ` (налог 3% в банк: ⭐ ${fmt(r.tax)})` : ""}`, "ok"); burstAt(el);
+    const r = await post("income/collect"); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.got)} дохода${r.tax ? ` (налог ${feeP("income", .03)} в банк: ⭐ ${fmt(r.tax)})` : ""}`, "ok"); burstAt(el);
     await loadInc();
   },
   "biz-shift": el => { const b = incBiz(el.dataset.id); if (b) bizShift(b); },

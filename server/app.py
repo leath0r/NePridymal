@@ -696,6 +696,7 @@ def me(uid=Depends(auth)):
             "gamesOff": __import__("gates").games_state(),
             "franchise": franchise.offer(uid),
             "flash": flash.public(uid),
+            "fees": fees.public(),
             "edges": {"x": edge(tuned("games.edge", EDGE)), "mines": edge(tuned("games.mines_edge", MINES_EDGE)), "upg": edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)},   # фронт показывает иксы кубика/лимбо/мин по этим же коэффициентам
             "inbox": q1("SELECT COUNT(*) n FROM inbox WHERE user=? AND id>?", uid, u["inbox_read"] if "inbox_read" in u.keys() else 0)["n"], **counters(uid), "clanChat": CLAN_UNREAD(uid) if CLAN_UNREAD else 0, "cashback": __import__("retain").cashback_preview(uid)}
 
@@ -2259,6 +2260,7 @@ import stack  # noqa: E402,F401 — «Стопка»: игра на ловкос
 import franchise  # noqa: E402 — франшиза: свои боты игроков с этой же игрой (Managed Bots)
 import refs  # noqa: E402 — реферальная программа: уровни друзей, рубежи, доля с покупок, недельный топ
 import flash  # noqa: E402 — ивенты раз в ~2 часа: «Удача ×3/×5», «Раздача ⭐»
+import fees  # noqa: E402 — все комиссии и налоги из админки (переписывает ставки модулей)
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------
