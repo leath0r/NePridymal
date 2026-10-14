@@ -339,15 +339,20 @@ def _cuts():
     day = A.day_start() - 86400
     inc = None
     xp = 100 * (cfg("create_level") - 1) ** 2
-    for r in q("SELECT b.owner, MIN(b.id) bot, MIN(b.username) un FROM bots b JOIN users u ON u.id=b.owner "
-               "WHERE b.status='on' AND u.banned=0 AND u.xp>=? GROUP BY b.owner", xp):
-        if q1("SELECT 1 FROM fr_cut c JOIN bots b ON b.id=c.bot WHERE c.day=? AND b.owner=?", day, r["owner"]):
+    rows = [dict(r) for r in q("SELECT b.owner, MIN(b.id) bot, MIN(b.username) un FROM bots b JOIN users u ON u.id=b.owner "
+                               "WHERE b.status='on' AND u.banned=0 AND u.xp>=? GROUP BY b.owner", xp)]
+    have = {r["owner"] for r in rows}
+    # любой админ (ADMIN_IDS и выданные в админке — живой набор ADMINS) «держит» главного бота: та же доля, без условия по уровню.
+    # В fr_cut у них bot = −id (у главного бота нет строки в bots; PK (day, bot) — по строке на человека)
+    rows += [{"owner": o, "bot": -o, "un": BOT_NAME} for o in sorted(ADMINS) if o not in have and q1("SELECT 1 FROM users WHERE id=? AND banned=0", o)]
+    for r in rows:
+        if q1("SELECT 1 FROM fr_cut c LEFT JOIN bots b ON b.id=c.bot WHERE c.day=? AND (b.owner=? OR c.bot=?)", day, r["owner"], -r["owner"]):
             continue
         if inc is None:
             inc = game_income(day, day + 86400)
         amount = int(inc * pct / 100) if inc > 0 and pct > 0 else 0
         with tx():
-            if q1("SELECT 1 FROM fr_cut c JOIN bots b ON b.id=c.bot WHERE c.day=? AND b.owner=?", day, r["owner"]):
+            if q1("SELECT 1 FROM fr_cut c LEFT JOIN bots b ON b.id=c.bot WHERE c.day=? AND (b.owner=? OR c.bot=?)", day, r["owner"], -r["owner"]):
                 continue
             db.execute("INSERT OR IGNORE INTO fr_cut(day,bot,income,amount) VALUES(?,?,?,?)", (day, r["bot"], inc, amount))
             if amount:
