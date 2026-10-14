@@ -96,9 +96,12 @@ async function admRender(el = topSheet()) {
     const s = await api("admin/sales");
     const card = (t, x) => `<div><span>${t}</span><b>${fmt(x.xtr)} <i class="adm-tg">${ic("tgplane")}</i></b><small>${x.n} покупок · ${x.buyers} чел.</small></div>`;
     const mx = Math.max(1, ...s.days.map(d => d.xtr));
-    body.innerHTML = `<div class="box"><div class="row kv"><div class="grow"><div class="t">Продажа звёзд за Telegram Stars</div>
-        <div class="s" style="white-space:normal">Пакеты, «Набор дня» и подарок звёзд другу. VIP и сундук продаются всегда</div></div>
-        ${s.canEdit ? `<button class="sw${s.shopOn ? " on" : ""}" data-act="adm-shop" data-v="${s.shopOn ? 0 : 1}"></button>` : `<b>${s.shopOn ? "вкл" : "выкл"}</b>`}</div></div>
+    const sw = (k, t, d) => `<div class="row kv"><div class="grow"><div class="t">${t}</div><div class="s" style="white-space:normal">${d}</div></div>
+        ${s.canEdit ? `<button class="sw${s.sale[k] ? " on" : ""}" data-act="adm-shop" data-k="${k}" data-v="${s.sale[k] ? 0 : 1}"></button>` : `<b>${s.sale[k] ? "вкл" : "выкл"}</b>`}</div>`;
+    body.innerHTML = `<div class="sec-t">Что продаётся за Telegram Stars</div><div class="box">
+        ${sw("shop", "Игровые звёзды", "Пакеты, своя сумма, «Набор дня», подарок звёзд другу")}
+        ${sw("vip", "VIP", "Бонус дня ×2, кейс чаще, комиссия маркета −50%, рамка")}
+        ${sw("chest", "Звёздный сундук", "Дорогой подарок за Stars — его можно продать за игровые звёзды")}</div>
       <div class="adm-sales">${card("Сегодня", s.today)}${card("7 дней", s.week)}${card("Всего", s.all)}</div>
       <div class="sec-t">${ic("trend")}По дням (14 дней), Telegram Stars</div>
       <div class="adm-bars">${s.days.length ? s.days.map(d => `<div title="${d.xtr}"><i style="height:${Math.max(4, d.xtr / mx * 100)}%"></i><span>${new Date(d.day * 1000).getDate()}</span></div>`).join("") : `<div class="hint" style="padding:14px">Покупок пока нет</div>`}</div>
@@ -349,7 +352,7 @@ Object.assign(ACT, {
   },
   "adm-shop": async el => {
     const on = el.dataset.v === "1";
-    await post("admin/shop", { on }); H.ok(); toast(on ? "Продажа звёзд включена" : "Продажа звёзд выключена", "ok"); SHOP = null; admRender();
+    await post("admin/shop", { what: el.dataset.k, on }); H.ok(); toast(on ? "Продажа включена" : "Продажа выключена", "ok"); SHOP = null; if (typeof PREM !== "undefined") PREM = null; admRender();
   },
   "adm-pay-rs": async el => { await post("admin/pay", { [el.dataset.k]: null }); H.ok(); toast("Сброшено", "ok"); admRender(); },
   "adm-pay-on": async el => {

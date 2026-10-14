@@ -20,10 +20,18 @@ CREATE TABLE IF NOT EXISTS payments(charge TEXT PRIMARY KEY, user INTEGER, xtr I
 """)
 
 
+SALE_KEYS = {"shop": "shop_on", "vip": "vip_on", "chest": "chest_on"}   # переключатели продаж в админке → «Продажи»
+
+
+def sale_on(what):
+    """Продаётся ли сейчас: shop — игровые звёзды, vip — VIP, chest — звёздный сундук. По умолчанию всё выключено."""
+    return kv_get(SALE_KEYS[what], "0") == "1"
+
+
 def shop_on():
     """Продажа игровых звёзд за Telegram Stars (пакеты, подарок другу, «Набор дня»). Владелец включает в админке → «Продажи».
     По умолчанию выключена. VIP и сундук продаются всегда."""
-    return kv_get("shop_on", "0") == "1"
+    return sale_on("shop")
 
 
 def pack_bonus(xtr):
@@ -90,7 +98,7 @@ async def on_pre_checkout(pq):
         p = json.loads(pq.get("invoice_payload") or "{}")
         if p.get("k"):
             import premium
-            ok = premium.validate(p, pq.get("total_amount", 0)) and pq.get("currency") == "XTR" and (p.get("k") != "offer" or shop_on())
+            ok = premium.validate(p, pq.get("total_amount", 0)) and pq.get("currency") == "XTR" and sale_on({"offer": "shop"}.get(p.get("k"), p.get("k")))
         else:
             ok = shop_on() and isinstance(p.get("x"), int) and 1 <= p["x"] <= CUSTOM_MAX and int(pq.get("total_amount", 0)) == p["x"] and pq.get("currency") == "XTR"
             if ok and p.get("to"):

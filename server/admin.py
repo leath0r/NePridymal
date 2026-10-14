@@ -475,18 +475,22 @@ def sales(aid=Depends(admin)):
         last.append({"user": user_brief(u) if u else {"id": r["user"], "name": "?"}, "xtr": r["xtr"], "stars": r["stars"], "ts": r["ts"]})
     import shop
     return {"today": per(t - t % 86400), "week": per(t - 7 * 86400), "all": per(0), "days": days, "top": top, "last": last,
-            "shopOn": shop.shop_on(), "canEdit": aid in OWNERS}
+            "sale": {k: shop.sale_on(k) for k in shop.SALE_KEYS}, "canEdit": aid in OWNERS}
 
 
 @app.post(R + "/admin/shop")
 async def shop_toggle(req: Request, aid=Depends(admin)):
-    """Вкл/выкл продажу игровых звёзд за Telegram Stars (только владелец)."""
+    """Вкл/выкл продаж за Telegram Stars: what = shop (игровые звёзды) | vip | chest (только владелец)."""
+    import shop
     if aid not in OWNERS:
-        err("Включать продажу звёзд может только владелец")
-    on = bool((await req.json()).get("on"))
+        err("Включать продажи может только владелец")
+    b = await req.json()
+    what, on = str(b.get("what") or "shop"), bool(b.get("on"))
+    if what not in shop.SALE_KEYS:
+        err("нет такой продажи")
     with tx():
-        db.execute("INSERT INTO kv(k,v) VALUES('shop_on',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", ("1" if on else "0",))
-        log(aid, "shop", None, "продажа звёзд за Telegram Stars: " + ("включена" if on else "выключена"))
+        db.execute("INSERT INTO kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (shop.SALE_KEYS[what], "1" if on else "0"))
+        log(aid, "shop", None, {"shop": "игровые звёзды", "vip": "VIP", "chest": "звёздный сундук"}[what] + " за Telegram Stars: " + ("включено" if on else "выключено"))
     return {"ok": True, "on": on}
 
 

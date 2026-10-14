@@ -28,6 +28,17 @@ function premHTML() {
       <button class="btn sm ${v.until ? "ghost" : "gold"}" data-act="prem-buy" data-k="vip">${v.until ? "Продлить" : ""} ${fmt(v.xtr)} ${ic("tgplane")}</button></div>
   </div>`;
 }
+// выключенное в админке («Продажи») не показываем
+const _premHTML0 = premHTML;
+premHTML = function () {
+  const h = _premHTML0();
+  if (!PREM) return h;
+  const t = document.createElement("template"); t.innerHTML = h;
+  if (PREM.chest.on === false) { const x = t.content.querySelector(".pr-chest"); if (x) x.remove(); }
+  if (PREM.vip.on === false) { const x = t.content.querySelector(".pr-vip"); if (x) x.remove(); }
+  const w = t.content.querySelector(".pr-wrap");
+  return w && w.children.length ? t.innerHTML : "";
+};
 // окно баланса: платные предложения над пакетами
 const _sfPrem = shopFill;
 shopFill = async function () {

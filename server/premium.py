@@ -79,9 +79,10 @@ def premium(uid=Depends(auth)):
     c = E.CASES[o["cid"]]
     cols = chest_info()
     last = q1("SELECT id FROM gifts WHERE owner=? AND id IN (SELECT gift FROM feed WHERE user=? AND cs='chest') ORDER BY id DESC LIMIT 1", uid, uid)
-    return {"vip": {"until": vip_until(uid), "xtr": VIP_XTR, "days": VIP_DAYS},
+    import shop
+    return {"vip": {"until": vip_until(uid), "xtr": VIP_XTR, "days": VIP_DAYS, "on": shop.sale_on("vip")},
             "offer": {**o, "bought": offer_bought(uid) or not _shop_on(), "off": not _shop_on(), "case": {"id": c["id"], "title": c["title"], "cover": c["cover"], "price": c["price"]}},
-            "chest": {"xtr": CHEST_XTR, "cols": cols, "ev": int(sum(x["p"] * x["ev"] for x in cols)), "last": last["id"] if last else 0},
+            "chest": {"on": shop.sale_on("chest"), "xtr": CHEST_XTR, "cols": cols, "ev": int(sum(x["p"] * x["ev"] for x in cols)), "last": last["id"] if last else 0},
             "now": now()}
 
 
@@ -102,8 +103,8 @@ async def premium_invoice(req: Request, uid=Depends(auth)):
     k = str((await req.json()).get("k", ""))
     if k not in KINDS:
         err("Действие устарело — обнови экран")
-    if k == "offer" and not shop.shop_on():
-        err("Покупка звёзд сейчас недоступна")
+    if not shop.sale_on({"offer": "shop"}.get(k, k)):
+        err({"vip": "VIP сейчас не продаётся", "chest": "Звёздный сундук сейчас недоступен"}.get(k, "Покупка звёзд сейчас недоступна"))
     if k == "offer" and offer_bought(uid):
         err("Набор дня уже куплен — завтра будет новый")
     o = offer_today()
