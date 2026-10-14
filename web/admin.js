@@ -6,7 +6,7 @@ const admBytes = b => b >= 1e9 ? (b / 1e9).toFixed(1).replace(".", ",") + " ГБ
 const admSgn = v => `<b class="${v >= 0 ? "tw" : "tl"}">${v >= 0 ? "+" : "−"}⭐ ${fmt(Math.abs(v))}</b>`;
 const admKv = (k, v) => `<div class="row kv"><div class="grow"><div class="s">${k}</div></div>${v}</div>`;
 
-// замочек админки и счётчик FPS спрятаны: админ 5 раз подряд жмёт «Топ» — появляются, ещё 5 раз — исчезают (запоминается на устройстве)
+// замочек админки и счётчик FPS спрятаны: админ 20 раз подряд жмёт «Топ» — появляются, ещё 20 раз — исчезают (запоминается на устройстве)
 const admShown = () => { try { return localStorage.getItem("admShow") === "1"; } catch (e) { return false; } };
 function admShow(on) {
   try { localStorage.setItem("admShow", on ? "1" : "0"); } catch (e) {}
@@ -24,7 +24,7 @@ function admShow(on) {
   document.addEventListener("click", e => {
     if (!ME || !ME.admin || !e.target.closest || !e.target.closest('[data-tab="top"]')) return;
     const now = Date.now(); n = now - last < 1200 ? n + 1 : 1; last = now;
-    if (n < 5) return;
+    if (n < 20) return;
     n = 0;
     const on = !admShown(); admShow(on);
     H.imp("heavy"); toast(on ? "Админка видна" : "Админка скрыта", "ok");
