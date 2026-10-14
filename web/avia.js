@@ -73,9 +73,9 @@ function avScene(path) {
   $("#av-ship").style.left = AV_X0 + (n + 2) * AV_STEP + "px";
   avMove(AV_X0 - 70, 207, 0, true);   // стоит на палубе стартового авианосца
 }
-function avMove(x, y, tilt, instant) {
+function avMove(x, y, tilt, instant, dur) {
   const p = $("#av-p"), w = $("#av-w"), sc = $("#av-sc"); if (!p) return Promise.resolve();
-  const d = instant ? 0 : avFast ? .3 : .6;
+  const d = instant ? 0 : (dur || .6) * (avFast ? .5 : 1);
   p.style.transition = `transform ${d}s cubic-bezier(.45,.05,.35,1)`;
   p.style.transform = `translate(${x}px,${y}px)`;
   p.style.setProperty("--tilt", tilt + "deg");
@@ -135,13 +135,11 @@ async function avGo() {
     await avMove(shipX + 16, 207, 0);
     $("#av-p").classList.remove("fly"); $("#av-p").classList.add("landed"); H.ok();
   } else {
-    // промах должен читаться как промах: раньше самолёт (86 px) падал носом на корму — выглядело «чуть не сел»
-    if (Math.random() < .5) {
-      await avMove(shipX - 145, 262, 58);   // недолёт: клюёт носом, в воду с зазором ~60 px до кормы
-    } else {
-      await avMove(shipX + 200, 172, 2);    // перелёт: проносится над палубой…
-      await avMove(shipX + 245, 262, 55);   // …и падает за носом корабля (корабль 170 px)
-    }
+    // промах — «не дотянул»: задирает нос, теряет скорость и падает почти вертикально, с зазором до кормы.
+    // (падение носом на корму выглядело как «чуть не сел», а перелёт над палубой — как издёвка; самолёт 86 px)
+    await avMove(shipX - 143, 192, -12, false, .5);
+    await avMove(shipX - 139, 212, 18, false, .45);
+    await avMove(shipX - 136, 262, 64, false, .7);
     const sc = $("#av-sc"), pr = $("#av-p").getBoundingClientRect(), sr = sc.getBoundingClientRect();
     sc.style.setProperty("--sx", pr.left - sr.left + pr.width / 2 + "px"); sc.classList.add("splash");
     $("#av-p").classList.add("sunk"); H.err();

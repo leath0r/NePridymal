@@ -43,7 +43,7 @@ DEFAULTS = {
     "reward": conf("franchise.reward", 25000),           # ⭐ владельцу, один раз на аккаунт…
     "players": conf("franchise.reward_players", 10),     # …когда бот приведёт столько новых игроков…
     "level": conf("franchise.reward_level", 5),          # …не ниже этого уровня
-    "cut_pct": 0.5,                                      # % владельцу от дохода игры с игроков его бота (игры + комиссии), раз в сутки
+    "cut_pct": 0.5,                                      # % КАЖДОМУ владельцу бота от всего дохода игры (игры + комиссии), раз в сутки, без потолка (решение владельца игры)
     "max_per_owner": conf("franchise.max_per_owner", 5),  # сверх — бот создан в Telegram, но игра его не подключает
     "game_promo": True,                                  # баннер на главной в игре
     "bot_promo": True,                                   # бот сам предлагает игрокам создать франшизу…
@@ -327,26 +327,35 @@ def cut_income(bid, owner, t0, t1):
                f"WHERE u.came_bot=? AND u.id!=? AND e.ts>=? AND e.ts<? AND e.kind IN {CUT_KINDS}", bid, owner, t0, t1)["s"]
 
 
+def game_income(t0, t1):
+    """Весь доход игры за [t0, t1): проигрыши игроков в играх + все комиссии."""
+    return -q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE ts>=? AND ts<? AND kind IN {CUT_KINDS}", t0, t1)["s"]
+
+
 def _cuts():
-    """Раз в сутки (UTC) — владельцам cut_pct % дохода игры за вчера с игроков их ботов. Из банка игры (kind frcut)."""
+    """Раз в сутки (UTC): КАЖДОМУ владельцу работающего бота (не ниже create_level) — cut_pct % всего дохода игры за вчера.
+    Играть в своём боте не нужно — достаточно держать бота. Из банка игры (kind frcut). Строка fr_cut — одна на владельца в день."""
     pct = cfg("cut_pct")
     day = A.day_start() - 86400
-    for b in list(BOTS.values()):
-        if b["status"] != "on" or q1("SELECT 1 FROM fr_cut WHERE day=? AND bot=?", day, b["id"]):
+    inc = None
+    xp = 100 * (cfg("create_level") - 1) ** 2
+    for r in q("SELECT b.owner, MIN(b.id) bot, MIN(b.username) un FROM bots b JOIN users u ON u.id=b.owner "
+               "WHERE b.status='on' AND u.banned=0 AND u.xp>=? GROUP BY b.owner", xp):
+        if q1("SELECT 1 FROM fr_cut c JOIN bots b ON b.id=c.bot WHERE c.day=? AND b.owner=?", day, r["owner"]):
             continue
-        inc = cut_income(b["id"], b["owner"], day, day + 86400)
+        if inc is None:
+            inc = game_income(day, day + 86400)
         amount = int(inc * pct / 100) if inc > 0 and pct > 0 else 0
         with tx():
-            if q1("SELECT 1 FROM fr_cut WHERE day=? AND bot=?", day, b["id"]):
+            if q1("SELECT 1 FROM fr_cut c JOIN bots b ON b.id=c.bot WHERE c.day=? AND b.owner=?", day, r["owner"]):
                 continue
-            db.execute("INSERT INTO fr_cut(day,bot,income,amount) VALUES(?,?,?,?)", (day, b["id"], inc, amount))
-            if amount and q1("SELECT 1 FROM users WHERE id=? AND banned=0", b["owner"]):
-                db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amount, b["owner"]))
-                event(b["owner"], "frcut", amount)
-            else:
-                amount = 0
+            db.execute("INSERT OR IGNORE INTO fr_cut(day,bot,income,amount) VALUES(?,?,?,?)", (day, r["bot"], inc, amount))
+            if amount:
+                db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amount, r["owner"]))
+                event(r["owner"], "frcut", amount)
         if amount:
-            notify(b["owner"], f"💼 Доход с бота @{esc(b['username'])} за вчера: <b>+{nf(amount)} ⭐</b> ({str(pct).replace('.', ',')}% от {nf(inc)} ⭐, что игра заработала на твоих игроках)")
+            notify(r["owner"], f"💼 Пассивный доход за вчера: <b>+{nf(amount)} ⭐</b> — {str(pct).replace('.', ',')}% от всех комиссий и доходов игры "
+                               f"({nf(inc)} ⭐), пока у тебя есть бот @{esc(r['un'])}")
 
 
 def _rewards():
@@ -391,7 +400,7 @@ async def cmd(m):
     if cfg("create_reward") and not q1("SELECT 1 FROM fr_create WHERE owner=?", uid):
         lines.append(f"🎁 <b>{nf(cfg('create_reward'))} ⭐ сразу</b> за создание (с {cfg('create_level')} уровня, один раз)")
     if cfg("cut_pct"):
-        lines.append(f"💼 <b>{str(cfg('cut_pct')).replace('.', ',')}%</b> каждый день от того, что игра заработала на твоих игроках (игры и комиссии)")
+        lines.append(f"💼 <b>{str(cfg('cut_pct')).replace('.', ',')}%</b> каждый день от всех комиссий и доходов игры — пока у тебя есть бот (с {cfg('create_level')} уровня)")
     if not paid and cfg("reward"):
         lines.append(f"🎁 Ещё <b>{nf(cfg('reward'))} ⭐</b> — когда через твоего бота придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня\n")
     for b in mine:
@@ -437,7 +446,7 @@ def admin_list(aid=Depends(admin)):
                "FROM bots b LEFT JOIN users u ON u.id=b.owner ORDER BY b.created DESC"):
         out.append({**dict(r), "progress": _progress(r["id"], r["owner"]),
                     "cut": q1("SELECT COALESCE(SUM(amount),0) s FROM fr_cut WHERE bot=?", r["id"])["s"],
-                    "today": int(max(0, cut_income(r["id"], r["owner"], A.day_start(), now())) * cfg("cut_pct") / 100)})
+                    "today": int(max(0, game_income(A.day_start(), now())) * cfg("cut_pct") / 100)})
     pr = q1("SELECT COUNT(*) n, COALESCE(SUM(ts>?),0) w FROM fr_promo", now() - 7 * 86400)
     return {"bots": out, "cfg": {k: cfg(k) for k in DEFAULTS}, "defaults": DEFAULTS, "changed": list(CFG), "canEdit": aid in OWNERS,
             "manager": CAN_MANAGE["on"], "promo": {"total": pr["n"], "week": pr["w"], "running": PROMO["running"]},
@@ -549,13 +558,13 @@ def promo_text():
     r, c, pct = cfg("reward"), cfg("create_reward"), cfg("cut_pct")
     pc = str(pct).replace(".", ",")
     perks = ([f"• <b>{nf(c)} ⭐ сразу</b> за создание (с {cfg('create_level')} уровня)"] if c else []) \
-        + ([f"• <b>{pc}% каждый день</b> от всего, что игра заработала на твоих игроках — пассивный доход, пока они играют"] if pct else []) \
+        + ([f"• <b>{pc}% каждый день</b> от всех комиссий и доходов игры — пассивный доход, пока у тебя есть бот"] if pct else []) \
         + ([f"• ещё <b>{nf(r)} ⭐</b>, когда придут {cfg('players')} игроков {cfg('level')}+ уровня"] if r else [])
     return ("🤖 <b>Свой бот с этой игрой" + (" — и доход каждый день</b>" if pct else "</b>") + "\n\n"
             "Одной кнопкой создай свой бот с нашей игрой — без @BotFather и без кода. "
             "Та же игра, тот же баланс, подарки и турниры."
             + ("\n\n💰 <b>Что получаешь:</b>\n" + "\n".join(perks) if perks else "")
-            + "\n\nЗови друзей в своего бота — чем больше они играют, тем больше получаешь ты 👇")
+            + "\n\nСоздай бота — и получай доход каждый день 👇")
 
 
 async def _promo_send(ids):
