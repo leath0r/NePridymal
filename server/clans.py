@@ -46,6 +46,8 @@ PRIZES = conf("clans.war_prizes", [50_000, 25_000, 10_000])
 GOALS = [(250_000, "luck"), (1_000_000, "lux"), (3_000_000, "cups")]
 STAFF = ("owner", "officer")
 TAX_MAX = 0.05                 # налог клана: 0–5% с чистого выигрыша участников
+PAY_TAX = 0.05                 # налог казино с раздачи из казны (с доли каждого участника) — меняется в админке, fees.py
+DONATE_TAX = 0.0               # налог казино со взноса в казну
 BOOST = (0.10, 86400)          # буст дохода: +10% на сутки
 SLOTS_STEP, SLOTS_MAX = 5, 40  # расширение клана
 try:
@@ -217,7 +219,7 @@ def clan(cid: int, uid=Depends(auth)):
             "spend": {"boost": boost_price(len(members)), "boostPct": int(BOOST[0] * 100), "slots": slots_price(c["slots"] or MAX_MEMBERS)
                       if (c["slots"] or MAX_MEMBERS) < SLOTS_MAX else None, "slotsStep": SLOTS_STEP,
                       "keys": {k: E.CASES[k]["price"] * len(members) for k in ("luck", "lux", "cups")},
-                      "keyTitles": {k: E.CASES[k]["title"] for k in ("luck", "lux", "cups")}, "taxMax": TAX_MAX}}
+                      "keyTitles": {k: E.CASES[k]["title"] for k in ("luck", "lux", "cups")}, "taxMax": TAX_MAX, "payTax": PAY_TAX, "donateTax": DONATE_TAX}}
 
 
 @app.post(R + "/clans")
@@ -334,6 +336,10 @@ async def clan_donate(req: Request, uid=Depends(auth)):
             err("Не хватает звёзд")
         before = clan_level(q1("SELECT treasury FROM clans WHERE id=?", cid)["treasury"])
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount, uid))
+        tax = int(amount * DONATE_TAX)
+        if tax:
+            event(uid, "fee", -tax)
+        amount -= tax   # дальше — то, что дошло до казны
         db.execute("UPDATE clans SET treasury=treasury+?, bank=bank+? WHERE id=?", (amount, amount, cid))
         feed(cid, uid, "donate", amount)
         after = clan_level(q1("SELECT treasury FROM clans WHERE id=?", cid)["treasury"])
@@ -342,7 +348,7 @@ async def clan_donate(req: Request, uid=Depends(auth)):
         db.execute("UPDATE clan_members SET donated=donated+? WHERE user=?", (amount, uid))
         event(uid, "clandep", -amount)   # взнос — в казну клана (не в банк казино)
         c = q1("SELECT treasury FROM clans WHERE id=?", cid)
-    return {"ok": True, "stars": bal(uid), "treasury": c["treasury"], "level": clan_level(c["treasury"])}
+    return {"ok": True, "stars": bal(uid), "treasury": c["treasury"], "level": clan_level(c["treasury"]), "tax": tax}
 
 
 # ---------------- итоги недели ----------------
@@ -540,9 +546,13 @@ async def clan_spend(req: Request, uid=Depends(auth)):
             need = sum(shares.values())
             for u, x in shares.items():
                 if x > 0:
-                    db.execute("UPDATE users SET stars=stars+? WHERE id=?", (x, u))
-                    event(u, "clanpay", x)
-                    msgs.append((u, f"🛡 Казна клана [{esc(c['tag'])}]: тебе ⭐ {x:,}".replace(",", " ")))
+                    tax = int(x * PAY_TAX)
+                    db.execute("UPDATE users SET stars=stars+? WHERE id=?", (x - tax, u))
+                    event(u, "clanpay", x - tax)
+                    if tax:
+                        event(u, "fee", -tax)
+                    msgs.append((u, f"🛡 Казна клана [{esc(c['tag'])}]: тебе ⭐ {x - tax:,}".replace(",", " ")
+                                 + (f" (налог ⭐ {tax:,})".replace(",", " ") if tax else "")))
             detail = need
         elif kind == "keys":
             k = str(b.get("cid", ""))

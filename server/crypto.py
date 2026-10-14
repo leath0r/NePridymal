@@ -319,12 +319,18 @@ def crypto_claim(uid=Depends(auth)):
     got = {}
     with tx():
         t = now()
+        tax_st = 0
         for r in q("SELECT asset FROM crypto_stake WHERE user=?", uid):
             sk = _accrue(uid, r["asset"], t)
             if sk["earned"] > 0:
-                _to_wallet(uid, sk["asset"], sk["earned"], 0)
-                db.execute("UPDATE crypto_stake SET earned=0, total=total+? WHERE user=? AND asset=?", (sk["earned"], uid, sk["asset"]))
-                got[sk["asset"]] = sk["earned"]
+                net = sk["earned"] * (1 - STAKE_TAX)
+                if sk["asset"] in PX:
+                    tax_st += (sk["earned"] - net) * PX[sk["asset"]]["usd"] / STAR_USD
+                _to_wallet(uid, sk["asset"], net, 0)
+                db.execute("UPDATE crypto_stake SET earned=0, total=total+? WHERE user=? AND asset=?", (net, uid, sk["asset"]))
+                got[sk["asset"]] = net
+        if int(tax_st):
+            event(uid, "fee", -int(tax_st))
     if not got:
         err("Награды пока нет")
     value = sum(v * (PX[a]["usd"] / STAR_USD if a in PX else 0) for a, v in got.items())
@@ -365,6 +371,7 @@ async def crypto_swap(aid: str, req: Request, uid=Depends(auth)):
 # ============================================================ фьючерсы: лонг/шорт с плечом
 LEVS = [2, 5, 10, 25, 50]
 FUT_FEE = 0.001         # 0,1% от объёма позиции при открытии и закрытии
+STAKE_TAX = 0.0         # налог с наград стейкинга (часть монет) — меняется в админке, fees.py
 LIQ = 0.9               # ликвидация, когда убыток съел 90% маржи
 MAX_POS = 10
 MIN_MARGIN = 50

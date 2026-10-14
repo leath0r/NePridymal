@@ -165,7 +165,7 @@ Object.assign(ACT, {
   },
   "clan-pay": async () => {
     const c = topSheet()._clan;
-    const v = await promptM("Раздать из казны", `В казне ⭐ ${fmt(c.bank)}. Сумма делится между ${c.members} участниками поровну.`, String(Math.floor(c.bank / 2)), "Раздать");
+    const v = await promptM("Раздать из казны", `В казне ⭐ ${fmt(c.bank)}. Сумма делится между ${c.members} участниками поровну.${c.spend && c.spend.payTax ? ` Налог ${pctF(c.spend.payTax)} с каждой доли уходит в банк игры.` : ""}`, String(Math.floor(c.bank / 2)), "Раздать");
     if (v == null || !(+v > 0)) return;
     await post("clans/spend", { kind: "pay", amount: Math.floor(+v), mode: "equal" }); H.ok(); toast("Раздано!", "ok"); await loadMe(); await clanRefresh();
   },
@@ -194,8 +194,9 @@ Object.assign(ACT, {
   },
   "clan-kick": async el => { if (!await confirmM("Исключить игрока?", "Он сможет вступить снова через 12 часов.", "Исключить")) return; await post(`clans/kick/${el.dataset.id}`); toast("Исключён"); await clanRefresh(); },
   "clan-donate": async () => {
-    const v = await promptM("Взнос в казну", "Звёзды уйдут в банк игры и прокачают уровень клана.", "1000", "Внести");
+    const c = topSheet()._clan, dt = c && c.spend ? c.spend.donateTax : 0;
+    const v = await promptM("Взнос в казну", `Звёзды уйдут в казну клана и прокачают его уровень.${dt ? ` Налог ${pctF(dt)} — в банк игры.` : ""}`, "1000", "Внести");
     if (v == null || !(Math.floor(+v) >= 100)) return v == null ? null : toast("Взнос от ⭐ 100");
-    const r = await post("clans/donate", { amount: Math.floor(+v) }); setStars(r.stars); H.ok(); toast(`Казна: ⭐ ${fmt(r.treasury)} · уровень ${r.level}`, "ok"); await clanRefresh();
+    const r = await post("clans/donate", { amount: Math.floor(+v) }); setStars(r.stars); H.ok(); toast(`Казна: ⭐ ${fmt(r.treasury)} · уровень ${r.level}${r.tax ? ` · налог ⭐ ${fmt(r.tax)}` : ""}`, "ok"); await clanRefresh();
   },
 });
