@@ -350,6 +350,7 @@ async function renderCases() {
   const lvl = ME.lv.level;
   v.innerHTML = `
     ${ME.rooms ? `<button class="invbar" data-act="my-invites">${ic("userPlus")}<span><b>Тебя зовут за стол</b>${ME.rooms} ${plural(ME.rooms, ["приглашение", "приглашения", "приглашений"])} — нажми, чтобы сесть</span>${ic("chev")}</button>` : ""}
+    ${frBanner()}
     <div class="sec-t"><span class="live-dot"></span>Живая лента</div><div class="feed" id="feed"></div>
     <div class="promo">
       <button data-act="case" data-id="free" class="${ME.freeIn ? "" : "ready"}"><span class="pic g">${ic("gift")}</span><div><b>Бесплатный</b><span id="free-t">${ME.freeIn ? "через " + clock(ME.freeIn) : "можно открыть!"}</span></div></button>
@@ -500,7 +501,7 @@ function openDaily() {
     <div class="sec-t">Ещё звёзды</div>
     <div class="box">
       <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">+${fmt(ME.refBonus)} ⭐ тебе и ему</div></div><span class="pill">${ME.refs}</span></div>
-      ${ME.franchise ? `<div class="row tap" data-act="franchise"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.reward ? `Создай за 1 тап · +${fmt(ME.franchise.reward)} ⭐ за ${ME.franchise.need} игроков` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
+      ${ME.franchise ? `<div class="row tap" data-act="franchise-info"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.reward ? `Создай за 1 тап · +${fmt(ME.franchise.reward)} ⭐ за ${ME.franchise.need} игроков` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
       <div class="row tap" data-act="case" data-id="free"><span class="pic g">${ic("gift")}</span><div class="grow"><div class="t">Бесплатный кейс</div><div class="s">${ME.freeIn ? "через " + clock(ME.freeIn) : "готов"}</div></div></div>
       <div class="row"><span class="pic y">${ic("medal")}</span><div class="grow"><div class="t">Уровни</div><div class="s">За каждый новый уровень — бонус звёздами</div></div></div>
     </div>
@@ -721,6 +722,28 @@ async function newTrade(uid) {
   };
 }
 
+// ============================================================ франшиза: свой бот с этой игрой (franchise.py)
+const FR_HIDE = "frHide";   // крестик на баннере — прячем на 14 дней (только у этого игрока)
+function frBanner() {
+  const f = ME.franchise;
+  if (!f || !f.banner || f.mine.length) return "";
+  try { if (Date.now() - (+localStorage.getItem(FR_HIDE) || 0) < 14 * 864e5) return ""; } catch (e) { }
+  return `<button class="invbar" data-act="franchise-info">${ic("rocket")}<span><b>Свой бот с этой игрой</b>${f.reward ? `+${fmt(f.reward)} ⭐ за ${f.need} игроков · создай за 1 тап` : "создай за 1 тап — без @BotFather"}</span><span data-act="franchise-hide" style="padding:6px;opacity:.6">✕</span></button>`;
+}
+function franchiseInfo() {
+  const f = ME.franchise; if (!f) return;
+  const st = { on: "работает", off: "отключён", limit: "не подключён (лимит)" };
+  openSheet(`<div style="text-align:center;padding-top:10px"><div style="font-size:64px">🤖</div><h2 style="margin:4px 0">Свой бот с этой игрой</h2>
+    <p class="hint" style="margin:0 0 14px">Одна кнопка — Telegram создаст бота за пару секунд. Без @BotFather и без кода.</p></div>
+    <div class="box">
+      <div class="row"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Та же игра</div><div class="s">Кейсы, игры, маркет и турниры — всё как здесь</div></div></div>
+      <div class="row"><span class="pic g">${ic("userPlus")}</span><div class="grow"><div class="t">Общие аккаунты</div><div class="s">У игроков тот же баланс и подарки в любом боте</div></div></div>
+      ${f.reward ? `<div class="row"><span class="pic y">${ic("gift")}</span><div class="grow"><div class="t">+${fmt(f.reward)} ⭐ тебе</div><div class="s">Когда через твоего бота придут ${f.need} новых игроков и дорастут до ${f.level} уровня (один раз)</div></div></div>` : ""}
+    </div>
+    ${f.mine.length ? `<div class="sec-t">Мои боты</div><div class="box">${f.mine.map(b => `<div class="row kv"><div class="grow"><div class="t">@${esc(b.username || "?")}</div><div class="s">${st[b.status] || b.status}${f.reward && b.status === "on" ? ` · игроков ${b.progress}/${f.need}` : ""}</div></div></div>`).join("")}</div>` : ""}
+    <div class="btns"><button class="btn gold" data-act="franchise">${ic("rocket")}${f.mine.length ? "Создать ещё бота" : "Создать бота"}</button></div>`);
+}
+
 // ============================================================ приглашение
 function invite() {
   const text = `Залетай в кейс-симулятор подарков 🎁 По моей ссылке оба получим по ${ME.refBonus} ⭐ (игровых)`;
@@ -773,6 +796,8 @@ const ACT = {
   "edit-profile": () => editProfile(),
   "save-profile": () => topSheet()._save(),
   invite: () => invite(),
+  "franchise-info": () => franchiseInfo(),
+  "franchise-hide": () => { try { localStorage.setItem(FR_HIDE, Date.now()); } catch (e) { } H.sel(); renderCases(); },
   franchise: () => inTg ? tg.openTelegramLink(ME.franchise.link) : window.open(ME.franchise.link),   // t.me/newbot/<главный бот> — окно создания бота
   fr: async el => { const r = await post(`friends/${el.dataset.id}/${el.dataset.v}`); H.sel(); toast({ friend: "Теперь вы друзья", outgoing: "Заявка отправлена", none: "Готово" }[r.rel] || "Готово"); await loadMe(); refreshProfileSheets(); refreshFriends(); },
   "trade-new": el => newTrade(+el.dataset.id),

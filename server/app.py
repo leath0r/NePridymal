@@ -379,7 +379,7 @@ def auth(request: Request, x_init_data: str = Header(""), x_dev_user: str = Head
     v = franchise.verify(x_init_data)   # главный бот — HMAC токеном, дочерние — подпись Telegram (franchise.py)
     if not v or "user" not in v[1]:
         err("unauthorized", 401)
-    bid, data = v
+    bid, data = v[0], v[1]
     if bid and not franchise.active(bid):
         err(f"Этот бот отключён — играй в @{BOT_NAME}", 403)
     uid, _ = register(json.loads(data["user"]), data.get("start_param", ""), bid)
@@ -426,7 +426,10 @@ def notify(uid, text, url=None):
 
     async def send():
         try:
-            r = await tg_call("sendMessage", _token=franchise.token_for(uid), chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
+            tok = franchise.token_for(uid)
+            r = await tg_call("sendMessage", _token=tok, chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
+            if not r.get("ok") and tok != TOKEN:   # бот-франшиза не смог (игрок его заблокировал и т. п.) — пробуем главным
+                r = await tg_call("sendMessage", _token=TOKEN, chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
             if not r.get("ok"):
                 print("notify fail", uid, r.get("description"), flush=True)
         except Exception as e:

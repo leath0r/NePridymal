@@ -184,9 +184,32 @@ async function admRender(el = topSheet()) {
       <div class="disc">Если двое постоянно перекидывают звёзды только друг другу — это может быть один человек с двух аккаунтов. Нажми на пару, чтобы открыть карточку отправителя.</div>`;
     starify(body);
   } else if (ADM.tab === "fr") {   // франшиза: боты игроков (franchise.py)
-    const d = await api("admin/franchise");
+    const d = await api("admin/franchise"), c = d.cfg, ed = d.canEdit;
     const st = { on: "работает", off: "отключён", limit: "лимит владельца" };
-    body.innerHTML = `<div class="box">${d.bots.map(b => `<div class="row kv">
+    const sw = (k, title, hint) => `<div class="row kv"><div class="grow"><div class="t">${title}</div><div class="s" style="white-space:normal">${hint}</div></div>
+      ${ed ? `<button class="sw${c[k] ? " on" : ""}" data-act="adm-frc-sw" data-k="${k}" data-v="${c[k] ? 0 : 1}"></button>` : `<b>${c[k] ? "да" : "нет"}</b>`}</div>`;
+    const field = (k, title, hint, unit) => `<div class="adm-odd"><div class="adm-oh"><b>${title}</b>${d.changed.includes(k) ? `<span class="adm-tag">изменено</span>` : ""}</div>
+      <div class="adm-os">${hint} · по умолчанию ${fmt(d.defaults[k])}</div>
+      ${ed ? `<div class="adm-oc"><input class="adm-oi" inputmode="numeric" data-k="${k}" value="${c[k]}"><span class="adm-op">${unit}</span>
+        <button class="btn sm gold" data-act="adm-frc" data-k="${k}">${ic("check")}Сохранить</button>
+        ${d.changed.includes(k) ? `<button class="btn sm ghost" data-act="adm-frc-rs" data-k="${k}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${fmt(c[k])} ${unit}</b></div>`}</div>`;
+    body.innerHTML = `${d.manager ? "" : `<div class="disc" style="margin-top:0">⚠️ Главный бот ещё не может создавать ботов: @BotFather → Mini App → бот → включить управление ботами (Bot Management). Пока не включено, игроки франшизу не видят.</div>`}
+      <div class="sec-t">Франшиза</div>
+      <div class="box">
+        ${sw("on", "Франшиза включена", "Кнопка в игре, /franchise в боте, подключение новых ботов. Уже созданные боты работают, пока не отключишь их ниже")}
+        ${sw("game_promo", "Баннер в игре", "Плашка «Свой бот с этой игрой» на главной (игрок может скрыть на 14 дней)")}
+        ${sw("bot_promo", "Бот предлагает игрокам", "Сообщение «создай свой бот» — активным игрокам с включёнными уведомлениями, раз в 30 минут понемногу")}
+        ${field("reward", "Награда владельцу", "один раз на аккаунт · 0 — без награды", "⭐")}
+        ${field("players", "Сколько игроков привести", "новых игроков, пришедших через его бота", "шт")}
+        ${field("level", "Уровень этих игроков", "против твинков: уровень даётся за обороты", "ур.")}
+        ${field("max_per_owner", "Ботов на одного игрока", "сверх лимита бот создаётся в Telegram, но к игре не подключается", "шт")}
+        ${field("promo_days", "Предложение от бота — не чаще", "одному игроку раз в столько дней", "дн")}
+        ${field("promo_level", "Предлагать с уровня", "новичкам рано", "ур.")}
+      </div>
+      <div class="box" style="margin-top:10px">${admKv("Предложений отправлено", `<b>${fmt(d.promo.total)}</b> · за 7 дн ${fmt(d.promo.week)}`)}</div>
+      <div class="btns"><button class="btn ghost" data-act="adm-frc-promo"${d.promo.running ? " disabled" : ""}>${ic("send")}${d.promo.running ? "Рассылка идёт…" : "Разослать предложение сейчас"}</button></div>
+      <div class="sec-t">Боты игроков · ${d.bots.length}</div>
+      <div class="box">${d.bots.map(b => `<div class="row kv">
         <div class="grow" style="min-width:0"><div class="t">@${esc(b.username || "?")}</div>
           <div class="s" style="white-space:normal">${esc(b.oname || "id " + b.owner)} · ${admDate(b.created)} · ${st[b.status] || b.status}<br>пришло ${fmt(b.came)} · играют сейчас ${fmt(b.now)} · ${b.paid ? "награда выплачена" : `к награде ${b.progress}/${d.need}`}</div></div>
         ${b.status === "limit" ? "" : `<button class="sw${b.status === "on" ? " on" : ""}" data-act="adm-fr" data-id="${b.id}" data-v="${b.status === "on" ? 0 : 1}"></button>`}</div>`).join("")
@@ -381,6 +404,21 @@ Object.assign(ACT, {
     const on = el.dataset.v === "1";
     if (!on && !await confirmM("Выключить переводы?", "Игроки не смогут переводить звёзды друг другу, пока не включишь обратно.", "Выключить")) return;
     await post("admin/pay", { on }); H.ok(); toast(on ? "Переводы включены" : "Переводы выключены", "ok"); admRender();
+  },
+  "adm-frc-sw": async el => {
+    const on = el.dataset.v === "1";
+    await post("admin/franchise/cfg", { [el.dataset.k]: on }); H.ok(); toast(on ? "Включено" : "Выключено", "ok"); admRender();
+  },
+  "adm-frc": async el => {
+    const k = el.dataset.k, v = topSheet().querySelector(`.adm-oi[data-k="${k}"]`).value;
+    await post("admin/franchise/cfg", { [k]: v }); H.ok(); toast("Сохранено", "ok"); admRender();
+  },
+  "adm-frc-rs": async el => { await post("admin/franchise/cfg", { [el.dataset.k]: null }); H.ok(); toast("Вернули по умолчанию", "ok"); admRender(); },
+  "adm-frc-promo": async el => {
+    if (!await confirmM("Разослать предложение?", "Получат активные игроки нужного уровня с включёнными уведомлениями, кому ещё не отправляли (или давно).", "Разослать")) return;
+    el.disabled = true;
+    try { const r = await post("admin/franchise/promo"); H.ok(); toast(`Отправляем ${fmt(r.total)} игрокам`, "ok"); admRender(); }
+    finally { el.disabled = false; }
   },
   "adm-fr": async el => {
     const on = el.dataset.v === "1";

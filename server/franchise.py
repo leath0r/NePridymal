@@ -14,9 +14,10 @@
 """
 import asyncio
 import base64
-import os
 import hashlib
 import hmac
+import json
+import os
 import secrets
 import urllib.parse
 
@@ -26,12 +27,33 @@ from fastapi.responses import JSONResponse
 from settings import conf
 import app as A
 from app import (ADMINS, APP_URL, BOT_NAME, CUR_TOKEN, R, TOKEN, VIA_BOT, app, db, err, esc, event, notify, now, q, q1, tg_call, tx)
-from admin import admin, log
+from admin import OWNERS, admin, log
 
-REWARD = conf("franchise.reward", 25000)               # ⭐ владельцу, один раз на аккаунт
-REWARD_PLAYERS = conf("franchise.reward_players", 10)  # …когда бот приведёт столько новых игроков
-REWARD_LEVEL = conf("franchise.reward_level", 5)       # …не ниже этого уровня
-MAX_PER_OWNER = conf("franchise.max_per_owner", 5)      # сверх — бот создан в Telegram, но игра его не подключает
+# настройки — в админке («Боты»), хранятся в kv 'frcfg'; settings.toml [franchise] — только значения по умолчанию
+DEFAULTS = {
+    "on": True,                                          # франшиза включена: кнопка в игре, /franchise, подключение новых ботов
+    "reward": conf("franchise.reward", 25000),           # ⭐ владельцу, один раз на аккаунт…
+    "players": conf("franchise.reward_players", 10),     # …когда бот приведёт столько новых игроков…
+    "level": conf("franchise.reward_level", 5),          # …не ниже этого уровня
+    "max_per_owner": conf("franchise.max_per_owner", 5),  # сверх — бот создан в Telegram, но игра его не подключает
+    "game_promo": True,                                  # баннер на главной в игре
+    "bot_promo": True,                                   # бот сам предлагает игрокам создать франшизу…
+    "promo_days": 30,                                    # …не чаще раза в N дней одному игроку…
+    "promo_level": 3,                                    # …и только с этого уровня (новичкам рано)
+}
+LIMITS = {"reward": (0, 1_000_000), "players": (1, 1000), "level": (1, 100), "max_per_owner": (1, 50),
+          "promo_days": (1, 365), "promo_level": (1, 100)}
+CFG = {}
+try:
+    CFG.update({k: v for k, v in json.loads(A.kv_get("frcfg", "{}")).items() if k in DEFAULTS})
+except Exception:
+    pass
+
+
+def cfg(k):
+    return CFG.get(k, DEFAULTS[k])
+
+
 MAX_AGE = conf("franchise.max_age_hours", 24) * 3600    # срок initData из дочернего бота (у главного — 7 дней)
 # публичный ключ Telegram для initData.signature (core.telegram.org/bots/webapps, production); TG_PUBKEY — для тестов
 PUBKEY = os.environ.get("TG_PUBKEY", "e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d")
@@ -40,6 +62,7 @@ db.executescript("""
 CREATE TABLE IF NOT EXISTS bots(id INTEGER PRIMARY KEY, username TEXT, name TEXT, token TEXT, owner INTEGER,
   secret TEXT, status TEXT DEFAULT 'on', created INTEGER, paid INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS bots_owner ON bots(owner);
+CREATE TABLE IF NOT EXISTS fr_promo(user INTEGER PRIMARY KEY, ts INTEGER, n INTEGER DEFAULT 1);
 """)
 for _c in ("bot", "came_bot"):   # bot — через какого бота игрок заходил последним (уведомления, ссылки); came_bot — откуда пришёл
     try:
@@ -84,19 +107,20 @@ def verify(init):
     if not init:
         return None
     hit = _CACHE.get(init)
-    if hit:
-        return hit
+    if hit:   # срок проверяем и для кэша — иначе сессия жила бы, пока кэш не переполнится
+        return hit if now() - hit[2] <= (MAX_AGE if hit[0] else 7 * 86400) else None
     data = dict(urllib.parse.parse_qsl(init, keep_blank_values=True))
     h = data.pop("hash", None)
     if not h:
         return None
-    age = now() - int(data.get("auth_date", 0) or 0)
+    ad = int(data.get("auth_date", 0) or 0) if str(data.get("auth_date", "")).isdigit() else 0
+    age = now() - ad
     dcs = "\n".join(f"{k}={data[k]}" for k in sorted(data))   # для HMAC — все поля, кроме hash (signature тоже)
     sig = data.pop("signature", None)
     res = None
     if hmac.compare_digest(hmac.new(A.SECRET, dcs.encode(), hashlib.sha256).hexdigest(), h):
         if age <= 7 * 86400:
-            res = (0, data)
+            res = (0, data, ad)
     elif sig and BOTS:
         try:
             raw = base64.urlsafe_b64decode(sig + "=" * (-len(sig) % 4))
@@ -109,13 +133,13 @@ def verify(init):
             except Exception:
                 continue
             if age <= MAX_AGE:
-                res = (bid, data)
+                res = (bid, data, ad)
             break
     if res:
         if len(_CACHE) > 20000:
             _CACHE.clear()
         _CACHE[init] = res
-    return res
+    return res   # (bot, data, auth_date)
 
 
 @app.middleware("http")
@@ -171,7 +195,7 @@ async def on_managed(mb):
             await _setup(old)
         return
     n = q1("SELECT COUNT(*) n FROM bots WHERE owner=? AND status!='limit'", owner)["n"]
-    st = "on" if n < MAX_PER_OWNER else "limit"
+    st = "limit" if n >= cfg("max_per_owner") else "on" if cfg("on") else "off"
     b = {"id": bid, "username": bot.get("username"), "name": bot.get("first_name"), "token": tok, "owner": owner,
          "secret": secrets.token_urlsafe(24), "status": st, "created": now(), "paid": 0}
     with tx():
@@ -179,26 +203,34 @@ async def on_managed(mb):
                    (bid, b["username"], b["name"], tok, owner, b["secret"], st, b["created"]))
     BOTS[bid] = b
     if st == "limit":
-        notify(owner, f"🤖 Бот @{esc(b['username'])} создан, но в игру не подключён: у тебя уже {MAX_PER_OWNER} ботов — это максимум")
+        notify(owner, f"🤖 Бот @{esc(b['username'])} создан, но в игру не подключён: у тебя уже {cfg('max_per_owner')} ботов — это максимум")
+        return
+    if st == "off":
+        notify(owner, f"🤖 Бот @{esc(b['username'])} создан, но подключение новых ботов сейчас выключено — подключим, когда откроем снова")
         return
     await _setup(b)
     paid = q1("SELECT 1 FROM bots WHERE owner=? AND paid=1", owner)
     notify(owner, f"🤖 Твой бот @{esc(b['username'])} готов — в нём та же игра и тот же аккаунт.\n\nДелись ссылкой t.me/{esc(b['username'])}"
-           + ("" if paid else f"\n\n🎁 Когда через него придут {REWARD_PLAYERS} новых игроков и дорастут до {REWARD_LEVEL} уровня — "
-                              f"тебе <b>{REWARD:,} ⭐</b>".replace(",", " ")))
+           + ("" if paid or not cfg("reward") else f"\n\n🎁 Когда через него придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня — "
+                                                    f"тебе <b>{cfg('reward'):,} ⭐</b>".replace(",", " ")))
+
+
+NEW_LINK = f"https://t.me/newbot/{BOT_NAME}?name=" + urllib.parse.quote("Кейсы и подарки")   # окно создания бота, менеджер — главный
 
 
 def offer(uid):
-    """Для /me: ссылка создания бота (t.me/newbot — менеджер главный бот) и награда, если ещё не получена."""
-    if not CAN_MANAGE["on"]:
+    """Для /me: ссылка создания бота, награда (если ещё не получена), мои боты с прогрессом, показывать ли баннер."""
+    if not (CAN_MANAGE["on"] and cfg("on")):
         return None
-    paid = q1("SELECT 1 FROM bots WHERE owner=? AND paid=1", uid)
-    return {"link": f"https://t.me/newbot/{BOT_NAME}?name=" + urllib.parse.quote("Кейсы и подарки"),
-            "reward": 0 if paid else REWARD, "need": REWARD_PLAYERS}
+    mine = [b for b in BOTS.values() if b["owner"] == uid]
+    paid = any(b["paid"] for b in mine)
+    return {"link": NEW_LINK, "reward": 0 if paid else cfg("reward"), "need": cfg("players"), "level": cfg("level"),
+            "banner": cfg("game_promo"),
+            "mine": [{"username": b["username"], "status": b["status"], "progress": _progress(b["id"], uid)} for b in mine]}
 
 
 def _progress(bid, owner):
-    xp = 100 * (REWARD_LEVEL - 1) ** 2   # app.level(): L = √(xp/100) + 1
+    xp = 100 * (cfg("level") - 1) ** 2   # app.level(): L = √(xp/100) + 1
     return q1("SELECT COUNT(*) n FROM users WHERE came_bot=? AND id!=? AND banned=0 AND xp>=?", bid, owner, xp)["n"]
 
 
@@ -206,16 +238,17 @@ def _rewards():
     for b in list(BOTS.values()):
         if b["status"] != "on" or b["paid"]:
             continue
-        if _progress(b["id"], b["owner"]) < REWARD_PLAYERS:
+        if not cfg("reward") or _progress(b["id"], b["owner"]) < cfg("players"):
             continue
+        reward = cfg("reward")
         with tx():   # один раз на владельца — даже если ботов несколько
             if q1("SELECT 1 FROM bots WHERE owner=? AND paid=1", b["owner"]) or not q1("SELECT 1 FROM users WHERE id=?", b["owner"]):
                 continue
             db.execute("UPDATE bots SET paid=1 WHERE id=?", (b["id"],))
-            db.execute("UPDATE users SET stars=stars+? WHERE id=?", (REWARD, b["owner"]))
-            event(b["owner"], "franchise", REWARD)
+            db.execute("UPDATE users SET stars=stars+? WHERE id=?", (reward, b["owner"]))
+            event(b["owner"], "franchise", reward)
         b["paid"] = 1
-        notify(b["owner"], f"🎉 Твой бот @{esc(b['username'])} привёл {REWARD_PLAYERS} игроков — тебе <b>{REWARD:,} ⭐</b>".replace(",", " "))
+        notify(b["owner"], f"🎉 Твой бот @{esc(b['username'])} привёл {cfg('players')} игроков — тебе <b>{reward:,} ⭐</b>".replace(",", " "))
 
 
 async def reward_loop():
@@ -231,19 +264,19 @@ async def reward_loop():
 async def cmd(m):
     """/franchise в главном боте: кнопка создания + мои боты и прогресс награды."""
     uid = m["from"]["id"]
-    if not CAN_MANAGE["on"]:
+    if not (CAN_MANAGE["on"] and cfg("on")):
         await tg_call("sendMessage", chat_id=uid, text="🤖 Свои боты скоро появятся — следи за новостями")
         return
     mine = [b for b in BOTS.values() if b["owner"] == uid]
     paid = any(b["paid"] for b in mine)
     lines = ["🤖 <b>Свой бот с этой игрой</b>\n",
              "Жми кнопку — Telegram создаст бота за пару секунд, без @BotFather. В нём та же игра, тот же баланс и подарки у всех игроков.\n"]
-    if not paid:
-        lines.append(f"🎁 Когда через твоего бота придут {REWARD_PLAYERS} новых игроков и дорастут до {REWARD_LEVEL} уровня — "
-                     f"<b>{REWARD:,} ⭐</b> (один раз на аккаунт)\n".replace(",", " "))
+    if not paid and cfg("reward"):
+        lines.append(f"🎁 Когда через твоего бота придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня — "
+                     f"<b>{cfg('reward'):,} ⭐</b> (один раз на аккаунт)\n".replace(",", " "))
     for b in mine:
         st = {"on": "работает", "off": "отключён", "limit": "не подключён (лимит)"}.get(b["status"], b["status"])
-        lines.append(f"• @{esc(b['username'])} — {st}" + ("" if paid or b["status"] != "on" else f", игроков: {_progress(b['id'], uid)}/{REWARD_PLAYERS}"))
+        lines.append(f"• @{esc(b['username'])} — {st}" + ("" if paid or b["status"] != "on" else f", игроков: {_progress(b['id'], uid)}/{cfg('players')}"))
     kb = {"keyboard": [[{"text": "🤖 Создать своего бота",
                          "request_managed_bot": {"request_id": 1, "suggested_name": "Кейсы и подарки", "suggested_username": "gifts_case"}}]],
           "resize_keyboard": True, "one_time_keyboard": True}
@@ -283,7 +316,56 @@ def admin_list(aid=Depends(admin)):
                "(SELECT COUNT(*) FROM users WHERE came_bot=b.id) came, (SELECT COUNT(*) FROM users WHERE bot=b.id) now "
                "FROM bots b LEFT JOIN users u ON u.id=b.owner ORDER BY b.created DESC"):
         out.append({**dict(r), "progress": _progress(r["id"], r["owner"])})
-    return {"bots": out, "reward": REWARD, "need": REWARD_PLAYERS, "level": REWARD_LEVEL}
+    pr = q1("SELECT COUNT(*) n, COALESCE(SUM(ts>?),0) w FROM fr_promo", now() - 7 * 86400)
+    return {"bots": out, "cfg": {k: cfg(k) for k in DEFAULTS}, "defaults": DEFAULTS, "changed": list(CFG), "canEdit": aid in OWNERS,
+            "manager": CAN_MANAGE["on"], "promo": {"total": pr["n"], "week": pr["w"], "running": PROMO["running"]},
+            "need": cfg("players"), "reward": cfg("reward"), "level": cfg("level")}
+
+
+@app.post(R + "/admin/franchise/cfg")
+async def admin_cfg(req: Request, aid=Depends(admin)):
+    if aid not in OWNERS:
+        err("Менять настройки франшизы может только владелец")
+    body = await req.json()
+    if not isinstance(body, dict):
+        err("неверные данные")
+    cur = dict(CFG)
+    for k, v in body.items():
+        if k not in DEFAULTS:
+            continue
+        if v is None:
+            cur.pop(k, None)
+        elif isinstance(DEFAULTS[k], bool):
+            cur[k] = v in (True, 1, "1", "true")
+        else:
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                err("введи целое число")
+            lo, hi = LIMITS[k]
+            if not lo <= v <= hi:
+                err(f"от {lo} до {hi}")
+            cur[k] = v
+    with tx():
+        db.execute("INSERT INTO kv(k,v) VALUES('frcfg',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur),))
+        log(aid, "frcfg", None, ", ".join(f"{k}={cur.get(k, DEFAULTS[k])}" for k in DEFAULTS))
+    CFG.clear()
+    CFG.update(cur)
+    return {"ok": True, "cfg": {k: cfg(k) for k in DEFAULTS}}
+
+
+@app.post(R + "/admin/franchise/promo")
+async def admin_promo(aid=Depends(admin)):
+    """Разослать предложение сейчас (тем же правилам: уровень, раз в N дней, включённые уведомления)."""
+    if PROMO["running"]:
+        err("рассылка уже идёт")
+    if not (CAN_MANAGE["on"] and cfg("on")):
+        err("франшиза выключена или главный бот ещё не менеджер (@BotFather)")
+    ids = await asyncio.get_running_loop().run_in_executor(None, _promo_targets, 2000)
+    with tx():
+        log(aid, "frpromo", None, f"{len(ids)} игрокам")
+    asyncio.create_task(_promo_send(ids))
+    return {"ok": True, "total": len(ids)}
 
 
 @app.post(R + "/admin/franchise/{bid}")
@@ -301,11 +383,76 @@ async def admin_toggle(bid: int, req: Request, aid=Depends(admin)):
     return {"ok": True, "status": b["status"]}
 
 
+# ============================== бот предлагает игрокам создать франшизу ==============================
+PROMO = {"running": False}
+
+
+def _promo_targets(limit):
+    """Активные игроки нужного уровня с включёнными сообщениями от бота, без своего бота; одному — не чаще раза в promo_days."""
+    xp = 100 * (cfg("promo_level") - 1) ** 2
+    t = now()
+    return [r[0] for r in q("SELECT u.id FROM users u LEFT JOIN fr_promo p ON p.user=u.id "
+                             "WHERE u.banned=0 AND COALESCE(u.notif,1)=1 AND u.xp>=? AND u.seen>? AND (p.ts IS NULL OR p.ts<?) "
+                             "AND u.id NOT IN (SELECT owner FROM bots) ORDER BY u.seen DESC LIMIT ?",
+                             xp, t - 14 * 86400, t - cfg("promo_days") * 86400, limit)]
+
+
+def promo_text():
+    r = cfg("reward")
+    return ("🤖 <b>Создай свой бот с этой игрой</b>\n\n"
+            "Одна кнопка — и у тебя свой бот: та же игра, кейсы, маркет и турниры, без @BotFather и без кода. "
+            "Зови друзей в своего бота и собирай свою аудиторию."
+            + (f"\n\n🎁 Когда через него придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня — "
+               f"<b>{r:,} ⭐</b> тебе".replace(",", " ") if r else ""))
+
+
+async def _promo_send(ids):
+    PROMO["running"] = True
+    kb = {"inline_keyboard": [[{"text": "🤖 Создать бота", "url": NEW_LINK}],
+                              [{"text": "Открыть игру", "web_app": {"url": APP_URL}}]]}
+    try:
+        for uid in ids:
+            with tx():   # отмечаем до отправки: сбой посреди рассылки не приведёт к повтору
+                db.execute("INSERT INTO fr_promo(user,ts) VALUES(?,?) ON CONFLICT(user) DO UPDATE SET ts=excluded.ts, n=n+1", (uid, now()))
+            try:
+                r = await tg_call("sendMessage", _token=token_for(uid), chat_id=uid, text=promo_text(), parse_mode="HTML", reply_markup=kb)
+                if not r.get("ok") and token_for(uid) != TOKEN:
+                    await tg_call("sendMessage", _token=TOKEN, chat_id=uid, text=promo_text(), parse_mode="HTML", reply_markup=kb)
+            except Exception as e:
+                print("franchise promo", uid, e, flush=True)
+            await asyncio.sleep(0.05)   # лимит Telegram ~30 сообщений/с
+    finally:
+        PROMO["running"] = False
+
+
+async def promo_loop():
+    await asyncio.sleep(300)
+    while True:
+        try:
+            if CAN_MANAGE["on"] and cfg("on") and cfg("bot_promo") and not PROMO["running"]:
+                ids = await asyncio.get_running_loop().run_in_executor(None, _promo_targets, 300)   # понемногу, раз в 30 мин
+                if ids:
+                    await _promo_send(ids)
+        except Exception as e:
+            print("franchise promo loop", e, flush=True)
+        await asyncio.sleep(1800)
+
+
 async def _check(b):
     """Вебхук и кнопка «Играть» — наши? Иначе владелец мог подменить Mini App и собирать входы игроков."""
     w = await tg_call("getWebhookInfo", _token=b["token"])
     if not w.get("ok"):
-        return None   # токен сменили — придёт апдейт managed_bot с новым
+        if w.get("error_code") != 401:
+            return None   # сбой Telegram — проверим в следующий раз
+        # токен не принимается: сменили (апдейт managed_bot мог потеряться) или бота удалили
+        r = await tg_call("getManagedBotToken", _token=TOKEN, user_id=b["id"])
+        if not r.get("ok"):
+            return "бот удалён или больше не управляется игрой"
+        with tx():
+            db.execute("UPDATE bots SET token=? WHERE id=?", (r["result"], b["id"]))
+        b["token"] = r["result"]
+        await _setup(b)
+        return None
     why = None
     if w["result"].get("url") != f"{APP_URL}api/tg/{b['id']}":
         why = "сменён вебхук"
@@ -350,3 +497,4 @@ async def startup():
         print("franchise: главный бот не менеджер — включи управление ботами в @BotFather (Mini App)", flush=True)
     asyncio.create_task(reward_loop())
     asyncio.create_task(watch_loop())
+    asyncio.create_task(promo_loop())
