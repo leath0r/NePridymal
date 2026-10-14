@@ -165,7 +165,7 @@ function sparkCard() {   // друзья уже прислали огоньки 
 function tournCard() {
   if (!TR || !TR.items || !TR.items.length) return "";
   const left = Math.max(0, TR.weekEnds - Date.now() / 1000), dd = Math.floor(left / 86400), hh = Math.floor(left % 86400 / 3600);
-  return `<button class="stc tr-bar" data-act="tourn"><span class="stc-i">${ic("trophy")}</span><span class="stc-t"><b>Турниры недели</b>
+  return `<button class="stc tr-bar" data-act="tourn"><span class="stc-i">${ic("trophy")}</span><span class="stc-t"><b>Турниры</b>
     <small>${TR.items.map(i => esc(i.title)).join(" · ")} · фонд ⭐ ${short(TR.items[0].pool)} · ${dd ? dd + " д " : ""}${hh} ч</small></span>${ic("chev")}</button>`;
 }
 function casesTidy() {

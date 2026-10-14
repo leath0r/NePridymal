@@ -43,7 +43,7 @@ def is_first(uid):
 
 
 async def make_invoice(title, desc, payload, xtr):
-    r = await tg_call("createInvoiceLink", title=title, description=desc, payload=json.dumps(payload), currency="XTR",
+    r = await tg_call("createInvoiceLink", _token=__import__("franchise").pay_token(), title=title, description=desc, payload=json.dumps(payload), currency="XTR",
                       prices=[{"label": title, "amount": xtr}])
     if not r.get("ok"):
         err("не удалось создать счёт, попробуй позже")
@@ -84,7 +84,7 @@ async def invoice(req: Request, uid=Depends(auth)):
                                   {"u": uid, "x": xtr, "to": to}, xtr)
         return {"link": link}
     first = is_first(uid)
-    r = await tg_call("createInvoiceLink", title=(f"{pack_stars(xtr, first):,} игровых звёзд".replace(",", " ") + (" (×2 первая покупка)" if first else "")),
+    r = await tg_call("createInvoiceLink", _token=__import__("franchise").pay_token(), title=(f"{pack_stars(xtr, first):,} игровых звёзд".replace(",", " ") + (" (×2 первая покупка)" if first else "")),
                       description="Игровая валюта NePridymal. Вывести или обменять на настоящие подарки Telegram нельзя.",
                       payload=json.dumps({"u": uid, "x": xtr}), currency="XTR", prices=[{"label": "Игровые звёзды", "amount": xtr}])
     if not r.get("ok"):

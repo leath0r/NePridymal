@@ -387,7 +387,7 @@ def auth(request: Request, x_init_data: str = Header(""), x_dev_user: str = Head
         err("unauthorized", 401)
     bid, data = v[0], v[1]
     if bid and not franchise.active(bid):
-        err(f"Этот бот отключён — играй в @{BOT_NAME}", 403)
+        err(f"Этот бот отключён — играй в @{franchise.face_name()}", 403)
     uid, _ = register(json.loads(data["user"]), data.get("start_param", ""), bid)
     franchise.seen_via(uid, bid)
     request.state.uid = uid   # для журнала действий (actlog.py)
@@ -416,7 +416,7 @@ async def tg_call(method, _token=None, **params):
 def bot_name():
     """Бот, через которого игрок сейчас играет: на него — реф-ссылки, приглашения в клан, подарки, столы."""
     b = VIA_BOT.get()
-    return franchise.username(b) if b else BOT_NAME
+    return franchise.username(b) if b else franchise.face_name()   # «лицо» игры назначается в админке
 
 
 def notify(uid, text, url=None):
@@ -456,7 +456,7 @@ async def bot_setup(token=None):
                   + ([] if token else [{"command": "franchise", "description": "Свой бот с этой игрой"}]))
     await tg_call("setMyDescription", _token=token, description=(
         "🎁 Кейс-симулятор подарков Telegram: 29 кейсов и 20+ игр — краш, Самолётик, Курица, Пёсики, слоты, плинко, мины, "
-        "битва кейсов, скретч-карты, дуэли с друзьями. Маркет, крипта, кланы, турниры недели и альбом коллекций.\n\n⚠️ " + DISCLAIMER))
+        "битва кейсов, скретч-карты, дуэли с друзьями. Маркет, крипта, кланы, турниры каждые 3 дня и альбом коллекций.\n\n⚠️ " + DISCLAIMER))
     await tg_call("setMyShortDescription", _token=token, short_description="Игра-симулятор подарков: кейсы, краш, слоты, маркет. Подарки и звёзды игровые 🎁")
 
 
@@ -2239,7 +2239,7 @@ import hub  # noqa: E402,F401 — входящие (колокольчик) и �
 import sparks  # noqa: E402,F401 — огоньки с друзьями (серии как в TikTok)
 import premium  # noqa: E402,F401 — VIP, набор дня, звёздный сундук (за Telegram Stars)
 import style  # noqa: E402,F401 — оформление профиля: цвет, статус, значки, рамки и ники за звёзды
-import tourn  # noqa: E402,F401 — турниры недели
+import tourn  # noqa: E402,F401 — турниры каждые 3 дня
 import album  # noqa: E402,F401 — альбом коллекций
 import presents  # noqa: E402,F401 — подарить подарок с открыткой
 import mkshop  # noqa: E402,F401 — витрина и скупка казино на маркете

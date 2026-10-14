@@ -111,7 +111,45 @@ def active(bid):
 
 def username(bid):
     b = active(bid)
+    return b["username"] if b else face_name()
+
+
+# ---------- «главный» бот, назначаемый в админке (kv 'mainbot') ----------
+# face — лицо игры: ссылки по умолчанию, «играй в @…». Можно любой работающий бот.
+# pay — через какого бота выставляются счета Telegram Stars: ТОЛЬКО бот админа (настоящие звёзды копятся у владельца бота
+#       в @BotFather — бот игрока вывел бы выручку себе). Создание франшиз (Bot Management) и опрос getUpdates
+#       навсегда остаются за исходным ботом из .env. pay_ok — все боты, когда-либо назначенные для оплат: по их старым счетам
+#       ещё могут прийти платежи; у остальных дочерних ботов pre_checkout отклоняем (владелец знает токен и мог бы
+#       выставить «наш» счёт сам себе).
+MAIN = {"face": 0, "pay": 0, "pay_ok": []}
+try:
+    MAIN.update(json.loads(A.kv_get("mainbot", "{}") or "{}"))
+except Exception as e:
+    print("mainbot:", e, flush=True)
+
+
+def face_name():
+    b = active(MAIN["face"])
     return b["username"] if b else BOT_NAME
+
+
+def can_pay(bid):
+    b = BOTS.get(bid)
+    return bool(b and b["owner"] in ADMINS)
+
+
+def pay_bot():
+    b = active(MAIN["pay"])
+    return b if b and can_pay(b["id"]) else None
+
+
+def pay_token():
+    b = pay_bot()
+    return b["token"] if b else TOKEN
+
+
+def pay_allowed(bid):
+    return bid in MAIN["pay_ok"] and can_pay(bid)
 
 
 def token_for(uid):
@@ -168,7 +206,7 @@ async def _via_bot(request: Request, call_next):
         v = verify(init)
         if v and v[0]:
             if not active(v[0]):
-                return JSONResponse({"detail": f"Этот бот отключён — играй в @{BOT_NAME}"}, status_code=403)
+                return JSONResponse({"detail": f"Этот бот отключён — играй в @{face_name()}"}, status_code=403)
             VIA_BOT.set(v[0])
     return await call_next(request)
 
@@ -232,7 +270,7 @@ async def _setup(b):
     """Вебхук + кнопка «Играть» + описание — как у главного бота."""
     tok = b["token"]
     r = await tg_call("setWebhook", _token=tok, url=f"{APP_URL}api/tg/{b['id']}", secret_token=b["secret"],
-                      allowed_updates=["message"], drop_pending_updates=True)
+                      allowed_updates=["message", "pre_checkout_query"], drop_pending_updates=True)
     if not r.get("ok"):
         print("franchise setWebhook", b["id"], r, flush=True)
     await A.bot_setup(tok)
@@ -449,6 +487,8 @@ async def cmd(m):
 
 # ============================== вебхук дочерних ботов ==============================
 async def _handle(bid, upd):
+    if upd.get("pre_checkout_query") or (upd.get("message") or {}).get("successful_payment"):
+        return await _handle_pay(bid, upd)
     b = active(bid)
     if not b:
         return
@@ -460,6 +500,30 @@ async def _handle(bid, upd):
             await A.on_command(m)
     except Exception as e:
         print("franchise update", bid, e, flush=True)
+
+
+async def _handle_pay(bid, upd):
+    """Оплата Stars через дочерний бот — только если его назначали ботом оплат и он принадлежит админу."""
+    b = BOTS.get(bid)
+    if not b:
+        return
+    CUR_TOKEN.set(b["token"])
+    import shop
+    try:
+        if upd.get("pre_checkout_query"):
+            pq = upd["pre_checkout_query"]
+            if pay_allowed(bid):
+                await shop.on_pre_checkout(pq)
+            else:
+                print("franchise: чужой счёт отклонён", bid, pq.get("from", {}).get("id"), flush=True)
+                await tg_call("answerPreCheckoutQuery", pre_checkout_query_id=pq["id"], ok=False,
+                              error_message=f"Покупки — только в @{face_name()}")
+        elif pay_allowed(bid):
+            await asyncio.get_running_loop().run_in_executor(None, shop.on_paid, upd["message"])
+        else:
+            print("franchise: платёж через неразрешённого бота", bid, upd["message"].get("successful_payment"), flush=True)
+    except Exception as e:
+        print("franchise pay", bid, e, flush=True)
 
 
 @app.post(R + "/tg/{bid}")
@@ -558,6 +622,53 @@ async def admin_promo(aid=Depends(admin)):
         log(aid, "frpromo", None, f"{len(ids)} игрокам")
     asyncio.create_task(_promo_send(ids))
     return {"ok": True, "total": len(ids)}
+
+
+def _main_info():
+    def row(b):
+        return {"id": b["id"], "username": b["username"], "owner": b["owner"], "admin": can_pay(b["id"])}
+    return {"face": MAIN["face"] if active(MAIN["face"]) else 0, "pay": (pay_bot() or {}).get("id", 0), "base": BOT_NAME,
+            "faceSet": MAIN["face"], "paySet": MAIN["pay"],
+            "bots": [row(b) for b in sorted(BOTS.values(), key=lambda x: x["username"].lower()) if b["status"] == "on"]}
+
+
+@app.get(R + "/admin/franchise/main")
+def admin_main(aid=Depends(admin)):
+    return {**_main_info(), "canEdit": aid in OWNERS}
+
+
+@app.post(R + "/admin/franchise/main")
+async def admin_main_set(req: Request, aid=Depends(admin)):
+    if aid not in OWNERS:
+        err("Назначать главного бота может только владелец")
+    body = await req.json()
+    if not isinstance(body, dict):
+        err("неверные данные")
+    cur = dict(MAIN, pay_ok=list(MAIN["pay_ok"]))
+    for k in ("face", "pay"):
+        if k not in body:
+            continue
+        try:
+            bid = int(body[k] or 0)
+        except (TypeError, ValueError):
+            err("неверный бот")
+        if bid:
+            b = active(bid) or err("бот не найден или отключён")
+            if k == "pay":
+                if not can_pay(bid):
+                    err("Для оплат — только бот, владелец которого админ: настоящие звёзды копятся у владельца бота")
+                r = await tg_call("setWebhook", _token=b["token"], url=f"{APP_URL}api/tg/{bid}", secret_token=b["secret"],
+                                  allowed_updates=["message", "pre_checkout_query"])   # без drop: не терять апдейты
+                if not r.get("ok"):
+                    err("Telegram не принял вебхук этого бота — попробуй позже")
+                if bid not in cur["pay_ok"]:
+                    cur["pay_ok"].append(bid)
+        cur[k] = bid
+    with tx():
+        db.execute("INSERT INTO kv(k,v) VALUES('mainbot',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur),))
+        log(aid, "mainbot", None, f"лицо={cur['face'] or BOT_NAME}, оплаты={cur['pay'] or BOT_NAME}")
+    MAIN.update(cur)
+    return {"ok": True, **_main_info()}
 
 
 @app.post(R + "/admin/franchise/{bid}")
@@ -693,7 +804,7 @@ async def watch_loop():
                     db.execute("UPDATE bots SET status='off' WHERE id=?", (b["id"],))
                 b["status"] = "off"
                 print("franchise OFF", b["id"], b["username"], why, flush=True)
-                notify(b["owner"], f"⛔ Бот @{esc(b['username'])} отключён от игры: {why}. Игроки могут играть в @{BOT_NAME}")
+                notify(b["owner"], f"⛔ Бот @{esc(b['username'])} отключён от игры: {why}. Игроки могут играть в @{face_name()}")
                 for a in ADMINS:
                     notify(a, f"⛔ Франшиза @{esc(b['username'])} (владелец {b['owner']}) отключена автоматически: {why}")
             await asyncio.sleep(0.3)

@@ -265,7 +265,18 @@ async function admRender(el = topSheet()) {
       <div class="disc">Бонусы за уровни друга платятся только за друзей, пришедших после запуска новой программы (14.10). Рубежи считаются по всем друзьям. Награды растут с уровнем друга, а не с его ставками — накрутить оборотом нельзя.</div>`;
     starify(body);
   } else if (ADM.tab === "fr") {   // франшиза: боты игроков (franchise.py)
-    const [d, an] = await Promise.all([api("admin/franchise"), api("admin/franchise/announce").catch(() => null)]), c = d.cfg, ed = d.canEdit;
+    const [d, an, mb] = await Promise.all([api("admin/franchise"), api("admin/franchise/announce").catch(() => null), api("admin/franchise/main").catch(() => null)]), c = d.cfg, ed = d.canEdit;
+    const mbSel = (k, list) => `<select class="adm-oi" style="flex:1" data-mb="${k}"${ed ? "" : " disabled"}><option value="0">@${esc(mb.base)} — исходный</option>${list.map(b => `<option value="${b.id}"${mb[k] === b.id ? " selected" : ""}>@${esc(b.username)}${b.admin ? " · бот админа" : ""}</option>`).join("")}</select>`;
+    const mainHTML = !mb ? "" : `<div class="sec-t">Главный бот</div>
+      <div class="box">
+        <div class="adm-odd"><div class="adm-oh"><b>Лицо игры</b>${mb.face ? `<span class="adm-tag">изменено</span>` : ""}</div>
+          <div class="adm-os" style="white-space:normal">Куда ведут ссылки (рефералки, кланы, подарки), «играй в @…», бот в рассылках. Любой работающий бот. Если это бот игрока — новые игроки по ссылкам засчитываются ему во франшизе.</div>
+          <div class="adm-oc">${mbSel("face", mb.bots)}${ed ? `<button class="btn sm gold" data-act="adm-mb" data-k="face">${ic("check")}</button>` : ""}</div></div>
+        <div class="adm-odd"><div class="adm-oh"><b>Оплаты Telegram Stars</b>${mb.pay ? `<span class="adm-tag">изменено</span>` : ""}</div>
+          <div class="adm-os" style="white-space:normal">Через какого бота выставляются счета. Только боты админов: настоящие звёзды копятся у владельца бота в @BotFather.${mb.bots.some(b => b.admin) ? "" : " У админов пока нет своих ботов — создай со своего аккаунта: /franchise в @" + esc(mb.base) + "."}</div>
+          <div class="adm-oc">${mbSel("pay", mb.bots.filter(b => b.admin))}${ed ? `<button class="btn sm gold" data-act="adm-mb" data-k="pay">${ic("check")}</button>` : ""}</div></div>
+        <div class="hint" style="font-size:12px;padding:2px 14px 10px;white-space:normal">Создание франшиз и приём старых платежей всегда остаются за @${esc(mb.base)}. Если назначенный бот отключат — игра сама вернётся к @${esc(mb.base)}.</div>
+      </div>`;
     const st = { on: "работает", off: "отключён", limit: "лимит владельца" };
     const sw = (k, title, hint) => `<div class="row kv"><div class="grow"><div class="t">${title}</div><div class="s" style="white-space:normal">${hint}</div></div>
       ${ed ? `<button class="sw${c[k] ? " on" : ""}" data-act="adm-frc-sw" data-k="${k}" data-v="${c[k] ? 0 : 1}"></button>` : `<b>${c[k] ? "да" : "нет"}</b>`}</div>`;
@@ -275,6 +286,7 @@ async function admRender(el = topSheet()) {
         <button class="btn sm gold" data-act="adm-frc" data-k="${k}">${ic("check")}Сохранить</button>
         ${d.changed.includes(k) ? `<button class="btn sm ghost" data-act="adm-frc-rs" data-k="${k}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${fmt(c[k])} ${unit}</b></div>`}</div>`;
     body.innerHTML = `${d.manager ? "" : `<div class="disc" style="margin-top:0">⚠️ Главный бот ещё не может создавать ботов: @BotFather → Mini App → бот → включить управление ботами (Bot Management). Пока не включено, игроки франшизу не видят.</div>`}
+      ${mainHTML}
       <div class="sec-t">Франшиза</div>
       <div class="box">
         ${sw("on", "Франшиза включена", "Кнопка в игре, /franchise в боте, подключение новых ботов. Уже созданные боты работают, пока не отключишь их ниже")}
@@ -496,6 +508,11 @@ Object.assign(ACT, {
     const on = el.dataset.v === "1";
     if (!on && !await confirmM("Выключить переводы?", "Игроки не смогут переводить звёзды друг другу, пока не включишь обратно.", "Выключить")) return;
     await post("admin/pay", { on }); H.ok(); toast(on ? "Переводы включены" : "Переводы выключены", "ok"); admRender();
+  },
+  "adm-mb": async el => {
+    const k = el.dataset.k, v = +topSheet().querySelector(`select[data-mb="${k}"]`).value;
+    if (!await confirmM(k === "pay" ? "Сменить бота для оплат?" : "Сменить лицо игры?", k === "pay" ? "Новые счета Stars будут выставляться через выбранного бота — выручка пойдёт на его баланс." : "Новые ссылки в игре поведут на выбранного бота.", "Сменить")) return;
+    await post("admin/franchise/main", { [k]: v }); H.ok(); toast("Сохранено", "ok"); admRender();
   },
   "adm-frc-sw": async el => {
     const on = el.dataset.v === "1";
