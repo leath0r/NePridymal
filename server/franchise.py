@@ -70,6 +70,10 @@ for _c in ("bot", "came_bot"):   # bot — через какого бота иг
     except Exception:
         pass
 db.execute("CREATE INDEX IF NOT EXISTS users_came_bot ON users(came_bot) WHERE came_bot!=0")
+try:   # photo=1 — аватарку главного бота уже ставили (один раз: свою аватарку владельца не перезаписываем)
+    db.execute("ALTER TABLE bots ADD COLUMN photo INTEGER DEFAULT 0")
+except Exception:
+    pass
 
 BOTS = {r["id"]: dict(r) for r in db.execute("SELECT * FROM bots")}
 BOT_OF = {r[0]: r[1] for r in db.execute("SELECT id, bot FROM users WHERE bot!=0")}
@@ -167,6 +171,49 @@ def seen_via(uid, bid):
 
 
 # ============================== создание и настройка ботов ==============================
+AVATAR = os.path.join(os.path.dirname(os.path.abspath(A.DB_PATH)), "franchise_avatar.jpg")   # аватарка главного бота (кэш)
+
+
+async def _main_avatar():
+    """JPG аватарки главного бота: из кэша или getUserProfilePhotos → getFile → скачать."""
+    if os.path.exists(AVATAR):
+        return open(AVATAR, "rb").read()
+    me = await tg_call("getMe", _token=TOKEN)
+    ph = await tg_call("getUserProfilePhotos", _token=TOKEN, user_id=me["result"]["id"], limit=1)
+    sizes = ((ph.get("result") or {}).get("photos") or [[]])[0]
+    if not sizes:
+        return None
+    f = await tg_call("getFile", _token=TOKEN, file_id=sizes[-1]["file_id"])
+    r = await A.http.get(f"https://api.telegram.org/file/bot{TOKEN}/{f['result']['file_path']}", timeout=60)
+    if r.status_code != 200:
+        return None
+    with open(AVATAR, "wb") as fh:
+        fh.write(r.content)
+    return r.content
+
+
+async def _set_avatar(b):
+    """Новому боту — аватарка главного (Telegram создаёт ботов без фото). Один раз."""
+    if b.get("photo"):
+        return
+    try:
+        img = await _main_avatar()
+        if not img:
+            print("franchise avatar: у главного бота нет аватарки", flush=True)
+            return
+        r = (await A.http.post(f"https://api.telegram.org/bot{b['token']}/setMyProfilePhoto", timeout=60,
+                               data={"photo": '{"type": "static", "photo": "attach://p"}'},
+                               files={"p": ("avatar.jpg", img, "image/jpeg")})).json()
+        if not r.get("ok"):
+            print("franchise avatar", b["id"], r.get("description"), flush=True)
+            return
+        with A.LOCK:
+            db.execute("UPDATE bots SET photo=1 WHERE id=?", (b["id"],))
+        b["photo"] = 1
+    except Exception as e:
+        print("franchise avatar", b["id"], e, flush=True)
+
+
 async def _setup(b):
     """Вебхук + кнопка «Играть» + описание — как у главного бота."""
     tok = b["token"]
@@ -175,6 +222,7 @@ async def _setup(b):
     if not r.get("ok"):
         print("franchise setWebhook", b["id"], r, flush=True)
     await A.bot_setup(tok)
+    await _set_avatar(b)
     return r.get("ok")
 
 
@@ -197,7 +245,7 @@ async def on_managed(mb):
     n = q1("SELECT COUNT(*) n FROM bots WHERE owner=? AND status!='limit'", owner)["n"]
     st = "limit" if n >= cfg("max_per_owner") else "on" if cfg("on") else "off"
     b = {"id": bid, "username": bot.get("username"), "name": bot.get("first_name"), "token": tok, "owner": owner,
-         "secret": secrets.token_urlsafe(24), "status": st, "created": now(), "paid": 0}
+         "secret": secrets.token_urlsafe(24), "status": st, "created": now(), "paid": 0, "photo": 0}
     with tx():
         db.execute("INSERT INTO bots(id,username,name,token,owner,secret,status,created,paid) VALUES(?,?,?,?,?,?,?,?,0)",
                    (bid, b["username"], b["name"], tok, owner, b["secret"], st, b["created"]))
@@ -511,3 +559,5 @@ async def startup():
     asyncio.create_task(reward_loop())
     asyncio.create_task(watch_loop())
     asyncio.create_task(promo_loop())
+    for b in [b for b in BOTS.values() if b["status"] == "on" and not b.get("photo")]:   # боты, созданные до аватарок
+        await _set_avatar(b)
