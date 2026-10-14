@@ -501,7 +501,7 @@ function openDaily() {
     <div class="sec-t">Ещё звёзды</div>
     <div class="box">
       <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">${ME.ref && ME.ref.on ? `до +${fmt((ME.ref.join || 0) + ME.ref.l1[1] + ME.ref.l2[1])} ⭐ за друга + топ недели` : "играйте вместе"}</div></div><span class="pill">${ME.refs}</span></div>
-      ${ME.franchise ? `<div class="row tap" data-act="franchise-info"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.create || ME.franchise.reward ? `Создай за 1 тап · до +${fmt((ME.franchise.create || 0) + (ME.franchise.reward || 0))} ⭐` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
+      ${ME.franchise ? `<div class="row tap" data-act="franchise-info"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.cutTotal ? `Пассивный доход: получено ${fmt(ME.franchise.cutTotal)} ⭐` : ME.franchise.create || ME.franchise.reward ? `Создай за 1 тап · до +${fmt((ME.franchise.create || 0) + (ME.franchise.reward || 0))} ⭐` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
       <div class="row tap" data-act="case" data-id="free"><span class="pic g">${ic("gift")}</span><div class="grow"><div class="t">Бесплатный кейс</div><div class="s">${ME.freeIn ? "через " + clock(ME.freeIn) : "готов"}</div></div></div>
       <div class="row"><span class="pic y">${ic("medal")}</span><div class="grow"><div class="t">Уровни</div><div class="s">За каждый новый уровень — бонус звёздами</div></div></div>
     </div>
