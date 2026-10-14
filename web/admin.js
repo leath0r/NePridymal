@@ -224,8 +224,8 @@ async function admRender(el = topSheet()) {
     const sw = (k, title, hint) => `<div class="row kv"><div class="grow"><div class="t">${title}</div><div class="s" style="white-space:normal">${hint}</div></div>
       ${ed ? `<button class="sw${c[k] ? " on" : ""}" data-act="adm-frc-sw" data-k="${k}" data-v="${c[k] ? 0 : 1}"></button>` : `<b>${c[k] ? "да" : "нет"}</b>`}</div>`;
     const field = (k, title, hint, unit) => `<div class="adm-odd"><div class="adm-oh"><b>${title}</b>${d.changed.includes(k) ? `<span class="adm-tag">изменено</span>` : ""}</div>
-      <div class="adm-os">${hint} · по умолчанию ${fmt(d.defaults[k])}</div>
-      ${ed ? `<div class="adm-oc"><input class="adm-oi" inputmode="numeric" data-k="${k}" value="${c[k]}"><span class="adm-op">${unit}</span>
+      <div class="adm-os">${hint} · по умолчанию ${String(d.defaults[k]).replace(".", ",")}</div>
+      ${ed ? `<div class="adm-oc"><input class="adm-oi" inputmode="${Number.isInteger(d.defaults[k]) ? "numeric" : "decimal"}" data-k="${k}" value="${String(c[k]).replace(".", ",")}"><span class="adm-op">${unit}</span>
         <button class="btn sm gold" data-act="adm-frc" data-k="${k}">${ic("check")}Сохранить</button>
         ${d.changed.includes(k) ? `<button class="btn sm ghost" data-act="adm-frc-rs" data-k="${k}">${ic("refresh")}</button>` : ""}</div>` : `<div class="adm-oc"><b>${fmt(c[k])} ${unit}</b></div>`}</div>`;
     body.innerHTML = `${d.manager ? "" : `<div class="disc" style="margin-top:0">⚠️ Главный бот ещё не может создавать ботов: @BotFather → Mini App → бот → включить управление ботами (Bot Management). Пока не включено, игроки франшизу не видят.</div>`}
@@ -234,6 +234,7 @@ async function admRender(el = topSheet()) {
         ${sw("on", "Франшиза включена", "Кнопка в игре, /franchise в боте, подключение новых ботов. Уже созданные боты работают, пока не отключишь их ниже")}
         ${sw("game_promo", "Баннер в игре", "Плашка «Свой бот с этой игрой» на главной (игрок может скрыть на 14 дней)")}
         ${sw("bot_promo", "Бот предлагает игрокам", "Сообщение «создай свой бот» — активным игрокам с включёнными уведомлениями, раз в 30 минут понемногу")}
+        ${field("cut_pct", "Доля владельцу с дохода", "% от того, что игра заработала на игроках его бота (проигрыши в играх + все комиссии), раз в сутки из банка. 0 — выключено", "%")}
         ${field("create_reward", "Сразу за создание бота", "один раз на аккаунт · 0 — без награды", "⭐")}
         ${field("create_level", "…если владелец не ниже уровня", "против твинков: ниже — получит, когда дорастёт; 1 — всем сразу", "ур.")}
         ${field("reward", "За приведённых игроков", "один раз на аккаунт · 0 — без награды", "⭐")}
@@ -248,7 +249,7 @@ async function admRender(el = topSheet()) {
       <div class="sec-t">Боты игроков · ${d.bots.length}</div>
       <div class="box">${d.bots.map(b => `<div class="row kv">
         <div class="grow" style="min-width:0"><div class="t">@${esc(b.username || "?")}</div>
-          <div class="s" style="white-space:normal">${esc(b.oname || "id " + b.owner)} · ${admDate(b.created)} · ${st[b.status] || b.status}<br>пришло ${fmt(b.came)} · играют сейчас ${fmt(b.now)} · ${b.paid ? "награда выплачена" : `к награде ${b.progress}/${d.need}`}</div></div>
+          <div class="s" style="white-space:normal">${esc(b.oname || "id " + b.owner)} · ${admDate(b.created)} · ${st[b.status] || b.status}<br>пришло ${fmt(b.came)} · играют сейчас ${fmt(b.now)} · ${b.paid ? "награда выплачена" : `к награде ${b.progress}/${d.need}`}<br>доля владельца: всего ${fmt(b.cut)} ⭐ · сегодня ≈ ${fmt(b.today)} ⭐</div></div>
         ${b.status === "limit" ? "" : `<button class="sw${b.status === "on" ? " on" : ""}" data-act="adm-fr" data-id="${b.id}" data-v="${b.status === "on" ? 0 : 1}"></button>`}</div>`).join("")
         || `<div class="hint" style="padding:14px">Ботов пока нет</div>`}</div>
       <div class="disc">Игрок создаёт бота кнопкой в игре или командой /franchise в главном боте. База общая. Награды — ⭐ ${fmt(c.create_reward)} за создание (с ${c.create_level} ур.) и ⭐ ${fmt(d.reward)}, когда бот приведёт ${d.need} игроков ${d.level}+ уровня; каждая один раз на аккаунт. Если владелец сменит вебхук или кнопку «Играть», бот отключится сам.</div>`;
