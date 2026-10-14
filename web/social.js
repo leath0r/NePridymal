@@ -134,7 +134,9 @@ function openFriends() {
 }
 async function refreshFriends() { for (const el of SHEETS) if (el._fr) fillFriends(el); }
 async function fillFriends(el) {
-  const [fr, trades, duels] = await Promise.all([api("friends"), api("trades"), window.loadDuels ? loadDuels() : []]);
+  let [fr, trades, duels] = await Promise.all([api("friends"), api("trades"), window.loadDuels ? loadDuels() : []]);
+  // во время перезапуска сервера ответ бывает пустым (null) — показываем то, что есть, а не падаем на .filter
+  fr = fr || { friends: [], incoming: [], outgoing: [] }; trades = trades || []; duels = duels || [];
   const open = trades.filter(t => t.status === "open"), hist = trades.filter(t => t.status !== "open").slice(0, 8);
   el.querySelector("#fr-body").innerHTML = `
     <div class="ref"><img src="${A.orig("Loot Bag", 128)}" alt=""><b>Пригласи друга</b><p>${ME.ref && ME.ref.on ? `До +${fmt((ME.ref.join || 0) + ME.ref.l1[1] + ME.ref.l2[1])} ⭐ за каждого друга` : "Играйте вместе"} · приглашено: ${ME.refs}</p><button class="btn" data-act="invite">${ic("send")}Пригласить</button></div>
