@@ -4,7 +4,7 @@ import time
 
 from fastapi import Depends, Request
 
-from app import R, app, auth, bal, db, err, event, notify, now, q, q1, tx, user_brief, day_start, GAME_KINDS, BANK_START
+from app import R, app, auth, bal, db, err, event, notify, now, q, q1, tx, user_brief, day_start, GAME_KINDS, BANK_START, kv_get
 
 db.executescript("""
 CREATE TABLE IF NOT EXISTS shares(user INTEGER PRIMARY KEY, n INTEGER DEFAULT 0, cost INTEGER DEFAULT 0, ts INTEGER DEFAULT 0);
@@ -16,16 +16,21 @@ DIV_SHARE = 0.20        # доля дневной прибыли казино, �
 DIV_FLOOR = 10_000      # делим минимум на столько акций: пара акций у единственного держателя не должна забирать всю долю
 SELL_FEE = 0.03
 LOCK = 86400            # продать можно через сутки после последней покупки
-BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback','frcut','flash')"
+BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback','frcut','flash','thanks')"
 
 
 _BV = {"ts": 0, "v": 0}
 
 
+def bank_from():
+    """С какого момента считаем банк: вайп (wipe.py) сбрасывает его к стартовому резерву — kv 'bank_from'."""
+    return int(kv_get("bank_from", 0) or 0)
+
+
 def bank_value():
     """Банк казино (кэш 15 с — сумма по всей таблице событий, а она растёт на десятки тысяч строк в сутки)."""
     if time.time() - _BV["ts"] > 15:
-        _BV.update(ts=time.time(), v=BANK_START - q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE {BANK_KINDS}")["s"])
+        _BV.update(ts=time.time(), v=BANK_START - q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE ({BANK_KINDS}) AND ts>=?", bank_from())["s"])
     return _BV["v"]
 
 
@@ -80,7 +85,7 @@ def bank_info(uid=Depends(auth)):
     for i in range(13, -1, -1):
         s = d - i * 86400
         days.append({"day": s, "profit": house_profit(s)})
-    me = q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind IN {GAME_KINDS}", uid)["s"]
+    me = q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind IN {GAME_KINDS} AND ts>=?", uid, bank_from())["s"]
     sh = q1("SELECT * FROM shares WHERE user=?", uid)
     held = q1("SELECT COALESCE(SUM(n),0) s FROM shares")["s"]
     last = q1("SELECT * FROM div_days ORDER BY day DESC LIMIT 1")
@@ -88,7 +93,7 @@ def bank_info(uid=Depends(auth)):
 
     def top(order):
         out = []
-        for r in q(f"SELECT user, SUM(delta) s FROM events WHERE kind IN {GAME_KINDS} GROUP BY user ORDER BY s {order} LIMIT 5"):
+        for r in q(f"SELECT user, SUM(delta) s FROM events WHERE kind IN {GAME_KINDS} AND ts>=? GROUP BY user ORDER BY s {order} LIMIT 5", bank_from()):
             u = q1("SELECT * FROM users WHERE id=?", r["user"])
             if u and (r["s"] > 0 if order == "DESC" else r["s"] < 0):
                 out.append({**user_brief(u), "sum": r["s"]})

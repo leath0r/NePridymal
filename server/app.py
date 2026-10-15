@@ -699,6 +699,7 @@ def me(uid=Depends(auth)):
             "franchise": franchise.offer(uid),
             "flash": flash.public(uid),
             "fees": fees.public(),
+            "wipe": wipe.public(uid),
             "tickets": tickets.me_info(uid),
             "edges": {"x": edge(tuned("games.edge", EDGE)), "mines": edge(tuned("games.mines_edge", MINES_EDGE)), "upg": edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)},   # фронт показывает иксы кубика/лимбо/мин по этим же коэффициентам
             "inbox": q1("SELECT COUNT(*) n FROM inbox WHERE user=? AND id>?", uid, u["inbox_read"] if "inbox_read" in u.keys() else 0)["n"], **counters(uid), "clanChat": CLAN_UNREAD(uid) if CLAN_UNREAD else 0, "cashback": __import__("retain").cashback_preview(uid)}
@@ -1812,7 +1813,8 @@ BANK_START = 50_000_000
 
 @app.get(R + "/bank")
 def bank(uid=Depends(auth)):
-    total = q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback')")["s"]
+    import bank as _bank   # тот же расчёт, что в bank.py (с учётом сброса банка на вайпе)
+    total = BANK_START - _bank.bank_value()
     today = q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind IN {GAME_KINDS} AND ts>=?", day_start())["s"]
     return {"bank": BANK_START - total, "today": -today}
 
@@ -2266,6 +2268,7 @@ import flash  # noqa: E402 — ивенты раз в ~2 часа: «Удача 
 import tickets  # noqa: E402 — тикеты поддержки: игрок ↔ админы
 import polls  # noqa: E402 — опросы в боте с кнопками «Да»/«Нет», итоги админам
 import fees  # noqa: E402 — все комиссии и налоги из админки (переписывает ставки модулей)
+import wipe  # noqa: E402 — вайпы: сброс звёзд, подарков, бизнесов (уровень остаётся), настройки в админке
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------
