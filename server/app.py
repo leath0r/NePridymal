@@ -836,6 +836,7 @@ def profile(tid: int, uid=Depends(auth)):
             "pinned": pinned, "gifts": gifts, "worth": worth, "opened": u["opened"],
             "badges": json.loads(u["p_badges"] or "[]") if "p_badges" in u.keys() else [], "cover": u["p_cover"] if "p_cover" in u.keys() else 0,
             "bestCrash": u["best_crash"], "friends": fr, "refs": u["refs"], "since": u["created"],
+            "seen": u["seen"] or 0, "now": now(),   # последний онлайн (seen обновляется при входе, не чаще раза в минуту)
             "rel": friend_status(uid, tid)}
 
 

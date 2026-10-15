@@ -192,6 +192,22 @@ const GAME_NAMES = { case: ["box", "Кейсы"], crash: ["rocket", "Краш"],
   duel: ["target", "Дуэли"], dice: ["box", "Кубик"], limbo: ["activity", "Лимбо"], plinko: ["grid", "Плинко"], tower: ["layers", "Башня"],
   slots: ["coins", "Слоты"], blackjack: ["award", "Блэкджек"], cards: ["users", "Столы"], dogs: ["paw", "Пёсики"],
   roulette: ["target", "Рулетка"], jroul: ["trophy", "Джекпот"], hilo: ["trend", "Больше/меньше"], craft: ["layers", "Крафт"] };
+// последний онлайн: seen — время последнего запроса к API (сервер обновляет раз в минуту); now — серверное время, чтобы не зависеть от часов телефона
+function seenHTML(p) {
+  if (!p.seen) return "";
+  const d = Math.max(0, (p.now || Date.now() / 1000) - p.seen);
+  if (d < 180) return `<span class="pf-seen on"><i></i>в сети</span>`;
+  const at = new Date(p.seen * 1000), hm = at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const day = n => { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - n); return at >= x; };
+  let t;
+  if (d < 3600) { const m = Math.floor(d / 60); t = `${m} ${plural(m, ["минуту", "минуты", "минут"])} назад`; }
+  else if (d < 6 * 3600) { const h = Math.floor(d / 3600); t = `${h} ${plural(h, ["час", "часа", "часов"])} назад`; }
+  else if (day(0)) t = "сегодня в " + hm;
+  else if (day(1)) t = "вчера в " + hm;
+  else if (d < 300 * 86400) t = at.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  else t = at.toLocaleDateString("ru-RU");
+  return `<span class="pf-seen"><i></i>в сети ${t}</span>`;
+}
 function profileHTML(p, tab = "show") {
   const isMe = p.id === ME.id, lv = p.lv;
   const prog = Math.round((lv.xp - lv.from) / (lv.to - lv.from) * 100);
@@ -230,7 +246,7 @@ function profileHTML(p, tab = "show") {
       <div class="pf-info">
         <div class="pf-tags"><span class="plv">${ic("medal")}${lv.level}</span>${p.clan ? `<span class="ctag" data-act="clan-tag" data-tag="${esc(p.clan)}">${esc(p.clan)}</span>` : ""}</div>
         <div class="pname"><h2>${esc(p.name)}</h2></div>
-        <div class="pf-sub">${p.username ? `<span>@${esc(p.username)}</span>` : ""}${p.title ? `<span class="pf-title" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</span>` : ""}</div>
+        <div class="pf-sub">${p.username ? `<span>@${esc(p.username)}</span>` : ""}${p.title ? `<span class="pf-title" ${isMe ? 'data-act="titles"' : ""}>${ic("medal")}${esc(p.title)}</span>` : ""}${isMe ? "" : seenHTML(p)}</div>
       </div>
     </div>
     ${p.badges && p.badges.length ? `<div class="pbadges"></div>` : ""}

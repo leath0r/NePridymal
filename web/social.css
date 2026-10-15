@@ -392,3 +392,9 @@ details.locked[open]>summary{margin-bottom:12px}
 .pf-stats [data-act]{cursor:pointer}
 /* под шапкой — плотнее */
 .pf~.pmenu{margin-top:12px}
+
+/* последний онлайн в профиле */
+.pf-seen{display:inline-flex;align-items:center;gap:5px}
+.pf-seen i{width:7px;height:7px;border-radius:50%;background:var(--hint);opacity:.5}
+.pf-seen.on{color:#3ecf6e}
+.pf-seen.on i{background:#3ecf6e;opacity:1;box-shadow:0 0 0 3px rgba(62,207,110,.2)}
