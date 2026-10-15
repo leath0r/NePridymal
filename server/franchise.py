@@ -417,8 +417,9 @@ def _cut_daily():
     for uid, un in cut_recipients():
         got = q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind='frcut' AND ts>=? AND ts<?", uid, day, day + 86400)["s"]
         if got > 0:
-            notify(uid, f"💼 Пассивный доход за вчера: <b>+{nf(got)} ⭐</b> — {str(cfg('cut_pct')).replace('.', ',')}% от всех налогов и комиссий игры, "
-                        f"начисляется каждую минуту, пока у тебя есть бот @{esc(un)}")
+            notify(uid, f"💼 Пассивный доход за вчера: <b>+{nf(got)} ⭐</b> — {str(cfg('cut_pct')).replace('.', ',')}% от всех налогов и комиссий игры.\n"
+                        f"Это отчёт: звёзды уже зачислены на баланс в течение вчерашнего дня (начисляются каждую минуту, "
+                        f"пока у тебя есть бот @{esc(un)}). История — в профиле → «История».")
 
 
 async def cut_loop():
