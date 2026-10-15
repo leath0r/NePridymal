@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import math
+import re
 import secrets
 
 from fastapi import Depends, Request
@@ -23,8 +24,10 @@ DEFAULTS = {
     "min": conf("economy.transfer_min", 10),
     "max": conf("economy.transfer_max", 0),            # один перевод не больше (0 — без ограничения)
     "day": conf("economy.transfer_day_count", 50),     # переводов в сутки с одного аккаунта
+    "inline_on": conf("economy.inline_on", True),      # инлайн-чеки: @бот <сумма> в любом чате
+    "inline_ttl_h": conf("economy.inline_ttl_h", 24),  # через сколько часов невостребованный чек вернётся отправителю
 }
-LIMITS = {"fee": (0, 0.5), "fee_addr": (0, 0.5), "min": (1, 10 ** 7), "max": (0, 10 ** 10), "day": (1, 1000)}
+LIMITS = {"fee": (0, 0.5), "fee_addr": (0, 0.5), "min": (1, 10 ** 7), "max": (0, 10 ** 10), "day": (1, 1000), "inline_ttl_h": (1, 720)}
 CFG = {}
 NOTE_MAX = 60
 
@@ -54,6 +57,8 @@ CREATE TABLE IF NOT EXISTS pay_pin(user INTEGER PRIMARY KEY, hash TEXT, salt TEX
   code TEXT, code_until INTEGER DEFAULT 0, code_fails INTEGER DEFAULT 0, code_ts INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS pay_addr(user INTEGER PRIMARY KEY, addr TEXT UNIQUE NOT NULL, ts INTEGER);
 CREATE TABLE IF NOT EXISTS pay_anon(user INTEGER PRIMARY KEY, addr TEXT UNIQUE NOT NULL, ts INTEGER);
+CREATE TABLE IF NOT EXISTS cheques(code TEXT PRIMARY KEY, sender INTEGER, amount INTEGER, fee INTEGER,
+  created INTEGER, claimed_by INTEGER DEFAULT 0, claimed_ts INTEGER DEFAULT 0, refunded INTEGER DEFAULT 0);
 """)
 try:   # anon=1 — перевод на анонимный адрес: отправитель не видит, кому ушли звёзды
     db.execute("ALTER TABLE transfers ADD COLUMN anon INTEGER DEFAULT 0")
@@ -330,6 +335,115 @@ async def qr_send(req: Request, uid=Depends(auth)):
 
 
 # ---------------- админка: переводы игрока (в карточке игрока) ----------------
+# ---------------- инлайн-чеки: «@бот <сумма>» в любом чате → карточка «Получить» ----------------
+# Чек забирает ПЕРВЫЙ, кто откроет t.me/<бот>?start=claim_<код> (кроме отправителя). Средства резервируются
+# при отправке чека (chosen_inline_result); невостребованный чек возвращается через inline_ttl_h. В коде зашита
+# сумма (вид «8000xСЛУЧ»), т.к. chosen_inline_result не передаёт текст карточки. src/dst пишутся в transfers при заборе.
+def _cheque_amt(code):
+    try:
+        return int(code.split("x", 1)[0])
+    except (ValueError, IndexError, AttributeError):
+        return 0
+
+
+async def _inline_hint(qid, text):
+    await tg_call("answerInlineQuery", inline_query_id=qid, results=[], cache_time=1, is_personal=True,
+                  switch_pm_text=text[:64], switch_pm_parameter="wallet")
+
+
+async def on_inline(iq):
+    """@бот <сумма> → карточка «Перевести N ⭐». Код с суммой кладём в кнопку; резерв — на chosen_inline_result."""
+    qid, uid = iq["id"], iq["from"]["id"]
+    amount = int(re.sub(r"\D", "", (iq.get("query") or "")) or 0)
+    if not cfg("inline_on") or not cfg("on"):
+        return await _inline_hint(qid, "Переводы сейчас отключены")
+    if amount < cfg("min"):
+        return await _inline_hint(qid, f"Напиши сумму чека — минимум {cfg('min')} ⭐")
+    if cfg("max") and amount > cfg("max"):
+        return await _inline_hint(qid, f"Максимум за раз — {cfg('max')} ⭐")
+    fee = _fee(amount)
+    if bal(uid) < amount + fee:
+        return await _inline_hint(qid, f"Не хватает звёзд: нужно {amount + fee} ⭐ с комиссией")
+    code = f"{amount}x{secrets.token_hex(6)}"
+    link = f"https://t.me/{BOT_NAME}?start=claim_{code}"   # главный бот — только он обрабатывает /start claim_
+    res = {"type": "article", "id": code, "title": f"Перевести {amount} ⭐",
+           "description": f"Комиссия {fee} ⭐ · заберёт первый, кто откроет",
+           "input_message_content": {"message_text": f"💸 Чек на <b>{amount} ⭐</b> в игре GiftBot\nЗаберёт первый, кто откроет кнопкой ниже.", "parse_mode": "HTML"},
+           "reply_markup": {"inline_keyboard": [[{"text": f"🎁 Получить {amount} ⭐", "url": link}]]}}
+    await tg_call("answerInlineQuery", inline_query_id=qid, results=[res], cache_time=1, is_personal=True)
+
+
+def reserve_cheque(uid, code):
+    """chosen_inline_result: игрок реально отправил чек в чат — резервируем сумму+комиссию под этим кодом."""
+    amount = _cheque_amt(code)
+    if amount <= 0:
+        return
+    fee = _fee(amount)
+    with tx():
+        if q1("SELECT 1 FROM cheques WHERE code=?", code):
+            return
+        if not cfg("inline_on") or not cfg("on") or amount < cfg("min") or (cfg("max") and amount > cfg("max")):
+            return
+        if loans.stars_locked(uid):
+            notify(uid, "↩️ Чек не создан: пока открыт кредит, переводить звёзды нельзя")
+            return
+        if bal(uid) < amount + fee:
+            notify(uid, f"↩️ Чек на {amount} ⭐ не создан: не хватило звёзд с комиссией")
+            return
+        db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount + fee, uid))
+        db.execute("INSERT INTO cheques(code,sender,amount,fee,created) VALUES(?,?,?,?,?)", (code, uid, amount, fee, now()))
+
+
+def claim_cheque(uid, code):
+    """start=claim_<код>: зачисляем первому открывшему (кроме отправителя). Возвращает dict для ответа боту."""
+    with tx():
+        c = q1("SELECT * FROM cheques WHERE code=?", code)
+        if not c:
+            return {"err": "Чек не найден или ещё не активирован — попробуй открыть чуть позже"}
+        if c["refunded"]:
+            return {"err": "Чек истёк и вернулся отправителю"}
+        if c["claimed_by"]:
+            return {"err": "Этот чек уже забрали"}
+        if c["sender"] == uid:
+            return {"err": "Это твой чек — его может забрать кто-то другой"}
+        if now() - c["created"] > cfg("inline_ttl_h") * 3600:
+            return {"err": "Чек истёк"}
+        db.execute("UPDATE cheques SET claimed_by=?, claimed_ts=? WHERE code=?", (uid, now(), code))
+        db.execute("UPDATE users SET stars=stars+? WHERE id=?", (c["amount"], uid))
+        event(c["sender"], "transfer", -c["amount"])
+        if c["fee"]:
+            event(c["sender"], "fee", -c["fee"])
+        event(uid, "transfer", c["amount"])
+        db.execute("INSERT INTO transfers(src,dst,amount,fee,note,ts,anon) VALUES(?,?,?,?,?,?,0)", (c["sender"], uid, c["amount"], c["fee"], "чек", now()))
+        snm = q1("SELECT name FROM users WHERE id=?", c["sender"])
+    rnm = q1("SELECT name FROM users WHERE id=?", uid)
+    amt_s = f"{c['amount']:,}".replace(",", " ")
+    notify(c["sender"], f"🎁 Твой чек на <b>{amt_s} ⭐</b> забрал <b>{esc(rnm['name'] if rnm else 'игрок')}</b>")
+    return {"ok": True, "amount": c["amount"], "from": snm["name"] if snm else "игрок"}
+
+
+def sweep_cheques():
+    """Невостребованные чеки старше inline_ttl_h — вернуть отправителю сумму+комиссию."""
+    cut = now() - cfg("inline_ttl_h") * 3600
+    with tx():
+        rows = q("SELECT code, sender, amount, fee FROM cheques WHERE claimed_by=0 AND refunded=0 AND created<?", cut)
+        for r in rows:
+            db.execute("UPDATE users SET stars=stars+? WHERE id=?", (r["amount"] + r["fee"], r["sender"]))
+            db.execute("UPDATE cheques SET refunded=1 WHERE code=?", (r["code"],))
+    for r in rows:
+        amt_s = f"{r['amount']:,}".replace(",", " ")
+        notify(r["sender"], f"↩️ Чек на <b>{amt_s} ⭐</b> никто не забрал — звёзды вернулись на баланс")
+
+
+async def cheque_loop():
+    while True:
+        await asyncio.sleep(600)
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, sweep_cheques)
+        except Exception as e:
+            print("cheque sweep:", e, flush=True)
+
+
 def _admin_routes():
     from admin import OWNERS, admin, log
 
@@ -360,7 +474,7 @@ def _admin_routes():
                 continue
             if v is None:
                 cur.pop(k, None)
-            elif k == "on":
+            elif k in ("on", "inline_on"):
                 cur[k] = v in (True, 1, "1", "true")
             else:
                 try:

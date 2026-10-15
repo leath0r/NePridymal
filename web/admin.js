@@ -178,11 +178,14 @@ async function admRender(el = topSheet()) {
     body.innerHTML = `<div class="box">
         <div class="row kv"><div class="grow"><div class="t">Переводы включены</div><div class="s" style="white-space:normal">Если выключить, кнопка «Перевести» у игроков перестанет работать</div></div>
           ${ed ? `<button class="sw${c.on ? " on" : ""}" data-act="adm-pay-on" data-v="${c.on ? 0 : 1}"></button>` : `<b>${c.on ? "да" : "нет"}</b>`}</div>
+        <div class="row kv"><div class="grow"><div class="t">Инлайн-чеки (@бот в чате)</div><div class="s" style="white-space:normal">Игрок пишет «@бот сумма» в любом чате и отправляет чек — заберёт первый, кто откроет. Комиссия и лимиты — как у переводов</div></div>
+          ${ed ? `<button class="sw${c.inline_on ? " on" : ""}" data-act="adm-pay-inline" data-v="${c.inline_on ? 0 : 1}"></button>` : `<b>${c.inline_on ? "да" : "нет"}</b>`}</div>
         ${field("fee", "Комиссия обычного перевода", `по QR, поиску и id · платит отправитель сверху суммы, уходит в банк · по умолчанию ${+(d.defaults.fee * 100).toFixed(2)}%`, +(c.fee * 100).toFixed(2), "%")}
         ${field("fee_addr", "Комиссия перевода по адресу", `когда переводят по адресу кошелька NP… · по умолчанию такая же, как обычная`, +(c.fee_addr * 100).toFixed(2), "%")}
         ${field("min", "Минимальный перевод", `по умолчанию ⭐ ${fmt(d.defaults.min)}`, c.min, "⭐")}
         ${field("max", "Максимум за один перевод", `0 — без ограничения · по умолчанию ${d.defaults.max ? "⭐ " + fmt(d.defaults.max) : "0"}`, c.max, "⭐")}
-        ${field("day", "Переводов в сутки с аккаунта", `по умолчанию ${d.defaults.day}`, c.day, "шт")}</div>
+        ${field("day", "Переводов в сутки с аккаунта", `по умолчанию ${d.defaults.day}`, c.day, "шт")}
+        ${field("inline_ttl_h", "Срок жизни инлайн-чека", `через сколько часов невостребованный чек вернётся отправителю · по умолчанию ${d.defaults.inline_ttl_h}`, c.inline_ttl_h, "ч")}</div>
       ${ed ? "" : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Менять настройки может только владелец</div>`}
       <div class="sec-t">За 7 дней</div>
       <div class="box">${admKv("Переводов", `<b>${fmt(w.n)}</b>`)}${admKv("Переведено", `<b>⭐ ${fmt(w.sum)}</b>`)}${admKv("Комиссия в банк", `<b class="tw">⭐ ${fmt(w.fee)}</b>`)}${admKv("Отправителей", `<b>${fmt(w.users)}</b>`)}</div>
@@ -523,6 +526,10 @@ Object.assign(ACT, {
     const on = el.dataset.v === "1";
     if (!on && !await confirmM("Выключить переводы?", "Игроки не смогут переводить звёзды друг другу, пока не включишь обратно.", "Выключить")) return;
     await post("admin/pay", { on }); H.ok(); toast(on ? "Переводы включены" : "Переводы выключены", "ok"); admRender();
+  },
+  "adm-pay-inline": async el => {
+    const on = el.dataset.v === "1";
+    await post("admin/pay", { inline_on: on }); H.ok(); toast(on ? "Инлайн-чеки включены" : "Инлайн-чеки выключены", "ok"); admRender();
   },
   "adm-mb": async el => {
     const k = el.dataset.k, v = +topSheet().querySelector(`select[data-mb="${k}"]`).value;

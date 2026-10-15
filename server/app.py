@@ -472,7 +472,7 @@ async def bot_loop():
     offset = 0
     while True:
         try:
-            res = await tg_call("getUpdates", offset=offset, timeout=50, allowed_updates=["message", "pre_checkout_query", "managed_bot", "callback_query"])
+            res = await tg_call("getUpdates", offset=offset, timeout=50, allowed_updates=["message", "pre_checkout_query", "managed_bot", "callback_query", "inline_query", "chosen_inline_result"])
             for upd in res.get("result", []):
                 offset = upd["update_id"] + 1
                 m = upd.get("message")
@@ -484,6 +484,11 @@ async def bot_loop():
                     await shop.on_pre_checkout(upd["pre_checkout_query"])
                 elif m and m.get("successful_payment"):
                     await asyncio.get_running_loop().run_in_executor(None, shop.on_paid, m)
+                elif upd.get("inline_query"):   # @бот <сумма> в чате — инлайн-чек (pay.py)
+                    await pay.on_inline(upd["inline_query"])
+                elif upd.get("chosen_inline_result"):   # чек отправлен в чат — резервируем средства
+                    cir = upd["chosen_inline_result"]
+                    await asyncio.get_running_loop().run_in_executor(None, pay.reserve_cheque, cir["from"]["id"], cir["result_id"])
                 elif m and m.get("text", "").startswith("/"):
                     await on_command(m)
         except Exception as e:
@@ -523,6 +528,20 @@ async def on_command(m):
                               text=f"💸 Перевод игроку <b>{esc(s['name'])}</b>" + (f": <b>{amt} ⭐</b>" if amt else "") + "\nЖми кнопку, чтобы отправить",
                               reply_markup={"inline_keyboard": [[{"text": "💸 Перевести", "web_app": {"url": APP_URL + f"?pay={part[0]}&amt={amt}"}}]]})
                 return
+    if cmd.startswith("/start") and arg.startswith("claim_"):   # инлайн-чек: забрать (pay.py)
+        register(m["from"])   # чек может забрать и новичок — заводим аккаунт из данных Telegram
+        r = await asyncio.get_running_loop().run_in_executor(None, pay.claim_cheque, uid, arg[6:])
+        if r.get("ok"):
+            amt_s = f"{r['amount']:,}".replace(",", " ")
+            await tg_call("sendMessage", chat_id=uid, parse_mode="HTML",
+                          text=f"🎁 Ты получил чек на <b>{amt_s} ⭐</b> от <b>{esc(r['from'])}</b>! Звёзды уже на балансе.", reply_markup=kb)
+        else:
+            await tg_call("sendMessage", chat_id=uid, parse_mode="HTML", text="🧾 " + esc(r["err"]), reply_markup=kb)
+        return
+    if cmd.startswith("/start") and arg == "wallet":   # из инлайн-подсказки «открой кошелёк»
+        await tg_call("sendMessage", chat_id=uid, parse_mode="HTML",
+                      text="💸 Открой кошелёк в игре — звёзды можно слать по адресу, QR или через @бот прямо в чате.", reply_markup=kb)
+        return
     if cmd.startswith("/start") and arg.startswith("clan_") and arg[5:].isdigit():
         c = q1("SELECT name, tag FROM clans WHERE id=?", int(arg[5:]))
         if c:
@@ -626,6 +645,7 @@ async def startup():
     http = httpx.AsyncClient(transport=httpx.AsyncHTTPTransport(local_address="0.0.0.0"))  # только IPv4
     asyncio.create_task(crash_loop())
     asyncio.create_task(rich.rich_loop())
+    asyncio.create_task(pay.cheque_loop())   # возврат невостребованных инлайн-чеков
     if not DEV:  # локально бот не поллит, чтобы не драться с продом за getUpdates
         asyncio.create_task(bot_loop())
         asyncio.create_task(reminder_loop())
