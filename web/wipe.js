@@ -139,6 +139,7 @@ async function admWipe(body) {
     </div>
     <div class="disc">Всегда отменяются открытые обмены, дуэли, столы и ставки в незаконченных играх. Остаются профиль, титулы, друзья, рефералы, кланы (без казны), боты и история.</div>
 
+    ${ed ? `<button class="btn ghost" data-act="wp-ann" style="margin-top:14px">${ic("megaphone")}Разослать условия сезона всем</button>` : ""}
     ${ed ? `<button class="btn red" data-act="wp-now" style="margin-top:14px"${d.running ? " disabled" : ""}>${ic("refresh")}Вайп сейчас</button>` : ""}
 
     ${d.last.length ? `<div class="sec-t">Прошлые вайпы</div><div class="box">${d.last.map(w => `<div class="row kv"><div class="grow"><div class="t">Сезон ${w.season || "?"} → ${(w.season || 0) + 1} · ${admDate(w.ts)}${w.by ? "" : " · авто"}</div>
@@ -153,6 +154,13 @@ Object.assign(ACT, {
   "wp-f": el => { const k = el.dataset.k; return wpSave({ [k]: topSheet().querySelector(`.adm-oi[data-k="${k}"]`).value }); },
   "wp-base": el => wpSave({ thanks_base: el.dataset.v }),
   "wp-next": () => { const v = topSheet().querySelector("#wp-next").value; return wpSave({ next: wpFromMsk(v) }, v ? "Дата сохранена" : "Дата убрана"); },
+  "wp-ann": async () => {
+    const d = await api("admin/wipe/announce");
+    const html = esc(d.text.replace(/<[^>]+>/g, "")).replace(/\n/g, "<br>");
+    if (!await modal(`<h3>Разослать всем?</h3><div class="hint" style="max-height:50vh;overflow:auto;text-align:left;font-size:12.5px;line-height:1.45;margin:0 0 14px">${html}</div>
+      <div class="btns"><button class="btn ghost" data-m="no">Отмена</button><button class="btn" data-m="ok">Разослать</button></div>`)) return;
+    await post("admin/wipe/announce"); H.ok(); toast("Рассылка пошла — уйдёт за пару минут", "ok");
+  },
   "wp-now": async () => {
     const v = await modal(`<h3>Вайп сейчас?</h3><p class="hint" style="margin:0 0 12px">Сбросятся звёзды, подарки, бизнесы и всё, что включено. Отменить нельзя. Всем игрокам придёт сообщение. Введи <b>ВАЙП</b>:</p>
       <input value=""><div class="btns"><button class="btn ghost" data-m="no">Отмена</button><button class="btn red" data-m="ok">Сбросить</button></div>`);

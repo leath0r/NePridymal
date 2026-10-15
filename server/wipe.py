@@ -264,7 +264,7 @@ def _when(ts):
 
 
 def _left(h):
-    return f"{h} ч" if h < 24 or h % 24 else f"{h // 24} д"
+    return "сутки" if h == 24 else f"{h} ч" if h < 24 or h % 24 else f"{h // 24} дн."
 
 
 async def _run(by):
@@ -300,10 +300,41 @@ async def _run(by):
     await _mass(letter)
 
 
+PART_LINES = {"gifts": "подарки, сейф и залоги", "biz": "бизнесы", "crypto": "крипта, стейкинг и фьючерсы",
+              "shares": "акции казино", "bank": "банк казино", "keys": "ключи от кейсов", "clans": "казна кланов"}
+
+
+def announce_text():
+    """Объявление о сезонах со всеми условиями — из текущих настроек (кнопка в админке)."""
+    c = CFG
+    gone = [f"звёзды — у всех станет <b>{nf(int(c['start']))} ⭐</b>"] + [PART_LINES[k] for k in PART_LINES if c.get(k)]
+    every = f"сезон длится <b>{c['days']} дней</b>" if c["days"] else "сезон длится до следующего вайпа"
+    th = (f"\n\n🏦 <b>Благодарность от банка</b>\nВ начале нового сезона банк вернёт каждому <b>{str(c['thanks_pct']).replace('.', ',')}%</b> от того, "
+          + ("сколько звёзд он купил за сезон." if c["thanks_base"] == "buy" else "что он внёс в банк за сезон (проигрыши и комиссии минус выплаты банка).")
+          + (f" Не больше {nf(int(c['thanks_cap']))} ⭐ одному." if c["thanks_cap"] else "")
+          + "\nЗвёзды сразу придут на баланс, а в игре будет ждать письмо с итогами твоего сезона: часы в игре, раунды, "
+            "сколько заработал и потратил, любимые игры и лучший выигрыш.") if c["thanks_pct"] > 0 else ""
+    warn = " и за ".join(_left(h) for h in sorted(c["warn"], reverse=True))
+    return (f"🏆 <b>В NePridymal приходят сезоны!</b>\n\n"
+            f"Вы проголосовали — и мы решили. Теперь {every}, а в конце каждого — <b>вайп</b>: полный сброс экономики "
+            f"и равный старт для всех.\n\n"
+            + (f"📅 <b>Ближайший вайп — {_when(c['next'])}</b>" + (f", дальше — раз в {c['days']} дней." if c["days"] else ".") if c["on"] and c["next"] else "")
+            + "\n\n🧹 <b>Что сбросится:</b>\n" + "\n".join("• " + x for x in gone)
+            + "\n\n⭐ <b>Что останется:</b>\n• уровень и опыт\n• профиль, титулы и рамки\n• друзья, рефералы и клан"
+            + th
+            + (f"\n\n⏰ Предупредим за {warn} до вайпа. За {c['freeze']} мин до него игры закроются — "
+               "незаконченные ставки и обмены отменятся.")
+            + "\n\nУдачи в сезоне! 🍀")
+
+
 async def wipe_loop():
     await asyncio.sleep(40)
     while True:
         try:
+            if A.kv_get("wipe_ann"):   # разослать объявление (кнопка в админке)
+                with A.LOCK:
+                    db.execute("DELETE FROM kv WHERE k='wipe_ann'")
+                await _mass(announce_text())
             c, t = CFG, now()
             if c["on"] and c["next"] and not STATE["running"]:
                 if t >= c["next"]:
@@ -431,3 +462,18 @@ async def wipe_seen(req: Request, uid=Depends(A.auth)):
     with tx():
         db.execute("UPDATE wipe_thanks SET seen=1 WHERE user=? AND wipe<=?", (uid, w))
     return {"ok": True}
+
+
+@app.post(R + "/admin/wipe/announce")
+def admin_wipe_announce(aid=Depends(admin)):
+    if aid not in OWNERS:
+        err("Рассылать может только владелец")
+    with tx():
+        db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('wipe_ann','1')")
+        log(aid, "wipe_announce", None, "объявление о сезонах")
+    return {"ok": True}
+
+
+@app.get(R + "/admin/wipe/announce")
+def admin_wipe_announce_preview(aid=Depends(admin)):
+    return {"text": announce_text()}
