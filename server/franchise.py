@@ -395,12 +395,7 @@ def _cut_tick():
                 db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_ts',?)", (str(t1),))
         return
     t0 = max(t0, t1 - 3600)   # после долгого простоя не начисляем задним числом больше часа
-    base = fee_income(t0, t1) + int(A.kv_get("frcut_carry", 0) or 0)   # минуты, где игроки выиграли больше, вычитаются из следующих
-    if base <= 0:
-        with A.LOCK:
-            db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_carry',?)", (str(max(base, -5_000_000)),))
-            db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_ts',?)", (str(t1),))
-        return
+    base = fee_income(t0, t1)   # минута, где игроки выиграли больше, чем проиграли, — просто без выплаты (минус не копится)
     rcp = cut_recipients() if base > 0 and cfg("cut_pct") > 0 else []
     pct = cut_share(len(rcp))
     with tx():
@@ -413,7 +408,6 @@ def _cut_tick():
                 db.execute("UPDATE users SET stars=stars+? WHERE id=?", (whole, uid))
                 event(uid, "frcut", whole)
         db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_ts',?)", (str(t1),))
-        db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_carry','0')")
 
 
 def _cut_daily():
