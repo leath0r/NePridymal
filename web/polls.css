@@ -46,3 +46,7 @@
 .pl-hist u{position:absolute;left:0;right:0;bottom:0;background:#ffd76a}
 .pl-last{margin-top:10px}
 .pl-last summary{font-size:13px;color:var(--mut,#999);cursor:pointer}
+.pl-ov.must{z-index:99999;align-items:center;background:rgba(5,4,12,.82)}
+.pl-ov.must .pl-card{border-color:#ffd76a;box-shadow:0 20px 60px #000c,0 0 0 1px #ffffff0d inset,0 0 60px #ffd76a44;animation:plGlow 2.4s ease-in-out infinite}
+@keyframes plGlow{50%{box-shadow:0 20px 60px #000c,0 0 0 1px #ffffff0d inset,0 0 90px #ffd76a77}}
+.pl-ov.must .pl-badge{background:#ff5c6a2a;color:#ffb0b6}

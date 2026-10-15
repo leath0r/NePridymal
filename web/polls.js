@@ -29,21 +29,27 @@ function pollCard() {
 const PL_SKIP = new Set();
 function pollShow(p, force) {
   if (!p || document.querySelector(".pl-ov") || document.querySelector(".wp-ov")) return;
-  if (!force && (p.my || PL_SKIP.has(p.id))) return;
+  if (!force && (p.my || (!p.must && PL_SKIP.has(p.id)))) return;
   const ov = document.createElement("div");
-  ov.className = "pl-ov";
-  ov.innerHTML = `<div class="pl-card" data-id="${p.id}"><button class="pl-x" data-act="pl-close" aria-label="Закрыть">${ic("x")}</button>
-    <div class="pl-badge">${ic("activity")}<span>Голосование</span></div><div class="pl-in">${plInner(p)}</div>
+  ov.className = "pl-ov" + (p.must && !p.my ? " must" : "");
+  ov.innerHTML = `<div class="pl-card" data-id="${p.id}">${p.must && !p.my ? "" : `<button class="pl-x" data-act="pl-close" aria-label="Закрыть">${ic("x")}</button>`}
+    <div class="pl-badge">${ic("activity")}<span>${p.must ? "Важное голосование" : "Голосование"}</span></div><div class="pl-in">${plInner(p)}</div>
     <div class="pl-foot">🔒 Анонимно — никто не увидит, кто как голосовал</div></div>`;
-  ov.addEventListener("click", e => { if (e.target === ov) pollClose(); });
+  ov.addEventListener("click", e => { if (e.target === ov && !ov.classList.contains("must")) pollClose(); });
   document.body.appendChild(ov);
   requestAnimationFrame(() => ov.classList.add("on"));
 }
 function pollClose() {
-  const ov = document.querySelector(".pl-ov"); if (!ov) return;
+  const ov = document.querySelector(".pl-ov"); if (!ov || ov.classList.contains("must")) return;
   PL_SKIP.add(+ov.querySelector(".pl-card").dataset.id);
   ov.classList.remove("on"); setTimeout(() => ov.remove(), 250);
 }
+// раз в минуту — новый опрос всплывёт сразу, без перезахода; обязательный, если его как-то убрали, вернётся
+setInterval(async () => {
+  if (!ME || document.hidden) return;
+  try { const d = await api("poll/active"); ME.polls = d.polls; } catch (e) { return; }
+  pollShow((ME.polls || []).find(p => !p.my));
+}, 60000);
 const _loadMePl = loadMe;
 loadMe = async function () { await _loadMePl(); setTimeout(() => pollShow((ME.polls || []).find(p => !p.my)), 1400); };
 
@@ -53,7 +59,7 @@ async function admPolls(body) {
   const d = await api("admin/polls"), t = d.now;
   const row = p => {
     const tot = p.y + p.n, py = plPct(p.y, tot), turn = p.reach ? Math.round(tot * 100 / p.reach) : 0;
-    const where = [p.ingame ? "в игре" : "", p.bot ? "в боте" : ""].filter(Boolean).join(" + ");
+    const where = [p.ingame ? (p.must ? "в игре (обязательно)" : "в игре") : "", p.bot ? "в боте" : ""].filter(Boolean).join(" + ");
     const maxH = Math.max(1, ...p.hours.map(h => h.y + h.n));
     return `<div class="box pl-adm${p.active ? " on" : ""}">
       <div class="pl-ah"><b>${esc(p.title)}</b><span class="adm-tag">${p.active ? `идёт · ещё ${plLeft(p.ends - t)}` : "закончен"}</span></div>
@@ -73,6 +79,7 @@ async function admPolls(body) {
       <div class="pl-2"><input class="adm-oi" id="pl-yes" maxlength="30" value="Да" placeholder="Кнопка 1"><input class="adm-oi" id="pl-no" maxlength="30" value="Нет" placeholder="Кнопка 2"></div>
       <div class="pl-2"><label>Длится, часов<input class="adm-oi" id="pl-h" inputmode="decimal" value="6"></label></div>
       <div class="row kv"><div class="grow"><div class="t">Плашка в игре</div><div class="s">всплывает у всех при входе, пока не ответят</div></div><button class="sw on" id="pl-ig" data-act="pl-tg"></button></div>
+      <div class="row kv"><div class="grow"><div class="t">Важное — нельзя закрыть</div><div class="s">плашка висит поверх игры, пока игрок не проголосует</div></div><button class="sw on" id="pl-mu" data-act="pl-tg"></button></div>
       <div class="row kv"><div class="grow"><div class="t">Сообщение в боте</div><div class="s">с кнопками, всем игрокам</div></div><button class="sw" id="pl-bt" data-act="pl-tg"></button></div>
       <button class="btn" data-act="pl-new" style="width:100%;margin-top:8px">Запустить опрос</button>
     </div>
@@ -90,16 +97,22 @@ Object.assign(ACT, {
     H.ok();
     const p = (ME.polls || []).find(x => x.id === id);
     if (p) Object.assign(p, r);
-    const box = document.querySelector(`.pl-card[data-id="${id}"] .pl-in`);
+    const card = document.querySelector(`.pl-card[data-id="${id}"]`), box = card && card.querySelector(".pl-in");
     if (box && p) box.innerHTML = plInner(p);
+    const ov = card && card.closest(".pl-ov");
+    if (ov && ov.classList.contains("must")) {   // проголосовал — можно закрыть
+      ov.classList.remove("must");
+      card.insertAdjacentHTML("afterbegin", `<button class="pl-x" data-act="pl-close" aria-label="Закрыть">${ic("x")}</button>`);
+      card.querySelector(".pl-foot").insertAdjacentHTML("beforebegin", `<button class="btn" data-act="pl-close" style="width:100%;margin-top:14px">Спасибо, продолжить</button>`);
+    }
     if (typeof casesTidy === "function") casesTidy();
   },
   "pl-tg": el => el.classList.toggle("on"),
   "pl-new": async () => {
     const s = topSheet(), v = id => s.querySelector("#" + id).value;
     const b = { title: v("pl-title"), desc: v("pl-desc"), yes: v("pl-yes"), no: v("pl-no"), hours: parseFloat(v("pl-h").replace(",", ".")) || 6,
-      ingame: s.querySelector("#pl-ig").classList.contains("on"), bot: s.querySelector("#pl-bt").classList.contains("on") };
-    if (!await modal(`<h3>Запустить опрос?</h3><p class="hint" style="margin:0 0 12px">«${esc(b.title)}» — ${esc(b.yes)} / ${esc(b.no)}, ${String(b.hours).replace(".", ",")} ч${b.ingame ? ", плашка у всех в игре" : ""}${b.bot ? ", сообщение в бот всем" : ""}.</p>
+      ingame: s.querySelector("#pl-ig").classList.contains("on"), bot: s.querySelector("#pl-bt").classList.contains("on"), must: s.querySelector("#pl-mu").classList.contains("on") };
+    if (!await modal(`<h3>Запустить опрос?</h3><p class="hint" style="margin:0 0 12px">«${esc(b.title)}» — ${esc(b.yes)} / ${esc(b.no)}, ${String(b.hours).replace(".", ",")} ч${b.ingame ? (b.must ? ", плашка поверх игры у всех — не закрыть, пока не проголосуют" : ", плашка у всех в игре") : ""}${b.bot ? ", сообщение в бот всем" : ""}.</p>
       <div class="btns"><button class="btn ghost" data-m="no">Отмена</button><button class="btn" data-m="ok">Запустить</button></div>`)) return;
     await post("admin/polls", b); H.ok(); toast("Опрос запущен", "ok"); admRender(); loadMe().catch(() => {});
   },

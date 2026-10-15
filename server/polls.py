@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS poll(id INTEGER PRIMARY KEY, text TEXT, yes TEXT, no 
                                 sent INTEGER DEFAULT 0, delivered INTEGER DEFAULT 0, done INTEGER DEFAULT 0, by INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS poll_vote(pid INTEGER, user INTEGER, choice TEXT, ts INTEGER, PRIMARY KEY(pid, user));
 """)
-for _c, _d in (("ingame", 0), ("bot", 1)):   # где показывать: плашка в игре / сообщение в боте (старые опросы — только бот)
+# где показывать: плашка в игре / сообщение в боте (старые опросы — только бот); must — плашку нельзя закрыть, пока не проголосуешь
+for _c, _d in (("ingame", 0), ("bot", 1), ("must", 0)):
     try:
         db.execute(f"ALTER TABLE poll ADD COLUMN {_c} INTEGER DEFAULT {_d}")
     except Exception:
@@ -89,11 +90,17 @@ def public(uid):
     out = []
     for p in q("SELECT * FROM poll WHERE ingame=1 AND done=0 AND ends>? ORDER BY id DESC LIMIT 3", now()):
         mine = q1("SELECT choice FROM poll_vote WHERE pid=? AND user=?", p["id"], uid)
-        d = {"id": p["id"], "text": p["text"], "yes": p["yes"], "no": p["no"], "ends": p["ends"], "my": mine["choice"] if mine else None}
+        d = {"id": p["id"], "text": p["text"], "yes": p["yes"], "no": p["no"], "ends": p["ends"], "my": mine["choice"] if mine else None, "must": p["must"]}
         if mine:
             d["y"], d["n"] = _counts(p["id"])
         out.append(d)
     return out
+
+
+@app.get(R + "/poll/active")
+def poll_active(uid=Depends(A.auth)):
+    """Лёгкая проверка раз в минуту из игры — чтобы новый опрос всплыл, не дожидаясь перезахода."""
+    return {"polls": public(uid)}
 
 
 @app.post(R + "/poll/vote")
@@ -119,7 +126,7 @@ def admin_polls(aid=Depends(admin)):
         hours = [dict(r) for r in q("SELECT (ts-?)/3600 h, SUM(choice='y') y, SUM(choice='n') n FROM poll_vote WHERE pid=? GROUP BY h ORDER BY h", p["created"], p["id"])]
         last = [dict(r) for r in q("SELECT v.choice, v.ts, u.name, u.xp FROM poll_vote v JOIN users u ON u.id=v.user WHERE v.pid=? ORDER BY v.ts DESC LIMIT 12", p["id"])]
         out.append({"id": p["id"], "title": _title(p), "text": p["text"], "yes": p["yes"], "no": p["no"], "created": p["created"], "ends": p["ends"],
-                    "active": not p["done"] and p["ends"] > now(), "ingame": p["ingame"], "bot": p["bot"], "y": y, "n": n,
+                    "active": not p["done"] and p["ends"] > now(), "ingame": p["ingame"], "bot": p["bot"], "must": p["must"], "y": y, "n": n,
                     "reach": _reach(p), "hours": hours, "last": last})
     return {"polls": out, "now": now()}
 
@@ -131,7 +138,7 @@ async def admin_poll_new(req: Request, aid=Depends(admin)):
     desc = str(b.get("desc", "")).strip()[:800]
     yes, no = str(b.get("yes", "") or "Да").strip()[:30], str(b.get("no", "") or "Нет").strip()[:30]
     hours = float(b.get("hours", 24) or 24)
-    ingame, bot = bool(b.get("ingame", True)), bool(b.get("bot", False))
+    ingame, bot, must = bool(b.get("ingame", True)), bool(b.get("bot", False)), bool(b.get("must", False))
     if len(title) < 3:
         err("напиши вопрос")
     if not 0.1 <= hours <= 24 * 14:
@@ -141,8 +148,8 @@ async def admin_poll_new(req: Request, aid=Depends(admin)):
     t = now()
     text = f"📊 <b>{esc(title)}</b>" + (f"\n\n{esc(desc)}" if desc else "") + "\n\n🔒 Опрос анонимный."
     with tx():
-        cur = db.execute("INSERT INTO poll(text,yes,no,created,ends,sent,by,ingame,bot) VALUES(?,?,?,?,?,?,?,?,?)",
-                         (text, yes, no, t, t + int(hours * 3600), 0 if bot else 1, aid, int(ingame), int(bot)))
+        cur = db.execute("INSERT INTO poll(text,yes,no,created,ends,sent,by,ingame,bot,must) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                         (text, yes, no, t, t + int(hours * 3600), 0 if bot else 1, aid, int(ingame), int(bot), int(must and ingame)))
     log(aid, "poll", f"{cur.lastrowid}: {title}")
     return {"id": cur.lastrowid}
 
