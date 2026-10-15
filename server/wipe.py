@@ -28,6 +28,7 @@ PARTS = {
     "biz": "Бизнесы",
     "crypto": "Крипта, стейкинг и фьючерсы",
     "shares": "Акции казино",
+    "loans": "Кредиты — долги списываются, кредитная история с нуля",
     "keys": "Ключи от кейсов",
     "clans": "Казна и банк кланов",
     "bank": "Банк казино — к стартовому резерву (и акции, и дивиденды с нуля)",
@@ -188,8 +189,11 @@ def _do_wipe(by):
         if CFG["gifts"]:
             db.execute("DELETE FROM gifts")
             db.execute("DELETE FROM vault")
-            db.execute("DELETE FROM loans WHERE status='open'")
             db.execute("UPDATE gift_links SET status='cancelled' WHERE status='open'")
+        if CFG["loans"]:
+            db.execute("DELETE FROM loans")   # и долги, и история (лимит кредита без залога — снова с первой ступени)
+        elif CFG["gifts"]:
+            db.execute("DELETE FROM loans WHERE status='open' AND gift IS NOT NULL")   # залоги исчезли вместе с подарками
         if CFG["biz"]:
             db.execute("DELETE FROM biz")
         if CFG["crypto"]:
@@ -301,7 +305,7 @@ async def _run(by):
 
 
 PART_LINES = {"gifts": "подарки, сейф и залоги", "biz": "бизнесы", "crypto": "крипта, стейкинг и фьючерсы",
-              "shares": "акции казино", "bank": "банк казино", "keys": "ключи от кейсов", "clans": "казна кланов"}
+              "shares": "акции казино", "bank": "банк казино", "loans": "кредиты — долги спишутся, кредитная история с нуля", "keys": "ключи от кейсов", "clans": "казна кланов"}
 
 
 def announce_text():
