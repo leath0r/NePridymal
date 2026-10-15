@@ -20,31 +20,62 @@ function wipeInfo() {
     За несколько минут до вайпа игры закроются.</p><div class="btns"><button class="btn" data-m="ok">Понятно</button></div>`);
 }
 
-// ---------------- плашка «благодарность банка» ----------------
+// ---------------- письмо «Банк благодарит за игру» (итоги прошлого сезона + благодарность) ----------------
 let WP_SHOWN = 0;
+const wpDay = ts => new Date(ts * 1000).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 function wipeThanks() {
   const t = ME && ME.wipe && ME.wipe.thanks; if (!t || WP_SHOWN === t.wipe || document.querySelector(".wp-ov")) return;
   WP_SHOWN = t.wipe;
-  const has = t.amount > 0, what = t.kind === "buy" ? "купленных за сезон звёзд" : "того, что ты внёс в банк за сезон";
+  const x = t.stats || {}, has = t.amount > 0, played = (x.rounds || 0) > 0 || (x.hours || 0) > 0;
+  const what = t.kind === "buy" ? "купленных за сезон звёзд" : "того, что ты внёс в банк за сезон";
+  const hrs = h => h < 1 ? "<1" : String(+(+h).toFixed(1)).replace(".", ",");
+  const tile = (icon, v, label, cls = "") => `<div class="wp-t ${cls}"><i>${ic(icon)}</i><b>${v}</b><span>${label}</span></div>`;
+  const maxG = Math.max(1, ...(x.games || []).map(g => g[1]));
   const ov = document.createElement("div");
   ov.className = "wp-ov";
-  ov.innerHTML = `<div class="wp-card">
-      <div class="wp-rays"></div>
-      <div class="wp-badge">Сезон ${t.season}</div>
-      <div class="wp-bank">${ic("bank")}</div>
-      <h2>${has ? "Банк благодарит<br>за вашу игру" : `Сезон ${t.season} начался!`}</h2>
-      ${has ? `<div class="wp-sum"><span class="st">⭐</span><b id="wp-n">0</b></div>
-        <p>${t.pct}% от ${what} — уже на балансе.<br>Ты внёс ⭐ ${fmt(t.base)}. Спасибо, что играешь с нами!</p>`
-      : `<p>Вайп прошёл — у всех равный старт. Твой уровень сохранён.</p>`}
-      <div class="wp-start">Стартовый баланс ⭐ ${fmt(t.start)}${has ? ` + благодарность` : ""}</div>
-      <button class="btn gold" data-wp="ok">${has ? "Забрать и играть" : "Играть"}</button>
-    </div>`;
+  const tName = esc(t.name || ME.name || "игрок");
+  ov.innerHTML = `<div class="wp-frame"><div class="wp-card">
+      <div class="wp-sheen"></div><div class="wp-rays"></div><div class="wp-mono">NP</div>
+      <div class="wp-top s1"><i></i><span>Итоги сезона ${t.ended}</span><i></i></div>
+      ${t.from ? `<div class="wp-dates s1">${wpDay(t.from)} — ${wpDay(t.to)}</div>` : ""}
+      <div class="wp-seal s2"><div>${ic("bank")}</div></div>
+      <div class="wp-greet s3">Дорогой друг,</div>
+      <h2 class="wp-name s3">${tName}</h2>
+      <p class="wp-lead s4">${t.bad ? `Сезон ${t.ended} завершён. Вот каким получился твой сезон.` : played ? `Сезон ${t.ended} завершён. Благодарим тебя за игру — вот каким получился твой сезон.` : `Сезон ${t.ended} завершён. Благодарим, что ты с нами — новый сезон уже начался.`}</p>
+      <div class="wp-orn s4"><i></i><b>✦</b><i></i></div>
+      ${played ? `<div class="wp-grid s5">
+        ${tile("clock", `${hrs(x.hours)} ч`, "в игре")}
+        ${tile("games", fmt(x.rounds), "раундов сыграно")}
+        ${tile("trend", `+${short(x.earned)}`, "заработано ⭐", "g")}
+        ${tile("activity", `−${short(x.spent)}`, "потрачено ⭐", "r")}
+        ${x.best ? tile("trophy", `+${short(x.best)}`, `лучший выигрыш · ${esc(x.bestGame)}`, "y") : ""}
+        ${tile("bank", short(t.base), t.kind === "buy" ? "куплено ⭐" : "внесено в банк ⭐")}
+      </div>
+      ${(x.games || []).length ? `<div class="wp-fav s6"><div class="wp-h">Любимые игры</div>${x.games.map((g, i) => `<div class="wp-g"><span><em>${i + 1}</em>${esc(g[0])}</span>
+        <i><u style="width:${Math.max(6, Math.round(g[1] / maxG * 100))}%"></u></i><b>${fmt(g[1])}</b></div>`).join("")}</div>` : ""}` : ""}
+      ${t.bad ? `<div class="wp-gift wp-bad s7"><div class="wp-h">Благодарность банка</div>
+        <div class="wp-sum"><b>0</b><span class="st">⭐</span></div>
+        <small>Ты себя плохо вёл — <b>багоюзер</b>. В этом сезоне банк благодарность не выдаёт. Играй честно — и в следующий раз она будет твоей.</small></div>` : ""}
+      ${has ? `<div class="wp-gift s7"><div class="wp-h">Банк NePridymal благодарит тебя</div>
+        <div class="wp-sum"><span class="st">⭐</span><b id="wp-n">0</b></div>
+        <small>Ты получаешь <b>${String(t.pct).replace(".", ",")}%</b> от ${what}. Звёзды уже на балансе.</small></div>` : ""}
+      <div class="wp-next s8"><b>Сезон ${t.season} начался</b><span>Всё сброшено, уровень сохранён. Старт — ⭐ ${fmt(t.start)}${has ? " + благодарность" : ""}.
+        ${t.days ? `Вайп — раз в ${t.days} дней.` : ""}${t.next ? ` Следующий — ${wpDay(t.next)}.` : ""}</span></div>
+      <div class="wp-sign s8"><span>С уважением и благодарностью,</span><b>Банк NePridymal</b></div>
+      <button class="wp-btn s9" data-wp="ok"><span>${t.bad ? "Понятно" : has ? "Забрать и играть" : "Начать сезон"}</span></button>
+    </div></div>`;
   document.body.appendChild(ov);
   requestAnimationFrame(() => ov.classList.add("on"));
   if (has) {
-    const n = ov.querySelector("#wp-n"), t0 = performance.now(), dur = 1400;
-    const step = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); n.textContent = fmt(Math.round(t.amount * e)); if (k < 1) requestAnimationFrame(step); };
-    setTimeout(() => { requestAnimationFrame(step); try { H.ok(); const r = n.getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, ["#ffd76a", "#ffb33d", "#fff", "#7cc2ff"]); } catch (e) {} }, 450);
+    const n = ov.querySelector("#wp-n");
+    const io = new IntersectionObserver(es => {   // считаем сумму, когда до неё долистали
+      if (!es[0].isIntersecting) return; io.disconnect();
+      const t0 = performance.now(), dur = 1400;
+      const step = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); n.textContent = fmt(Math.round(t.amount * e)); if (k < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+      setTimeout(() => { try { H.ok(); const r = n.getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, ["#ffd76a", "#ffb33d", "#fff", "#7cc2ff"]); } catch (e) {} }, 1200);
+    }, { threshold: .6 });
+    setTimeout(() => io.observe(n), 450);
   }
   ov.addEventListener("click", e => {
     if (!e.target.closest("[data-wp]")) return;
@@ -93,6 +124,8 @@ async function admWipe(body) {
       ${field("start", "Стартовый баланс", "у всех одинаковый", "⭐")}
       ${field("thanks_pct", "Благодарность банка", "сколько % вернуть каждому в начале нового сезона; 0 — выключено", "%", "decimal")}
       ${field("thanks_cap", "Потолок благодарности", "не больше столько одному игроку; 0 — без потолка", "⭐")}
+      ${field("deny", "Без благодарности в этот вайп", "id игроков через запятую — багоюзеры; в письме им напишет «ты себя плохо вёл». После вайпа список очищается", "", "text")}
+      ${d.deny.length ? `<div class="adm-os" style="padding:0 14px 10px">${d.deny.map(u => `${esc(u.name)} (${u.id})`).join(", ")}</div>` : ""}
       <div class="adm-odd"><div class="adm-oh"><b>От чего считать</b></div>
         <div class="seg" style="margin-top:6px">${Object.entries(d.bases).map(([k, t]) => `<button ${ed ? `data-act="wp-base" data-v="${k}"` : "disabled"} class="${c.thanks_base === k ? "on" : ""}">${k === "bank" ? "Вклад в банк" : "Покупки звёзд"}</button>`).join("")}</div>
         <div class="adm-os" style="margin-top:6px">${esc(d.bases[c.thanks_base])}</div></div>

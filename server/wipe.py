@@ -33,8 +33,8 @@ PARTS = {
     "bank": "Банк казино — к стартовому резерву (и акции, и дивиденды с нуля)",
 }
 BASES = {"bank": "чистый вклад в банк (проигрыши и комиссии − выплаты банка)", "buy": "купленные звёзды (Telegram Stars)"}
-DEFAULTS = {"on": False, "next": 0, "days": 30, "start": A.START_STARS, "freeze": 5, "warn": [24, 1], "warned": [],
-            "thanks_pct": 10, "thanks_base": "bank", "thanks_cap": 0, **{k: True for k in PARTS}}
+DEFAULTS = {"on": False, "next": 0, "days": 14, "start": A.START_STARS, "freeze": 5, "warn": [24, 1], "warned": [],
+            "thanks_pct": 10, "thanks_base": "bank", "thanks_cap": 0, "deny": [], **{k: True for k in PARTS}}
 CFG = dict(DEFAULTS)
 STATE = {"running": False}
 
@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS wipe_log(id INTEGER PRIMARY KEY, ts INTEGER, by INTEG
 CREATE TABLE IF NOT EXISTS wipe_thanks(wipe INTEGER, user INTEGER, base INTEGER, amount INTEGER, seen INTEGER DEFAULT 0,
                                        PRIMARY KEY(wipe, user));
 """)
+try:
+    db.execute("ALTER TABLE wipe_thanks ADD COLUMN stats TEXT DEFAULT '{}'")
+except Exception:
+    pass
+try:
+    db.execute("ALTER TABLE wipe_thanks ADD COLUMN bad INTEGER DEFAULT 0")   # 1 — без благодарности: багоюзер (список deny)
+except Exception:
+    pass
+
 
 
 def nf(x):
@@ -93,6 +102,30 @@ def thanks_calc(since, until):
     return out
 
 
+def season_stats(since, until):
+    """Итоги сезона каждого игрока для письма: часы в игре (5-минутки с действиями), раунды, выиграно/проиграно в играх,
+    заработано/потрачено всего, лучший выигрыш, любимые игры."""
+    from live import NAMES
+    w = (since, until)
+    out = {}
+    get = lambda u: out.setdefault(u, {"hours": 0, "rounds": 0, "won": 0, "lost": 0, "earned": 0, "spent": 0, "best": 0, "bestGame": "", "games": []})
+    for r in q("SELECT user, COUNT(DISTINCT ts/300) n FROM events WHERE ts>=? AND ts<? AND kind NOT IN ('wipe','thanks') GROUP BY user", *w):
+        get(r["user"])["hours"] = round(r["n"] * 5 / 60, 1)
+    for r in q("SELECT user, SUM(CASE WHEN delta>0 THEN delta ELSE 0 END) p, SUM(CASE WHEN delta<0 THEN -delta ELSE 0 END) m FROM events "
+               "WHERE ts>=? AND ts<? AND kind NOT IN ('wipe','thanks') GROUP BY user", *w):
+        x = get(r["user"]); x["earned"], x["spent"] = r["p"] or 0, r["m"] or 0
+    for r in q(f"SELECT user, kind, COUNT(*) n, SUM(CASE WHEN delta>0 THEN delta ELSE 0 END) p, SUM(CASE WHEN delta<0 THEN -delta ELSE 0 END) m, "
+               f"MAX(delta) mx FROM events WHERE kind IN {A.GAME_KINDS} AND ts>=? AND ts<? GROUP BY user, kind", *w):
+        x = get(r["user"])
+        x["rounds"] += r["n"]; x["won"] += r["p"] or 0; x["lost"] += r["m"] or 0
+        x["games"].append([NAMES.get(r["kind"], r["kind"]), r["n"]])
+        if (r["mx"] or 0) > x["best"]:
+            x["best"], x["bestGame"] = r["mx"], NAMES.get(r["kind"], r["kind"])
+    for x in out.values():
+        x["games"] = sorted(x["games"], key=lambda g: -g[1])[:4]
+    return out
+
+
 def public(uid):
     """Для /me: следующий вайп (отсчёт на главной) и непоказанная плашка «благодарность банка» нового сезона."""
     out = {"season": season_no()}
@@ -100,8 +133,12 @@ def public(uid):
         out.update(next=CFG["next"], start=CFG["start"], frozen=frozen())
     t = q1("SELECT t.*, w.ts FROM wipe_thanks t JOIN wipe_log w ON w.id=t.wipe WHERE t.user=? AND t.seen=0 ORDER BY t.wipe DESC LIMIT 1", uid)
     if t:
-        out["thanks"] = {"wipe": t["wipe"], "season": t["wipe"] + 1, "base": t["base"], "amount": t["amount"],
-                         "kind": CFG["thanks_base"], "pct": CFG["thanks_pct"], "start": CFG["start"]}
+        u = q1("SELECT name FROM users WHERE id=?", uid)
+        out["thanks"] = {"wipe": t["wipe"], "ended": t["wipe"], "season": t["wipe"] + 1, "base": t["base"], "amount": t["amount"],
+                         "kind": CFG["thanks_base"], "pct": CFG["thanks_pct"], "start": CFG["start"], "name": u["name"] if u else "",
+                         "stats": json.loads(t["stats"] or "{}"), "days": CFG["days"], "bad": bool(t["bad"]),
+                         "next": CFG["next"] if CFG["on"] else 0, "from": q1("SELECT COALESCE(MAX(ts),0) t FROM wipe_log WHERE id<?", t["wipe"])["t"],
+                         "to": t["ts"]}
     return out
 
 
@@ -129,6 +166,7 @@ def _do_wipe(by):
     A.CR["bets"].clear()   # ставки текущего раунда краша сгорают (вывод после сброса дал бы новые звёзды)
     with tx():
         thanks = thanks_calc(last_wipe(), t + 1) if CFG["thanks_pct"] > 0 else {}
+        stats = season_stats(last_wipe(), t + 1)
         st["thanks"] = sum(a for _, a in thanks.values())
         st["season"] = season_no()
         wid = db.execute("INSERT INTO wipe_log(ts,by,stats) VALUES(?,?,?)", (t, by, "{}")).lastrowid
@@ -168,13 +206,21 @@ def _do_wipe(by):
             db.execute("INSERT INTO kv(k,v) VALUES('bank_from',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(t),))
             db.execute("DELETE FROM shares")
         # благодарность банка — уже после сброса, платит банк нового сезона (kind thanks входит в BANK_KINDS)
+        deny = set(CFG["deny"])
         for r in q("SELECT id FROM users WHERE banned=0"):
             base, amount = thanks.get(r["id"], (0, 0))
-            db.execute("INSERT OR REPLACE INTO wipe_thanks(wipe,user,base,amount,seen) VALUES(?,?,?,?,0)", (wid, r["id"], base, amount))
+            bad = r["id"] in deny
+            if bad:
+                st["thanks"] -= amount
+                amount = 0
+            db.execute("INSERT OR REPLACE INTO wipe_thanks(wipe,user,base,amount,seen,stats,bad) VALUES(?,?,?,?,0,?,?)",
+                       (wid, r["id"], base, amount, json.dumps(stats.get(r["id"], {}), ensure_ascii=False), int(bad)))
             if amount > 0:
                 db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amount, r["id"]))
                 A.event(r["id"], "thanks", amount)
         db.execute("UPDATE wipe_log SET stats=? WHERE id=?", (json.dumps(st), wid))
+        CFG["deny"] = []   # список «без благодарности» — только на один вайп
+        db.execute("INSERT INTO kv(k,v) VALUES('wipecfg',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(CFG),))
         log(by, "wipe", None, f"сезон {st['season']}: игроков {st['players']}, звёзд {st['stars']}, подарков {st['gifts']}, "
                               f"бизнесов {st['biz']}, благодарность {st['thanks']}")
     try:
@@ -193,14 +239,16 @@ def _kept():
 
 
 async def _mass(text):
-    """Всем игрокам: во «входящие» + в бота (через бота игрока, без флуда — ~20 сообщений/с)."""
+    """Всем игрокам: во «входящие» + в бота (через бота игрока, без флуда — ~20 сообщений/с). text — строка или uid → строка."""
     fr = __import__("franchise")
     ids = [r["id"] for r in q("SELECT id FROM users WHERE banned=0")]
-    plain = re.sub(r"<[^>]+>", "", text)
+    txt = text if callable(text) else (lambda _u: text)
+    msgs = {u: txt(u) for u in ids}
     with tx():
-        db.executemany("INSERT INTO inbox(user,text,ts) VALUES(?,?,?)", [(u, plain, now()) for u in ids])
+        db.executemany("INSERT INTO inbox(user,text,ts) VALUES(?,?,?)", [(u, re.sub(r"<[^>]+>", "", msgs[u]), now()) for u in ids])
     kb = {"inline_keyboard": [[{"text": "Открыть", "web_app": {"url": A.APP_URL}}]]}
     for uid in ids:
+        text = msgs[uid]
         try:
             tok = fr.token_for(uid)
             r = await A.tg_call("sendMessage", _token=tok, chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
@@ -228,11 +276,28 @@ async def _run(by):
     finally:
         STATE["running"] = False
     nxt = CFG["next"] if CFG["on"] and CFG["next"] > now() else 0
-    await _mass(f"🧹 <b>Сезон {season_no()} начался — вайп прошёл!</b>\n\nСброшено: {esc(_kept())}.\n"
-                f"Уровень сохранён. Стартовый баланс у всех: <b>{nf(int(CFG['start']))} ⭐</b>."
-                + (f"\n\n🏦 Банк благодарит за игру: {CFG['thanks_pct']}% от того, что ты внёс в банк за прошлый сезон, "
-                   f"уже на балансе — загляни в игру." if CFG["thanks_pct"] > 0 else "")
-                + (f"\n\nСледующий вайп — {_when(nxt)}." if nxt else ""))
+    wid = q1("SELECT MAX(id) i FROM wipe_log")["i"]
+    rows = {r["user"]: r for r in q("SELECT t.user, t.amount, t.stats, t.bad, u.name FROM wipe_thanks t JOIN users u ON u.id=t.user WHERE t.wipe=?", wid)}
+    every = f"Вайп — раз в {CFG['days']} дн." if CFG["days"] else ""
+
+    def letter(uid):
+        r = rows.get(uid)
+        x = json.loads(r["stats"] or "{}") if r else {}
+        head = f"✉️ <b>Дорогой друг, {esc(r['name'])}!</b>\n\nСезон {wid} завершён — спасибо, что играл с нами." if r else \
+            f"🧹 <b>Сезон {wid + 1} начался — вайп прошёл!</b>"
+        st = ""
+        if x.get("rounds") or x.get("hours"):
+            fav = ", ".join(g[0] for g in x.get("games", [])[:3])
+            st = (f"\n\n📊 <b>Твой сезон:</b>\n⏱ В игре: ~{f"{x['hours']:g}".replace('.', ',')} ч\n🎲 Раундов: {nf(x['rounds'])}"
+                  f"\n📈 Заработал: +{nf(x['earned'])} ⭐\n📉 Потратил: −{nf(x['spent'])} ⭐"
+                  + (f"\n🏆 Лучший выигрыш: +{nf(x['best'])} ⭐ ({esc(x['bestGame'])})" if x.get("best") else "")
+                  + (f"\n❤️ Любимые игры: {esc(fav)}" if fav else ""))
+        th = "\n\n🚫 <b>Благодарность банка: 0 ⭐.</b> Ты себя плохо вёл — багоюзер. В новом сезоне играй честно." if r and r["bad"] else \
+            f"\n\n🏦 <b>Банк благодарит тебя: +{nf(r['amount'])} ⭐</b> — {str(CFG['thanks_pct']).replace('.', ',')}% от того, что ты внёс в банк. Уже на балансе!" \
+            if r and r["amount"] > 0 else ""
+        return (head + st + th + f"\n\n🧹 Сезон {wid + 1} начался: всё сброшено, уровень сохранён, старт — <b>{nf(int(CFG['start']))} ⭐</b>."
+                + (f"\n{every}" if every else "") + (f" Следующий — {_when(nxt)}." if nxt else ""))
+    await _mass(letter)
 
 
 async def wipe_loop():
@@ -256,8 +321,9 @@ async def wipe_loop():
                             warned.update(x for x in c["warn"] if x >= h)   # сразу закрываем и более ранние (их время прошло)
                             c["warned"] = sorted(warned)
                             _save()
-                            await _mass(f"⚠️ <b>Через {_left(h)} — вайп</b> ({_when(c['next'])}).\n\n"
-                                        f"Сбросятся {esc(_kept())}. Уровень останется. После вайпа у всех будет "
+                            await _mass(f"⚠️ <b>Через {_left(h)} — вайп</b> ({_when(c['next'])}).\n"
+                                        + (f"Вайпы — раз в {c['days']} дн.\n" if c["days"] else "") + "\n"
+                                        + f"Сбросятся {esc(_kept())}. Уровень останется. После вайпа у всех будет "
                                         f"<b>{nf(int(c['start']))} ⭐</b>"
                                         + (f" + благодарность банка: {c['thanks_pct']}% от того, что ты внёс в банк за сезон" if c["thanks_pct"] > 0 else "")
                                         + f".\n\nЗа {c['freeze']} мин до вайпа игры закроются.")
@@ -276,10 +342,11 @@ async def _wipe_start():
 @app.get(R + "/admin/wipe")
 def admin_wipe(aid=Depends(admin)):
     last = [{"ts": r["ts"], "by": r["by"], **json.loads(r["stats"])} for r in q("SELECT * FROM wipe_log ORDER BY id DESC LIMIT 5")]
-    th = thanks_calc(last_wipe(), now() + 1)
+    th = {u: v for u, v in thanks_calc(last_wipe(), now() + 1).items() if u not in set(CFG["deny"])}
     top = sorted(th.items(), key=lambda x: -x[1][1])[:5]
+    deny = [{**A.user_brief(u), "id": u["id"]} for u in (q1("SELECT * FROM users WHERE id=?", i) for i in CFG["deny"]) if u]
     return {"cfg": {k: CFG[k] for k in DEFAULTS if k != "warned"}, "parts": PARTS, "bases": BASES, "now": _stats(), "last": last,
-            "canEdit": aid in OWNERS, "frozen": frozen(), "running": STATE["running"], "season": season_no(), "since": last_wipe(),
+            "canEdit": aid in OWNERS, "frozen": frozen(), "running": STATE["running"], "season": season_no(), "since": last_wipe(), "deny": deny,
             "thanks": {"players": len(th), "total": sum(a for _, a in th.values()),
                        "top": [{**A.user_brief(q1("SELECT * FROM users WHERE id=?", u)), "base": b, "amount": a} for u, (b, a) in top]}}
 
@@ -314,6 +381,9 @@ async def admin_wipe_set(req: Request, aid=Depends(admin)):
             new["thanks_pct"] = float(str(b["thanks_pct"]).replace(",", "."))
         if "thanks_cap" in b:
             new["thanks_cap"] = int(b["thanks_cap"] or 0)
+        if "deny" in b:
+            d = b["deny"]
+            new["deny"] = sorted({int(x) for x in (re.split(r"[ ,;]+", d.strip()) if isinstance(d, str) else d) if str(x).strip()})
         if "thanks_base" in b:
             new["thanks_base"] = str(b["thanks_base"])
     except (TypeError, ValueError):
