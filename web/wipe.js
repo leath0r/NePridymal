@@ -56,12 +56,12 @@ function wipeThanks() {
       ${t.bad ? `<div class="wp-gift wp-bad s7"><div class="wp-h">Благодарность банка</div>
         <div class="wp-sum"><b>0</b><span class="st">⭐</span></div>
         <small>Ты себя плохо вёл — <b>багоюзер</b>. В этом сезоне банк благодарность не выдаёт. Играй честно — и в следующий раз она будет твоей.</small></div>` : ""}
-      ${has ? `<div class="wp-gift s7"><div class="wp-h">Банк NePridymal благодарит тебя</div>
+      ${has ? `<div class="wp-gift s7"><div class="wp-h">Банк GiftBot благодарит тебя</div>
         <div class="wp-sum"><span class="st">⭐</span><b id="wp-n">0</b></div>
         <small>Ты получаешь <b>${String(t.pct).replace(".", ",")}%</b> от ${what}. Звёзды уже на балансе.</small></div>` : ""}
       <div class="wp-next s8"><b>Сезон ${t.season} начался</b><span>Всё сброшено, уровень сохранён. Старт — ⭐ ${fmt(t.start)}${has ? " + благодарность" : ""}.
         ${t.days ? `Вайп — раз в ${t.days} дней.` : ""}${t.next ? ` Следующий — ${wpDay(t.next)}.` : ""}</span></div>
-      <div class="wp-sign s8"><span>С уважением и благодарностью,</span><b>Банк NePridymal</b></div>
+      <div class="wp-sign s8"><span>С уважением и благодарностью,</span><b>Банк GiftBot</b></div>
       <button class="wp-btn s9" data-wp="ok"><span>${t.bad ? "Понятно" : has ? "Забрать и играть" : "Начать сезон"}</span></button>
     </div></div>`;
   document.body.appendChild(ov);
