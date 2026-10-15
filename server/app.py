@@ -699,7 +699,7 @@ def me(uid=Depends(auth)):
             "franchise": franchise.offer(uid),
             "flash": flash.public(uid),
             "fees": fees.public(),
-            "wipe": wipe.public(uid),
+            "wipe": wipe.public(uid), "polls": polls.public(uid),
             "tickets": tickets.me_info(uid),
             "edges": {"x": edge(tuned("games.edge", EDGE)), "mines": edge(tuned("games.mines_edge", MINES_EDGE)), "upg": edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)},   # фронт показывает иксы кубика/лимбо/мин по этим же коэффициентам
             "inbox": q1("SELECT COUNT(*) n FROM inbox WHERE user=? AND id>?", uid, u["inbox_read"] if "inbox_read" in u.keys() else 0)["n"], **counters(uid), "clanChat": CLAN_UNREAD(uid) if CLAN_UNREAD else 0, "cashback": __import__("retain").cashback_preview(uid)}

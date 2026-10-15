@@ -135,7 +135,7 @@ profileHTML = function (p, tab) {
 
 // ---------------- 4–5. главная: листалка вместо стопки плашек, без ленты дропов ----------------
 let SSB = null, SSB_T = 0, TRB_T = 0, SHB_T = 0;
-const ST_ORDER = ["st-wipe", "st-spark", "ob", "st-shop", "st-offer", "prib", "evrib", "incbar", "st-season", "tr-bar", "jpbar", "homecard"];
+const ST_ORDER = ["st-poll", "st-wipe", "st-spark", "ob", "st-shop", "st-offer", "prib", "evrib", "incbar", "st-season", "tr-bar", "jpbar", "homecard"];
 loadFeed = async function () {};
 const _rcHub = renderCases;
 renderCases = async function () {
@@ -187,7 +187,7 @@ function casesTidy() {
   }
   const track = st.querySelector(".st-track");
   // свои карточки (сезон, турниры) — перерисовываем
-  [["st-wipe", wipeCard()], ["st-season", seasonCard()], ["tr-bar", tournCard()], ["st-shop", shopCard()], ["st-spark", sparkCard()], ["st-offer", offerCard()]].forEach(([k, html]) => {
+  [["st-poll", pollCard()], ["st-wipe", wipeCard()], ["st-season", seasonCard()], ["tr-bar", tournCard()], ["st-shop", shopCard()], ["st-spark", sparkCard()], ["st-offer", offerCard()]].forEach(([k, html]) => {
     const old = track.querySelector(`.st-sl[data-k="${k}"]`);
     if (old) old.remove();
     if (html) v.insertAdjacentHTML("beforeend", html);
