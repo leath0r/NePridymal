@@ -205,6 +205,9 @@ def _do_wipe(by):
         if CFG["keys"]:
             db.execute("DELETE FROM case_keys")
         if CFG["clans"]:
+            import clans as C
+            for c in q("SELECT * FROM clans"):   # места за уровень остаются купленными — иначе состав больше лимита (30/25)
+                db.execute("UPDATE clans SET slots=? WHERE id=?", (max(C.cap(c), q1("SELECT COUNT(*) n FROM clan_members WHERE clan=?", c["id"])["n"]), c["id"]))
             db.execute("UPDATE clans SET treasury=0, bank=0")
         if CFG["bank"]:
             db.execute("INSERT INTO kv(k,v) VALUES('bank_from',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(t),))
@@ -456,6 +459,10 @@ async def admin_wipe_now(req: Request, aid=Depends(admin)):
         err("для подтверждения введи слово ВАЙП")
     if STATE["running"]:
         err("вайп уже идёт")
+    if CFG["on"] and CFG["days"]:   # ручной вайп — расписание сдвигается: следующий через days дней от сегодня, в 12:00 МСК
+        d = (now() + 10800) // 86400 * 86400 - 10800 + 12 * 3600 + CFG["days"] * 86400
+        CFG.update(next=d, warned=[])
+        _save()
     asyncio.create_task(_run(aid))
     return {"ok": True}
 
