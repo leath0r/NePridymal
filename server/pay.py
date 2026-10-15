@@ -362,7 +362,10 @@ async def on_inline(iq):
     if cfg("max") and amount > cfg("max"):
         return await _inline_hint(qid, f"Максимум за раз — {cfg('max')} ⭐")
     fee = _fee(amount)
-    if bal(uid) < amount + fee:
+    u = q1("SELECT stars FROM users WHERE id=?", uid)   # отправитель мог ни разу не открыть игру — аккаунта нет
+    if not u:
+        return await _inline_hint(qid, "Сначала открой игру — потом сможешь отправлять чеки")
+    if u["stars"] < amount + fee:
         return await _inline_hint(qid, f"Не хватает звёзд: нужно {amount + fee} ⭐ с комиссией")
     code = f"{amount}x{secrets.token_hex(6)}"
     link = f"https://t.me/{BOT_NAME}?start=claim_{code}"   # главный бот — только он обрабатывает /start claim_
@@ -387,7 +390,8 @@ def reserve_cheque(uid, code):
         if loans.stars_locked(uid):
             notify(uid, "↩️ Чек не создан: пока открыт кредит, переводить звёзды нельзя")
             return
-        if bal(uid) < amount + fee:
+        u = q1("SELECT stars FROM users WHERE id=?", uid)
+        if not u or u["stars"] < amount + fee:
             notify(uid, f"↩️ Чек на {amount} ⭐ не создан: не хватило звёзд с комиссией")
             return
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount + fee, uid))
@@ -406,6 +410,9 @@ def claim_cheque(uid, code):
             return {"err": "Этот чек уже забрали"}
         if c["sender"] == uid:
             return {"err": "Это твой чек — его может забрать кто-то другой"}
+        cu = q1("SELECT banned FROM users WHERE id=?", uid)
+        if not cu or cu["banned"]:
+            return {"err": "Аккаунт заблокирован"}
         if now() - c["created"] > cfg("inline_ttl_h") * 3600:
             return {"err": "Чек истёк"}
         db.execute("UPDATE cheques SET claimed_by=?, claimed_ts=? WHERE code=?", (uid, now(), code))
