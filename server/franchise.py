@@ -43,9 +43,9 @@ DEFAULTS = {
     "reward": conf("franchise.reward", 25000),           # ⭐ владельцу, один раз на аккаунт…
     "players": conf("franchise.reward_players", 10),     # …когда бот приведёт столько новых игроков…
     "level": conf("franchise.reward_level", 5),          # …не ниже этого уровня
-    "cut_pct": 0.5,                                      # % КАЖДОМУ владельцу бота и админу от всех налогов и комиссий игры, каждую минуту, без потолка (решение владельца игры)
+    "cut_pct": 0.5,                                      # % КАЖДОМУ владельцу бота и админу от всего дохода игры (игры + налоги и комиссии), каждую минуту, без потолка (решение владельца игры)
     "cap_on": False,                                     # общий потолок: всем получателям вместе не больше cap_pct %…
-    "cap_pct": 10.0,                                     # …налогов и комиссий (сверх — делится поровну)
+    "cap_pct": 10.0,                                     # …дохода игры (сверх — делится поровну)
     "max_per_owner": conf("franchise.max_per_owner", 5),  # сверх — бот создан в Telegram, но игра его не подключает
     "game_promo": True,                                  # баннер на главной в игре
     "bot_promo": True,                                   # бот сам предлагает игрокам создать франшизу…
@@ -359,9 +359,12 @@ def _create_rewards():
                + (f"\n\nКогда через него придут {cfg('players')} новых игроков {cfg('level')}+ уровня — ещё <b>{nf(cfg('reward'))} ⭐</b>" if cfg("reward") else ""))
 
 
+CUT_KINDS = A.GAME_KINDS[:-1] + ",'fee')"   # весь доход игры: проигрыши в играх + все налоги и комиссии
+
+
 def fee_income(t0, t1):
-    """Все налоги и комиссии игры за [t0, t1): события fee (маркет, обмены, переводы, кредиты, налог с бизнеса)."""
-    return -q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind='fee' AND ts>=? AND ts<?", t0, t1)["s"]
+    """Весь доход игры за [t0, t1): проигрыши игроков в играх минус выигрыши + налоги и комиссии (маркет, обмены, переводы, кредиты, бизнес)."""
+    return -q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind IN {CUT_KINDS} AND ts>=? AND ts<?", t0, t1)["s"]
 
 
 def cut_recipients():
@@ -382,7 +385,7 @@ def cut_share(n):
 
 
 def _cut_tick():
-    """Каждую минуту: cut_pct % налогов и комиссий, собранных с прошлого тика, — каждому получателю. Дробные части копятся
+    """Каждую минуту: cut_pct % всего дохода игры (игры + fee), собранного с прошлого тика, — каждому получателю. Дробные части копятся
     в fr_acc (за минуту комиссий бывает ~100 ⭐ → 0,5 ⭐), начисляется целое. Из банка игры (kind frcut)."""
     t1 = now()
     t0 = int(A.kv_get("frcut_ts", 0) or 0) or t1
@@ -392,7 +395,12 @@ def _cut_tick():
                 db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_ts',?)", (str(t1),))
         return
     t0 = max(t0, t1 - 3600)   # после долгого простоя не начисляем задним числом больше часа
-    base = fee_income(t0, t1)
+    base = fee_income(t0, t1) + int(A.kv_get("frcut_carry", 0) or 0)   # минуты, где игроки выиграли больше, вычитаются из следующих
+    if base <= 0:
+        with A.LOCK:
+            db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_carry',?)", (str(max(base, -5_000_000)),))
+            db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_ts',?)", (str(t1),))
+        return
     rcp = cut_recipients() if base > 0 and cfg("cut_pct") > 0 else []
     pct = cut_share(len(rcp))
     with tx():
@@ -405,6 +413,7 @@ def _cut_tick():
                 db.execute("UPDATE users SET stars=stars+? WHERE id=?", (whole, uid))
                 event(uid, "frcut", whole)
         db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_ts',?)", (str(t1),))
+        db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('frcut_carry','0')")
 
 
 def _cut_daily():
@@ -417,7 +426,7 @@ def _cut_daily():
     for uid, un in cut_recipients():
         got = q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind='frcut' AND ts>=? AND ts<?", uid, day, day + 86400)["s"]
         if got > 0:
-            notify(uid, f"💼 Пассивный доход за вчера: <b>+{nf(got)} ⭐</b> — {str(cfg('cut_pct')).replace('.', ',')}% от всех налогов и комиссий игры.\n"
+            notify(uid, f"💼 Пассивный доход за вчера: <b>+{nf(got)} ⭐</b> — {str(cfg('cut_pct')).replace('.', ',')}% от всего дохода игры (игры + налоги и комиссии).\n"
                         f"Это отчёт: звёзды уже зачислены на баланс в течение вчерашнего дня (начисляются каждую минуту, "
                         f"пока у тебя есть бот @{esc(un)}). История — в профиле → «История».")
 
@@ -474,7 +483,7 @@ async def cmd(m):
     if cfg("create_reward") and not q1("SELECT 1 FROM fr_create WHERE owner=?", uid):
         lines.append(f"🎁 <b>{nf(cfg('create_reward'))} ⭐ сразу</b> за создание (с {cfg('create_level')} уровня, один раз)")
     if cfg("cut_pct"):
-        lines.append(f"💼 <b>{str(cfg('cut_pct')).replace('.', ',')}%</b> от всех налогов и комиссий игры — начисляется каждую минуту, пока у тебя есть бот (с {cfg('create_level')} уровня)")
+        lines.append(f"💼 <b>{str(cfg('cut_pct')).replace('.', ',')}%</b> от всего дохода игры (игры + налоги и комиссии) — начисляется каждую минуту, пока у тебя есть бот (с {cfg('create_level')} уровня)")
     if not paid and cfg("reward"):
         lines.append(f"🎁 Ещё <b>{nf(cfg('reward'))} ⭐</b> — когда через твоего бота придут {cfg('players')} новых игроков и дорастут до {cfg('level')} уровня\n")
     for b in mine:
@@ -708,7 +717,7 @@ def promo_text():
     r, c, pct = cfg("reward"), cfg("create_reward"), cfg("cut_pct")
     pc = str(pct).replace(".", ",")
     perks = ([f"• <b>{nf(c)} ⭐ сразу</b> за создание (с {cfg('create_level')} уровня)"] if c else []) \
-        + ([f"• <b>{pc}% от всех налогов и комиссий игры</b> — пассивный доход каждую минуту, пока у тебя есть бот"] if pct else []) \
+        + ([f"• <b>{pc}% от всего дохода игры (игры + налоги и комиссии)</b> — пассивный доход каждую минуту, пока у тебя есть бот"] if pct else []) \
         + ([f"• ещё <b>{nf(r)} ⭐</b>, когда придут {cfg('players')} игроков {cfg('level')}+ уровня"] if r else [])
     return ("🤖 <b>Свой бот с этой игрой" + (" — и доход каждую минуту</b>" if pct else "</b>") + "\n\n"
             "Одной кнопкой создай свой бот с нашей игрой — без @BotFather и без кода. "
