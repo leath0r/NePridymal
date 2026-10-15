@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse
 
 from settings import conf
 import app as A
-from app import (ADMINS, APP_URL, BOT_NAME, CUR_TOKEN, R, TOKEN, VIA_BOT, app, db, err, esc, event, notify, now, q, q1, tg_call, tx)
+from app import (ADMINS, APP_URL, BOT_NAME, CUR_TOKEN, R, STEALTH, TOKEN, VIA_BOT, app, db, err, esc, event, notify, now, q, q1, tg_call, tx)
 from admin import OWNERS, admin, log
 
 
@@ -812,7 +812,8 @@ async def watch_loop():
                 print("franchise OFF", b["id"], b["username"], why, flush=True)
                 notify(b["owner"], f"⛔ Бот @{esc(b['username'])} отключён от игры: {why}. Игроки могут играть в @{face_name()}")
                 for a in ADMINS:
-                    notify(a, f"⛔ Франшиза @{esc(b['username'])} (владелец {b['owner']}) отключена автоматически: {why}")
+                    if a not in STEALTH:   # в режиме секретности админу не шлём
+                        notify(a, f"⛔ Франшиза @{esc(b['username'])} (владелец {b['owner']}) отключена автоматически: {why}")
             await asyncio.sleep(0.3)
         await asyncio.sleep(180)
 

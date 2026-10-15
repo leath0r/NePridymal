@@ -174,7 +174,7 @@ def pay_home(uid=Depends(auth)):
         if other not in peers:
             peers[other] = _brief(other)
         if peers[other]:
-            hide = r["anon"] and r["src"] == uid   # отправитель анонимного перевода получателя не видит
+            hide = bool(r["anon"])   # анонимный перевод скрыт в обе стороны (в transfers src/dst остаются — админу видно для откатов)
             out.append({"in": r["dst"] == uid, "amount": r["amount"], "fee": r["fee"], "note": r["note"], "ts": r["ts"], "user": ANON if hide else peers[other]})
     wk = now() - 7 * 86400
     week = {"in": q1("SELECT COALESCE(SUM(amount),0) s FROM transfers WHERE dst=? AND ts>=?", uid, wk)["s"],
@@ -262,7 +262,7 @@ async def pay_send(req: Request, uid=Depends(auth)):
             event(uid, "fee", -fee)
         event(to, "transfer", amount)
         db.execute("INSERT INTO transfers(src,dst,amount,fee,note,ts,anon) VALUES(?,?,?,?,?,?,?)", (uid, to, amount, fee, note, now(), int(anon)))
-        name = q1("SELECT name FROM users WHERE id=?", uid)["name"]
+        name = "Неизвестный пользователь" if anon else q1("SELECT name FROM users WHERE id=?", uid)["name"]
         left = bal(uid)
     notify(to, f"💸 Перевод от <b>{esc(name)}</b>: <b>{amount:,} ⭐</b>".replace(",", " ") + (f"\n\n<i>«{esc(note)}»</i>" if note else ""))
     return {"ok": True, "stars": left, "amount": amount, "fee": fee}

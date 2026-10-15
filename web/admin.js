@@ -6,10 +6,12 @@ const admBytes = b => b >= 1e9 ? (b / 1e9).toFixed(1).replace(".", ",") + " ГБ
 const admSgn = v => `<b class="${v >= 0 ? "tw" : "tl"}">${v >= 0 ? "+" : "−"}⭐ ${fmt(Math.abs(v))}</b>`;
 const admKv = (k, v) => `<div class="row kv"><div class="grow"><div class="s">${k}</div></div>${v}</div>`;
 
-// замочек админки и счётчик FPS спрятаны: админ 20 раз подряд жмёт «Топ» — появляются, ещё 20 раз — исчезают (запоминается на устройстве)
-const admShown = () => { try { return localStorage.getItem("admShow") === "1"; } catch (e) { return false; } };
+// Режим секретности (без пароля): один серверный выключатель. Пока включён — вся админская разметка скрыта
+// на устройстве, и бот НЕ шлёт этому админу служебные сообщения (тикеты, идеи, опросы, авто-отключения франшиз).
+// Ничего не удаляется: admin_log/actlog пишутся, у других админов уведомления идут. Состояние — на сервере
+// (ME.stealth), переживает перезапуск. 20 нажатий на «Кейсы» переключают режим.
+const admShown = () => !!(ME && !ME.stealth);   // админка видна, когда режим секретности выключен
 function admShow(on) {
-  try { localStorage.setItem("admShow", on ? "1" : "0"); } catch (e) {}
   if (!on) { const b = $("#adm-btn"), f = $("#fps"); if (b) b.remove(); if (f) f.remove(); return; }
   if (!$("#adm-btn")) {
     const b = document.createElement("button");
@@ -18,16 +20,23 @@ function admShow(on) {
   }
   fpsMeter();
 }
+async function admToggleSecret() {
+  const on = !ME.stealth;
+  let r; try { r = await post("admin/stealth", { on }); } catch (e) { return; }
+  if (!r || !r.ok) return;
+  ME.stealth = r.on;
+  admShow(!ME.stealth);
+  H.imp("heavy"); toast(ME.stealth ? "Режим секретности включён — админка скрыта, уведомления отключены" : "Режим секретности выключен", "ok");
+}
 (function admButton() {
-  const t = setInterval(() => { if (ME) { clearInterval(t); if (ME.admin && admShown()) admShow(true); } }, 500);
+  const t = setInterval(() => { if (ME) { clearInterval(t); if (ME.admin && !ME.stealth) admShow(true); } }, 500);
   let n = 0, last = 0;
   document.addEventListener("click", e => {
-    if (!ME || !ME.admin || !e.target.closest || !e.target.closest('[data-tab="top"]')) return;
+    if (!ME || !ME.admin || !e.target.closest || !e.target.closest('[data-tab="cases"]')) return;
     const now = Date.now(); n = now - last < 1200 ? n + 1 : 1; last = now;
     if (n < 20) return;
     n = 0;
-    const on = !admShown(); admShow(on);
-    H.imp("heavy"); toast(on ? "Админка видна" : "Админка скрыта", "ok");
+    admToggleSecret();
   }, true);
 })();
 

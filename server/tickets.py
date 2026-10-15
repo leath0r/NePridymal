@@ -7,7 +7,7 @@ import asyncio
 from fastapi import Depends, Request
 
 import app as A
-from app import ADMINS, R, app, auth, db, err, esc, notify, now, q, q1, tx, user_brief
+from app import ADMINS, R, STEALTH, app, auth, db, err, esc, notify, now, q, q1, tx, user_brief
 from admin import admin, log
 
 TOPICS = {"pay": "Покупка звёзд", "bug": "Ошибка в игре", "gift": "Подарки и баланс", "acc": "Аккаунт и бан", "other": "Другое"}
@@ -46,7 +46,7 @@ def _to_admins(tid, uid, text, new):
     head = f"🎫 <b>Новый тикет #{tid}</b>" if new else f"💬 <b>Тикет #{tid}</b> — новое сообщение"
     msg = f"{head} · {esc(TOPICS.get(t['topic'], ''))}\n{who}\n\n{esc(text[:1500])}"
     for a in list(ADMINS):
-        if a != uid:
+        if a != uid and a not in STEALTH:   # в режиме секретности админу не шлём
             notify(a, msg, url=_url("aticket", tid))
 
 

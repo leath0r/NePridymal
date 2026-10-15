@@ -8,7 +8,7 @@ import re
 from fastapi import Depends, Request
 
 import app as A
-from app import ADMINS, R, app, db, err, esc, notify, now, q, q1, tg_call, tx
+from app import ADMINS, R, STEALTH, app, db, err, esc, notify, now, q, q1, tg_call, tx
 from admin import admin, log
 
 db.executescript("""
@@ -60,7 +60,8 @@ def _finish(p):
             f"{esc(p['yes'])}: <b>{y}</b> ({pct(y)})\n{esc(p['no'])}: <b>{n}</b> ({pct(n)})\n\n"
             f"Проголосовали {tot} из {_reach(p)} {'видевших опрос' if p.get('ingame') else 'получивших'}.")
     for a in ADMINS:
-        notify(a, text)
+        if a not in STEALTH:   # в режиме секретности админу не шлём
+            notify(a, text)
 
 
 def _reach(p):

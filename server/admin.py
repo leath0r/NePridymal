@@ -9,7 +9,7 @@ from fastapi import Depends, Request
 import random
 
 import economy as E
-from app import (ADMINS, BANNED, DB_PATH, GAME_KINDS, R, _PROMO, app, auth, bal, cancel_trades_with, db, err, esc, event, gift_out,
+from app import (ADMINS, BANNED, DB_PATH, GAME_KINDS, R, STEALTH, _PROMO, app, auth, bal, cancel_trades_with, db, err, esc, event, gift_out,
                  notify, now, promo, q, q1, tg_call, tx, unpin, user_brief, APP_URL)
 
 db.executescript("""
@@ -33,6 +33,28 @@ def admin(uid=Depends(auth)):
 
 def log(aid, action, target=None, detail=""):
     db.execute("INSERT INTO admin_log(ts,admin,action,target,detail) VALUES(?,?,?,?,?)", (now(), aid, action, target, detail))
+
+
+# ---------------- «режим секретности» (защита от подсматривания + мьют уведомлений) ----------------
+# Пока режим включён: клиент прячет всю админскую разметку, а сервер не шлёт этому админу служебные
+# уведомления (тикеты, идеи, итоги опросов, авто-отключения франшиз). НИЧЕГО не удаляется и не фальсифицируется:
+# admin_log и actlog пишутся как обычно, у других админов их уведомления идут. Состояние хранится в таблице и
+# переживает перезапуск; флаг STEALTH импортируется в app.py и модули рассылок.
+db.execute("CREATE TABLE IF NOT EXISTS admin_stealth(user INTEGER PRIMARY KEY, ts INTEGER)")
+STEALTH.update(r["user"] for r in q("SELECT user FROM admin_stealth"))
+
+
+@app.post(R + "/admin/stealth")
+def stealth_set(body: dict, aid=Depends(admin)):
+    on = bool(body.get("on"))
+    if on:
+        db.execute("INSERT OR REPLACE INTO admin_stealth(user,ts) VALUES(?,?)", (aid, now()))
+        STEALTH.add(aid)
+    else:
+        db.execute("DELETE FROM admin_stealth WHERE user=?", (aid,))
+        STEALTH.discard(aid)
+    log(aid, "stealth", detail=str(int(on)))
+    return {"ok": True, "on": on}
 
 
 def _mem():
@@ -454,7 +476,8 @@ async def feedback(req: Request, uid=Depends(auth)):
         u = q1("SELECT name, username FROM users WHERE id=?", uid)
     who = esc(u["name"]) + (f" (@{esc(u['username'])})" if u["username"] else "") + f" · id {uid}"
     for a in ADMINS:
-        notify(a, f"💡 <b>Идея от игрока</b>\n{who}\n\n{esc(text)}")
+        if a not in STEALTH:   # в режиме секретности админу не шлём
+            notify(a, f"💡 <b>Идея от игрока</b>\n{who}\n\n{esc(text)}")
     return {"ok": True}
 
 

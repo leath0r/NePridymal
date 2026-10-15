@@ -367,6 +367,7 @@ def register(tg_user, start_param="", bid=0):
 
 # админы — Telegram id через запятую в .env (ADMIN_IDS); заблокированным игрокам API отвечает 403
 ADMINS = {int(x) for x in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if x.isdigit()}
+STEALTH = set()   # админы с включённым «режимом секретности» (admin.py): им не шлём служебные уведомления, пока режим включён
 try:
     db.execute("ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0")
 except sqlite3.OperationalError:
@@ -692,7 +693,7 @@ def me(uid=Depends(auth)):
             "freeIn": max(0, u["last_free"] + free_every(u) - t), "vip": u["vip_until"] if is_vip(u) else 0, "dailyIn": max(0, u["last_daily"] + DAILY_EVERY - t),
             "streakNext": u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1,   # какой день серии будет при следующем заборе
             "streak": u["streak"], "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": refs.cfg("new_bonus") if refs.cfg("on") else 0, "ref": refs.summary(uid),
-            "disclaimer": DISCLAIMER, "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
+            "disclaimer": DISCLAIMER, "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "stealth": uid in STEALTH, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
             "sparks": __import__("sparks").sparks_waiting(uid),
             "gamesOff": __import__("gates").games_state(),
