@@ -346,6 +346,15 @@ def _cheque_amt(code):
         return 0
 
 
+def _cheque_sender(code):
+    # формат кода: «<сумма>x<id_отправителя>x<случайное>» — отправитель зашит, чтобы забор мог
+    # сам списать средства, если chosen_inline_result не пришёл (у бота выключен inline-feedback)
+    try:
+        return int(code.split("x")[1])
+    except (ValueError, IndexError, AttributeError):
+        return 0
+
+
 async def _inline_hint(qid, text):
     await tg_call("answerInlineQuery", inline_query_id=qid, results=[], cache_time=1, is_personal=True,
                   switch_pm_text=text[:64], switch_pm_parameter="wallet")
@@ -367,7 +376,7 @@ async def on_inline(iq):
         return await _inline_hint(qid, "Сначала открой игру — потом сможешь отправлять чеки")
     if u["stars"] < amount + fee:
         return await _inline_hint(qid, f"Не хватает звёзд: нужно {amount + fee} ⭐ с комиссией")
-    code = f"{amount}x{secrets.token_hex(6)}"
+    code = f"{amount}x{uid}x{secrets.token_hex(5)}"   # отправитель зашит в код — забор сможет списать сам, если feedback выкл.
     link = f"https://t.me/{BOT_NAME}?start=claim_{code}"   # главный бот — только он обрабатывает /start claim_
     res = {"type": "article", "id": code, "title": f"Перевести {amount} ⭐",
            "description": f"Комиссия {fee} ⭐ · заберёт первый, кто откроет",
@@ -402,31 +411,54 @@ def claim_cheque(uid, code):
     """start=claim_<код>: зачисляем первому открывшему (кроме отправителя). Возвращает dict для ответа боту."""
     with tx():
         c = q1("SELECT * FROM cheques WHERE code=?", code)
-        if not c:
-            return {"err": "Чек не найден или ещё не активирован — попробуй открыть чуть позже"}
-        if c["refunded"]:
-            return {"err": "Чек истёк и вернулся отправителю"}
-        if c["claimed_by"]:
-            return {"err": "Этот чек уже забрали"}
-        if c["sender"] == uid:
-            return {"err": "Это твой чек — его может забрать кто-то другой"}
-        cu = q1("SELECT banned FROM users WHERE id=?", uid)
-        if not cu or cu["banned"]:
-            return {"err": "Аккаунт заблокирован"}
-        if now() - c["created"] > cfg("inline_ttl_h") * 3600:
-            return {"err": "Чек истёк"}
-        db.execute("UPDATE cheques SET claimed_by=?, claimed_ts=? WHERE code=?", (uid, now(), code))
-        db.execute("UPDATE users SET stars=stars+? WHERE id=?", (c["amount"], uid))
-        event(c["sender"], "transfer", -c["amount"])
-        if c["fee"]:
-            event(c["sender"], "fee", -c["fee"])
-        event(uid, "transfer", c["amount"])
-        db.execute("INSERT INTO transfers(src,dst,amount,fee,note,ts,anon) VALUES(?,?,?,?,?,?,0)", (c["sender"], uid, c["amount"], c["fee"], "чек", now()))
-        snm = q1("SELECT name FROM users WHERE id=?", c["sender"])
+        if c:   # чек уже зарезервирован (chosen_inline_result пришёл) — просто зачисляем
+            if c["refunded"]:
+                return {"err": "Чек истёк и вернулся отправителю"}
+            if c["claimed_by"]:
+                return {"err": "Этот чек уже забрали"}
+            if c["sender"] == uid:
+                return {"err": "Это твой чек — его может забрать кто-то другой"}
+            cu = q1("SELECT banned FROM users WHERE id=?", uid)
+            if not cu or cu["banned"]:
+                return {"err": "Аккаунт заблокирован"}
+            if now() - c["created"] > cfg("inline_ttl_h") * 3600:
+                return {"err": "Чек истёк"}
+            sender, amount, fee = c["sender"], c["amount"], c["fee"]
+            db.execute("UPDATE cheques SET claimed_by=?, claimed_ts=? WHERE code=?", (uid, now(), code))
+            db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amount, uid))
+        else:   # резерв не сработал (у бота выключен inline-feedback) — списываем с отправителя прямо сейчас
+            amount, sender = _cheque_amt(code), _cheque_sender(code)
+            if amount <= 0 or sender <= 0:
+                return {"err": "Чек не найден или ещё не активирован — попробуй открыть чуть позже"}
+            if not cfg("on") or not cfg("inline_on"):
+                return {"err": "Переводы сейчас отключены"}
+            if amount < cfg("min") or (cfg("max") and amount > cfg("max")):
+                return {"err": "Чек недействителен"}
+            if sender == uid:
+                return {"err": "Это твой чек — его может забрать кто-то другой"}
+            cu = q1("SELECT banned FROM users WHERE id=?", uid)
+            if not cu or cu["banned"]:
+                return {"err": "Аккаунт заблокирован"}
+            if loans.stars_locked(sender):
+                return {"err": "Отправитель сейчас не может переводить звёзды"}
+            fee = _fee(amount)
+            su = q1("SELECT stars FROM users WHERE id=?", sender)
+            if not su or su["stars"] < amount + fee:
+                return {"err": "У отправителя не хватает звёзд — чек недействителен"}
+            db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount + fee, sender))
+            db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amount, uid))
+            db.execute("INSERT INTO cheques(code,sender,amount,fee,created,claimed_by,claimed_ts) VALUES(?,?,?,?,?,?,?)",
+                       (code, sender, amount, fee, now(), uid, now()))
+        event(sender, "transfer", -amount)
+        if fee:
+            event(sender, "fee", -fee)
+        event(uid, "transfer", amount)
+        db.execute("INSERT INTO transfers(src,dst,amount,fee,note,ts,anon) VALUES(?,?,?,?,?,?,0)", (sender, uid, amount, fee, "чек", now()))
+        snm = q1("SELECT name FROM users WHERE id=?", sender)
     rnm = q1("SELECT name FROM users WHERE id=?", uid)
-    amt_s = f"{c['amount']:,}".replace(",", " ")
-    notify(c["sender"], f"🎁 Твой чек на <b>{amt_s} ⭐</b> забрал <b>{esc(rnm['name'] if rnm else 'игрок')}</b>")
-    return {"ok": True, "amount": c["amount"], "from": snm["name"] if snm else "игрок"}
+    amt_s = f"{amount:,}".replace(",", " ")
+    notify(sender, f"🎁 Твой чек на <b>{amt_s} ⭐</b> забрал <b>{esc(rnm['name'] if rnm else 'игрок')}</b>")
+    return {"ok": True, "amount": amount, "from": snm["name"] if snm else "игрок"}
 
 
 def sweep_cheques():
