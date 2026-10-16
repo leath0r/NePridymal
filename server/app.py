@@ -684,7 +684,9 @@ def user_brief(r):
     keys = r.keys()
     title = TITLE_NAMES.get(r["title"]) if "title" in keys and r["title"] else None
     frame = r["frame"] if "frame" in keys and r["frame"] and (r["frame_until"] or 0) > now() else None
-    return {"id": r["id"], "name": r["name"], "username": r["username"], "photo": r["photo"], "level": level(r["xp"]),
+    name = (r["nick"] if "nick" in keys and r["nick"] else r["name"]) or "Игрок"
+    photo = (r["avatar"] if "avatar" in keys and r["avatar"] else r["photo"])
+    return {"id": r["id"], "name": name, "username": r["username"], "photo": photo, "level": level(r["xp"]),
             "clan": CLAN_TAG.get(r["id"]), "crown": RICH_RANK.get(r["id"]), "title": title, "frame": frame, "vip": is_vip(r),
             **(STYLE_BRIEF(r) if STYLE_BRIEF else {}), **(CLAN_LOOK(r["id"]) if CLAN_LOOK else {})}
 
@@ -850,7 +852,7 @@ def _next_ms(uid):
 
 @app.get(R + "/feed")
 def feed(uid=Depends(auth)):
-    rows = q("""SELECT f.cs, g.*, u.name uname, u.photo uphoto FROM feed f JOIN gifts g ON g.id=f.gift
+    rows = q("""SELECT f.cs, g.*, COALESCE(NULLIF(u.nick,''),u.name) uname, COALESCE(NULLIF(u.avatar,''),u.photo) uphoto FROM feed f JOIN gifts g ON g.id=f.gift
                 JOIN users u ON u.id=f.user ORDER BY f.id DESC LIMIT 24""")
     return [{"user": {"id": r["owner"], "name": r["uname"], "photo": r["uphoto"]}, "gift": gift_out(r), "case": r["cs"]} for r in rows]
 
@@ -879,6 +881,8 @@ def profile(tid: int, uid=Depends(auth)):
     best = q1(f"SELECT MAX(delta) m FROM events WHERE user=? AND kind IN {GAME_KINDS}", tid)["m"] or 0
     return {"ach": achievements(u, gifts, fr, worth), "cols": len({g["col"] for g in gifts}),
             "bannerImg": u["banner_img"] if "banner_img" in u.keys() else "",
+            "nick": u["nick"] if "nick" in u.keys() else "", "tgName": u["name"] or "",
+            "avatarImg": u["avatar"] if "avatar" in u.keys() else "", "tgPhoto": u["photo"] or "",
             "stats": {"games": games, "won": won, "lost": lost, "best": best, "rounds": sum(games.values())}, **user_brief(u), "lv": level_info(u["xp"]), "bio": u["bio"], "banner": u["banner"],
             "pinned": pinned, "gifts": gifts, "worth": worth, "opened": u["opened"],
             "badges": json.loads(u["p_badges"] or "[]") if "p_badges" in u.keys() else [], "cover": u["p_cover"] if "p_cover" in u.keys() else 0,
@@ -938,11 +942,13 @@ import secrets  # noqa: E402
 
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(WEB_DIR, "u"))
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-try:
-    db.execute("ALTER TABLE users ADD COLUMN banner_img TEXT DEFAULT ''")
-except Exception:
-    pass
+for _c in ("banner_img TEXT DEFAULT ''", "nick TEXT DEFAULT ''", "avatar TEXT DEFAULT ''"):
+    try:   # nick/avatar — свои имя и аватарка в игре поверх присланных Telegram (пусто — берём из Telegram)
+        db.execute(f"ALTER TABLE users ADD COLUMN {_c}")
+    except Exception:
+        pass
 BANNER_MAX = 700 * 1024
+AVA_MAX = 400 * 1024
 
 
 @app.post(R + "/profile/banner")
@@ -973,6 +979,34 @@ async def banner_upload(req: Request, uid=Depends(auth)):
     return {"bannerImg": name}
 
 
+@app.post(R + "/profile/avatar")
+async def avatar_upload(req: Request, uid=Depends(auth)):
+    """Своя аватарка: приходит обрезанной в квадрат и сжатой на клиенте (JPEG data URL). Пустая строка — вернуть аватар из Telegram."""
+    img = str((await req.json()).get("img", ""))
+    old = q1("SELECT avatar FROM users WHERE id=?", uid)["avatar"] or ""
+    name = ""
+    if img:
+        if not img.startswith("data:image/jpeg;base64,"):
+            err("нужна картинка JPEG")
+        try:
+            raw = base64.b64decode(img.split(",", 1)[1], validate=True)
+        except Exception:
+            err("картинка повреждена")
+        if len(raw) > AVA_MAX or raw[:3] != b"\xff\xd8\xff":
+            err("картинка слишком большая или не JPEG")
+        name = f"u/a{uid}_{secrets.token_hex(6)}.jpg"
+        with open(os.path.join(UPLOAD_DIR, os.path.basename(name)), "wb") as f:
+            f.write(raw)
+    with tx():
+        db.execute("UPDATE users SET avatar=? WHERE id=?", (name, uid))
+    if old:
+        try:
+            os.remove(os.path.join(UPLOAD_DIR, os.path.basename(old)))
+        except OSError:
+            pass
+    return {"avatar": name}
+
+
 @app.post(R + "/profile")
 async def edit_profile(req: Request, uid=Depends(auth)):
     body = await req.json()
@@ -981,10 +1015,18 @@ async def edit_profile(req: Request, uid=Depends(auth)):
     if banner and banner not in BACKDROPS:
         err("нет такого баннера")
     pinned = [int(x) for x in body.get("pinned", [])][:6]
+    set_nick = "nick" in body   # ник меняем, только если его прислали (пустая строка = сброс на имя из Telegram)
+    nick = ""
+    if set_nick:
+        nick = " ".join(str(body["nick"]).split())[:24]   # схлопываем пробелы и переводы строк, режем до 24
+        if nick and len(nick) < 2:
+            err("Ник — минимум 2 символа")
     with tx():
         own = {r["id"] for r in q("SELECT id FROM gifts WHERE owner=?", uid)}
         pinned = [p for p in pinned if p in own]
         db.execute("UPDATE users SET bio=?, banner=?, pinned=? WHERE id=?", (bio, banner, json.dumps(pinned), uid))
+        if set_nick:
+            db.execute("UPDATE users SET nick=? WHERE id=?", (nick, uid))
     return {"ok": True}
 
 
@@ -1068,7 +1110,7 @@ def market(sort: str = "new", col: str = "", qs: str = "", mine: int = 0, rare: 
     if mine:
         where += " AND g.owner=?"
         args.append(uid)
-    rows = q(f"""SELECT g.*, COALESCE(u.name, 'Банк игры') uname, u.photo uphoto FROM gifts g LEFT JOIN users u ON u.id=g.owner
+    rows = q(f"""SELECT g.*, COALESCE(NULLIF(u.nick,''),u.name, 'Банк игры') uname, COALESCE(NULLIF(u.avatar,''),u.photo) uphoto FROM gifts g LEFT JOIN users u ON u.id=g.owner
                  WHERE {where} AND (u.id IS NOT NULL OR g.owner=0) ORDER BY {order} LIMIT 400""", *args)
     items = [{**gift_out(r, True), "seller": {"id": r["owner"], "name": r["uname"], "photo": r["uphoto"]}} for r in rows]
     lim = {"legend": 5, "epic": 10, "rare": 15}.get(rare)
@@ -1152,7 +1194,9 @@ async def crash_bet(req: Request, uid=Depends(auth)):
             err("Не хватает звёзд")
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount, uid))
         lvl = add_xp(uid, max(1, amount // 20))
-        CR["bets"][uid] = {"amount": amount, "auto": auto, "cashed": None, "name": u["name"], "photo": u["photo"]}
+        CR["bets"][uid] = {"amount": amount, "auto": auto, "cashed": None,
+                           "name": (u["nick"] if "nick" in u.keys() and u["nick"] else u["name"]),
+                           "photo": (u["avatar"] if "avatar" in u.keys() and u["avatar"] else u["photo"])}
     return {"ok": True, "levelup": lvl}
 
 

@@ -593,9 +593,17 @@ async function refreshProfileSheets() {
 async function editProfile() {
   await loadBanners();
   MYP = await api("user/" + ME.id);
-  const ed = { bio: MYP.bio || "", banner: MYP.banner || "", pinned: MYP.pinned.map(g => g.id), notif: ME.notif !== false, img: MYP.bannerImg || "", newImg: null };
+  const ed = { bio: MYP.bio || "", banner: MYP.banner || "", pinned: MYP.pinned.map(g => g.id), notif: ME.notif !== false, img: MYP.bannerImg || "", newImg: null,
+    nick: MYP.nick || "", ava: MYP.avatarImg || "", newAva: null };
   const el = openSheet(`<h2 class="gtitle">Профиль</h2>
     <div class="eprev" id="e-prev"></div>
+    <div class="sec-t">Имя в игре</div>
+    <div class="eid-row">
+      <label class="eava-edit"><span id="e-ava"></span><i class="eava-cam">${ic("edit")}</i><input type="file" accept="image/*" id="e-afile" hidden></label>
+      <div class="grow"><input id="enick" maxlength="24" placeholder="${esc(MYP.tgName || "Ник")}" value="${esc(ed.nick)}">
+        <div class="eid-hint" id="e-idhint"></div></div>
+    </div>
+    <div class="bnr-photo" id="e-defrow" style="${ed.nick || ed.ava || MYP.bannerImg ? "" : "display:none"}"><button class="btn ghost sm" id="e-tgdef">${ic("refresh")}Вернуть из Telegram</button></div>
     <div class="sec-t">О себе <span id="e-cnt"></span></div>
     <textarea id="ebio" rows="2" maxlength="140" placeholder="Пара слов о себе">${esc(ed.bio)}</textarea>
     <div class="sec-t">Баннер</div>
@@ -611,8 +619,14 @@ async function editProfile() {
     <div class="esave"><button class="btn cta" data-act="save-profile">${ic("check")}Сохранить</button></div>`, "edit-s");
   const all = new Map(MYP.gifts.map(g => [g.id, g]));
   const draw = () => {
-    const prev = { ...MYP, banner: ed.banner, bio: ed.bio, pinned: ed.pinned.map(i => all.get(i)).filter(Boolean), bannerImg: ed.newImg ?? ed.img };
-    el.querySelector("#e-prev").innerHTML = bannerHTML(prev) + `<div class="eprev-u">${avaHTML(MYP, 56)}<div><b>${esc(MYP.name)}</b><span>${esc(ed.bio) || "без описания"}</span></div></div>`;
+    const curAva = ed.newAva !== null ? ed.newAva : ed.ava;       // "" — вернуть аватар из Telegram
+    const pu = { ...MYP, name: ed.nick.trim() || MYP.tgName || "Игрок", photo: curAva || MYP.tgPhoto || "" };
+    const prev = { ...pu, banner: ed.banner, bio: ed.bio, pinned: ed.pinned.map(i => all.get(i)).filter(Boolean), bannerImg: ed.newImg ?? ed.img };
+    el.querySelector("#e-prev").innerHTML = bannerHTML(prev) + `<div class="eprev-u">${avaHTML(pu, 56)}<div><b>${esc(pu.name)}</b><span>${esc(ed.bio) || "без описания"}</span></div></div>`;
+    el.querySelector("#e-ava").outerHTML = `<span id="e-ava">${avaHTML(pu, 52)}</span>`;
+    const custom = ed.nick.trim() || curAva;
+    el.querySelector("#e-idhint").textContent = custom ? "своё имя в игре" : "сейчас как в Telegram";
+    el.querySelector("#e-defrow").style.display = custom ? "" : "none";
     el.querySelector("#e-cnt").textContent = `${ed.bio.length}/140`;
     el.querySelector("#e-pc").textContent = `${ed.pinned.length}/6`;
     el.querySelector("#e-pins").innerHTML = ed.pinned.map(i => all.get(i)).filter(Boolean).map(g => `<div class="gcell" data-unpin="${g.id}">${giftHTML(g, { lite: true, plain: true })}<span class="sel">${ic("x")}</span></div>`).join("")
@@ -645,12 +659,36 @@ async function editProfile() {
     im.src = url;
   };
   el.querySelector("#e-nophoto").onclick = () => { ed.newImg = ""; el.querySelector("#e-nophoto").style.display = "none"; H.sel(); draw(); };
+  el.querySelector("#enick").oninput = e => { ed.nick = e.target.value; draw(); };
+  // своя аватарка: обрезаем по центру в квадрат 256×256 и жмём в JPEG прямо в браузере
+  el.querySelector("#e-afile").onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    const url = URL.createObjectURL(f), im = new Image();
+    im.onload = () => {
+      const S = 256, side = Math.min(im.width, im.height);
+      const cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+      cv.getContext("2d").drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, S, S);
+      let q = .85, data = cv.toDataURL("image/jpeg", q);
+      while (data.length > 380000 && q > .4) { q -= .1; data = cv.toDataURL("image/jpeg", q); }
+      ed.newAva = data; URL.revokeObjectURL(url); H.sel(); draw();
+    };
+    im.onerror = () => toast("Не получилось открыть картинку", "err");
+    im.src = url;
+    e.target.value = "";
+  };
+  el.querySelector("#e-tgdef").onclick = () => {
+    ed.nick = ""; ed.newAva = "";
+    el.querySelector("#enick").value = "";
+    H.sel(); draw();
+  };
   el.querySelector("#e-notif").onclick = e => { ed.notif = !ed.notif; e.currentTarget.classList.toggle("on", ed.notif); H.sel(); };
   el._ed = ed; el._edDraw = draw;
   el._save = async () => {
     if (ed.newImg !== null && ed.newImg !== ed.img) await post("profile/banner", { img: ed.newImg });
-    await post("profile", { bio: ed.bio, banner: ed.banner, pinned: ed.pinned });
+    if (ed.newAva !== null && ed.newAva !== ed.ava) await post("profile/avatar", { img: ed.newAva });
+    await post("profile", { bio: ed.bio, banner: ed.banner, pinned: ed.pinned, nick: ed.nick.trim() });
     if (ed.notif !== (ME.notif !== false)) { await post("settings", { notif: ed.notif }); ME.notif = ed.notif; }
+    try { Object.assign(ME, await api("me")); } catch {}   // обновим имя/аватар в шапке сразу
     H.ok(); toast("Профиль сохранён", "ok"); closeSheet(); refreshProfileSheets();
   };
   draw();
