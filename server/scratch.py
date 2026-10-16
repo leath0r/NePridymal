@@ -30,13 +30,23 @@ def _grid(win_sym):
     return cells
 
 
+LOW_MAX = 5   # призы меньше x5 — «мелочь» (вернули ставку), x5 и выше — крутые комбинации
+_EV_LOW = sum(x * p for x, p, _ in PRIZES if x < LOW_MAX)    # ожидаемый возврат от мелких призов ≈ 0,49
+_EV_HIGH = sum(x * p for x, p, _ in PRIZES if x >= LOW_MAX)  # ... от крутых ≈ 0,46
+
+
 def _roll():
-    k = edge(tuned("games.scratch_rtp", 0.94), 0.96) / 0.95          # в акцию чуть щедрее: шансы выигрышей растут пропорционально
+    """Возврат игроку = настройка scratch_rtp. Мелкие призы (x1–x3) частые и фиксированные,
+    а весь прирост возврата сверх базы идёт в КРУТЫЕ комбинации (x5+): поднял шанс в админке —
+    чаще выпадают именно редкие призы, а не «вернули ставку». В акцию edge() поднимает возврат (ещё щедрее)."""
+    rtp = edge(tuned("games.scratch_rtp", 0.94), 0.96)
+    m = max(0.0, (rtp - _EV_LOW) / _EV_HIGH) if _EV_HIGH else 0.0   # множитель шанса крутых призов под нужный возврат
     r = random.random()
     for x, p, sym in PRIZES:
-        if r < p * k:
+        pr = p if x < LOW_MAX else p * m
+        if r < pr:
             return x, sym
-        r -= p * k
+        r -= pr
     return 0, None
 
 
