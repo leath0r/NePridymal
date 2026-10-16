@@ -499,12 +499,17 @@ function openDaily() {
   const days = [1, 2, 3, 4, 5, 6, 7].map(i => w0 + i).map(d => `<div style="flex:1;text-align:center;padding:8px 0;border-radius:12px;background:${d <= ME.streak && ME.dailyIn ? "color-mix(in srgb,var(--gold) 22%,transparent)" : "var(--card)"};${d === next && !ME.dailyIn ? "box-shadow:inset 0 0 0 2px var(--gold)" : ""}">
     <div style="font-size:11px" class="hint">день ${d}</div><b style="font-size:13px">${short(pay(d))}</b>${dailyKey(d) ? `<div class="dkey">${ic("lock")}</div>` : ""}</div>`).join("");
   openSheet(`<div style="text-align:center;padding-top:10px"><div style="font-size:72px">⭐</div><h2 style="margin:4px 0">Ежедневный бонус</h2>
-    <p class="hint" style="margin:0 0 14px">Заходи каждый день — награда растёт до 7 дня. На 2, 3, 5 и 7 день — <b>ключ от кейса</b>, дальше ключ «Роскошь» каждые 7 дней${ME.promo ? " · сегодня x2" : ""}</p></div>
+    <p class="hint" style="margin:0 0 ${ME.streakBest > 1 ? "6" : "14"}px">Заходи каждый день — награда растёт до 7 дня. На 2, 3, 5 и 7 день — <b>ключ от кейса</b>, дальше ключ «Роскошь» каждые 7 дней${ME.promo ? " · сегодня x2" : ""}</p>
+    ${ME.streakBest > 1 ? `<div class="hint" style="margin:0 0 14px;font-size:12px">Рекорд серии: 🔥 ${ME.streakBest} дн.</div>` : ""}</div>
     <div id="shop-box"></div>
     <div class="sec-t">${ic("calendar")}Бонус дня</div>
     <div style="display:flex;gap:4px">${days}</div>
     <div class="btns" style="margin-top:16px">${ME.dailyIn ? `<button class="btn ghost" disabled>Через ${clock(ME.dailyIn)}</button>`
       : `<button class="btn gold" data-act="claim-daily">Забрать ⭐ ${pay(next)}${dailyKey(next) ? " + ключ" : ""}</button>`}</div>
+    ${ME.streakMs ? `<div class="box" style="margin-top:12px;display:flex;align-items:center;gap:10px">
+      <span class="pic y">${ic("trophy")}</span>
+      <div class="grow"><div class="t">Награда за ${ME.streakMs.day} дней подряд</div>
+      <div class="s">+${fmt(ME.streakMs.stars)} ⭐ + ключ «${ME.streakMs.key}» · осталось ${Math.max(0, ME.streakMs.day - ME.streak)} дн.</div></div></div>` : ""}
     <div class="sec-t">Ещё звёзды</div>
     <div class="box">
       <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">${ME.ref && ME.ref.on ? `до +${fmt((ME.ref.join || 0) + ME.ref.l1[1] + ME.ref.l2[1])} ⭐ за друга + топ недели` : "играйте вместе"}</div></div><span class="pill">${ME.refs}</span></div>
@@ -788,7 +793,13 @@ const ACT = {
   me: () => openProfile(ME.id),
   profile: el => openProfile(+el.dataset.id),
   daily: () => openDaily(),
-  "claim-daily": async () => { const r = await post("daily"); H.ok(); toast(`+⭐ ${r.bonus}${r.key ? ` + ключ «${r.key}»` : ""} · серия ${r.streak} дн.`, "ok"); if (r.key) CASES = []; burst(innerWidth / 2, innerHeight / 3, ["#ffd76a", "#fff"]); closeSheet(); await loadMe(); if (TAB === "cases") renderCases(); },
+  "claim-daily": async () => {
+    const r = await post("daily"); H.ok();
+    if (r.milestone) { toast(`🏆 Веха ${r.milestone.day} дней подряд! +⭐ ${fmt(r.milestone.stars)} + ключ «${r.milestone.key}»`, "ok"); burst(innerWidth / 2, innerHeight / 3, ["#ffd76a", "#ff6fb5", "#7cc2ff", "#fff"], 160); }
+    else { toast(`+⭐ ${r.bonus}${r.key ? ` + ключ «${r.key}»` : ""} · серия ${r.streak} дн.`, "ok"); burst(innerWidth / 2, innerHeight / 3, ["#ffd76a", "#fff"]); }
+    if (r.key || r.milestone) CASES = [];
+    closeSheet(); await loadMe(); if (TAB === "cases") renderCases();
+  },
   case: el => openCase(el.dataset.id),
   "open-case": el => doOpen(topSheet(), el.dataset.id),
   "sell-won": async el => {

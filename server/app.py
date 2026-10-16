@@ -712,7 +712,8 @@ def me(uid=Depends(auth)):
     return {**user_brief(u), "stars": u["stars"], "lv": level_info(u["xp"]), "refs": u["refs"],
             "freeIn": max(0, u["last_free"] + free_every(u) - t), "vip": u["vip_until"] if is_vip(u) else 0, "dailyIn": max(0, u["last_daily"] + DAILY_EVERY - t),
             "streakNext": u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1,   # какой день серии будет при следующем заборе
-            "streak": u["streak"], "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": refs.cfg("new_bonus") if refs.cfg("on") else 0, "ref": refs.summary(uid),
+            "streak": u["streak"], "streakBest": u["best_streak"] if "best_streak" in u.keys() else 0, "streakMs": _next_ms(uid),
+            "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": refs.cfg("new_bonus") if refs.cfg("on") else 0, "ref": refs.summary(uid),
             "disclaimer": DISCLAIMER, "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "stealth": uid in STEALTH, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
             "sparks": __import__("sparks").sparks_waiting(uid),
@@ -809,17 +810,42 @@ def daily(uid=Depends(auth)):
             err("Ещё рано")
         streak = u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1
         bonus = (300 + 100 * min(streak, 7)) * (2 if promo() else 1) * (2 if is_vip(u) else 1)
-        db.execute("UPDATE users SET stars=stars+?, last_daily=?, streak=? WHERE id=?", (bonus, t, streak, uid))
+        db.execute("UPDATE users SET stars=stars+?, last_daily=?, streak=?, best_streak=MAX(best_streak,?) WHERE id=?", (bonus, t, streak, streak, uid))
         event(uid, "daily", bonus)
         key = STREAK_KEYS.get(streak) or (STREAK_KEYS[7] if streak > 7 and streak % 7 == 0 else None)
         if key:   # за серию дней — ключ от кейса
             db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (uid, key))
-    return {"bonus": bonus, "streak": streak, "key": E.CASES[key]["title"] if key else None,
+        ms = None   # веха серии — разовый крупный приз (звёзды + ключ), выдаётся один раз за достигнутый день
+        if streak in STREAK_MS and not q1("SELECT 1 FROM streak_ms WHERE user=? AND day=?", uid, streak):
+            amt, mcid = STREAK_MS[streak]
+            db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amt, uid))
+            db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (uid, mcid))
+            db.execute("INSERT INTO streak_ms(user,day,ts) VALUES(?,?,?)", (uid, streak, t))
+            event(uid, "daily", amt)
+            ms = {"day": streak, "stars": amt, "key": E.CASES[mcid]["title"]}
+    return {"bonus": bonus, "streak": streak, "key": E.CASES[key]["title"] if key else None, "milestone": ms, "nextMs": _next_ms(uid),
             "nextKey": next(({"day": d, "title": E.CASES[c]["title"]} for d, c in sorted(STREAK_KEYS.items()) if d > streak),
                             {"day": (streak // 7 + 1) * 7, "title": E.CASES[STREAK_KEYS[7]]["title"]})}
 
 
 STREAK_KEYS = {2: "pepehunt", 3: "luck", 5: "hearthunt", 7: "lux"}   # день серии → ключ от кейса (далее каждые 7 дней — «Роскошь»)
+# разовые вехи серии: день → (звёзды, ключ от кейса). Дают долгую цель заходить каждый день неделями.
+STREAK_MS = {14: (10_000, "elite"), 30: (30_000, "mega"), 60: (75_000, "mega"), 100: (200_000, "mega")}
+try:
+    db.execute("ALTER TABLE users ADD COLUMN best_streak INTEGER DEFAULT 0")   # рекорд серии — для показа и мотивации
+except sqlite3.OperationalError:
+    pass
+db.execute("CREATE TABLE IF NOT EXISTS streak_ms(user INTEGER, day INTEGER, ts INTEGER, PRIMARY KEY(user, day))")
+
+
+def _next_ms(uid):
+    """Ближайшая невзятая веха серии (для показа цели)."""
+    done = {r["day"] for r in q("SELECT day FROM streak_ms WHERE user=?", uid)}
+    for d in sorted(STREAK_MS):
+        if d not in done:
+            amt, cid = STREAK_MS[d]
+            return {"day": d, "stars": amt, "key": E.CASES[cid]["title"]}
+    return None
 
 
 @app.get(R + "/feed")
