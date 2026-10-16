@@ -363,9 +363,48 @@ async def _sched_start():
     asyncio.create_task(_sched_loop())
 
 
+def _alog_keep():
+    r = q1("SELECT v FROM kv WHERE k='admin_log_keep'")
+    try:
+        return max(0, min(365, int(r["v"]))) if r else 0   # 0 — хранить всё
+    except (ValueError, TypeError):
+        return 0
+
+
 @app.get(R + "/admin/log")
 def admin_log(aid=Depends(admin)):
-    return {"log": [dict(r) for r in q("SELECT * FROM admin_log ORDER BY id DESC LIMIT 50")]}
+    keep = _alog_keep()
+    if keep:
+        db.execute("DELETE FROM admin_log WHERE ts<?", (now() - keep * 86400,))
+    st = q1("SELECT COUNT(*) c, MIN(ts) o FROM admin_log")
+    return {"log": [dict(r) for r in q("SELECT * FROM admin_log ORDER BY id DESC LIMIT 50")],
+            "keep_days": keep, "total": st["c"], "oldest": st["o"], "canEdit": aid in OWNERS}
+
+
+@app.post(R + "/admin/log/cfg")
+def admin_log_cfg(body: dict, aid=Depends(admin)):
+    if aid not in OWNERS:
+        err("Менять журнал может только владелец")
+    try:
+        keep = max(0, min(365, int(body.get("keep_days", 0))))
+    except (TypeError, ValueError):
+        err("Введи число дней (0 — хранить всё)")
+    with tx():
+        db.execute("INSERT INTO kv(k,v) VALUES('admin_log_keep',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(keep),))
+        if keep:
+            db.execute("DELETE FROM admin_log WHERE ts<?", (now() - keep * 86400,))
+        log(aid, "adminlog_cfg", detail=f"хранить {keep} дн" if keep else "хранить всё")
+    return {"ok": True, "keep_days": keep}
+
+
+@app.post(R + "/admin/log/clear")
+def admin_log_clear(aid=Depends(admin)):
+    if aid not in OWNERS:
+        err("Очистить журнал может только владелец")
+    with tx():
+        db.execute("DELETE FROM admin_log")
+        log(aid, "adminlog_clear", detail="админский журнал очищен")   # сам факт очистки остаётся в журнале
+    return {"ok": True}
 
 
 # ---------------- выдача подарков и кейсов ----------------

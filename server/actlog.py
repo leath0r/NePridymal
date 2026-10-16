@@ -11,8 +11,8 @@ from collections import deque
 from fastapi import Depends, Request
 from fastapi.responses import Response
 
-from app import DB_PATH, R, VIA_BOT, app
-from admin import admin
+from app import DB_PATH, R, VIA_BOT, app, err
+from admin import OWNERS, admin, log
 
 KEEP_DAYS = 10
 LOG_DB = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "logs.db")
@@ -33,11 +33,25 @@ LLOCK = threading.Lock()
 rdb = sqlite3.connect(f"file:{os.path.abspath(DB_PATH)}?mode=ro", uri=True, check_same_thread=False)
 RLOCK = threading.Lock()
 BUF = deque(maxlen=50_000)
+LOGCFG = {"on": True, "keep_days": KEEP_DAYS}   # живые настройки журнала из админки: вкл/выкл и срок хранения (дней)
+ldb.execute("CREATE TABLE IF NOT EXISTS cfg(k TEXT PRIMARY KEY, v TEXT)")
+
+
+def _loadcfg():
+    try:
+        rows = dict(ldb.execute("SELECT k, v FROM cfg").fetchall())
+        LOGCFG["on"] = rows.get("on", "1") != "0"
+        LOGCFG["keep_days"] = max(1, min(365, int(rows.get("keep_days", KEEP_DAYS))))
+    except Exception as e:
+        print("actlog cfg:", e, flush=True)
+
+
+_loadcfg()
 
 
 @app.middleware("http")
 async def _actlog(request: Request, call_next):
-    if request.method != "POST" or not request.url.path.startswith(R):
+    if request.method != "POST" or not request.url.path.startswith(R) or not LOGCFG["on"]:
         return await call_next(request)
     body = (await request.body())[:400].decode("utf-8", "replace")
     t0 = time.time()
@@ -74,7 +88,7 @@ def _flush():
 
 def _prune():
     with LLOCK:
-        ldb.execute("DELETE FROM actlog WHERE ts<?", (time.time() - KEEP_DAYS * 86400,))
+        ldb.execute("DELETE FROM actlog WHERE ts<?", (time.time() - LOGCFG["keep_days"] * 86400,))
 
 
 async def _loop():
@@ -116,3 +130,54 @@ def actlog(user: int = 0, path: str = "", hours: float = 24, limit: int = 300, a
         cur = ldb.execute(sql, args)
         cols = [c[0] for c in cur.description]
         return {"rows": [dict(zip(cols, r)) for r in cur.fetchall()]}
+
+
+@app.get(R + "/admin/actlog/cfg")
+def actlog_cfg(aid=Depends(admin)):
+    """Настройки подробного журнала + сводка: вкл/выкл, срок хранения, сколько записей и места занимает."""
+    _flush()
+    with LLOCK:
+        n, oldest = ldb.execute("SELECT COUNT(*), MIN(ts) FROM actlog").fetchone()
+    size = 0
+    for ext in ("", "-wal", "-shm"):
+        try:
+            size += os.path.getsize(LOG_DB + ext)
+        except OSError:
+            pass
+    return {"on": LOGCFG["on"], "keep_days": LOGCFG["keep_days"], "rows": n or 0,
+            "oldest": oldest, "bytes": size, "canEdit": aid in OWNERS}
+
+
+@app.post(R + "/admin/actlog/cfg")
+async def actlog_cfg_set(req: Request, aid=Depends(admin)):
+    if aid not in OWNERS:
+        err("Менять журнал может только владелец")
+    b = await req.json()
+    with LLOCK:
+        if "on" in b:
+            LOGCFG["on"] = bool(b["on"])
+            ldb.execute("INSERT INTO cfg(k,v) VALUES('on',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", ("1" if LOGCFG["on"] else "0",))
+        if "keep_days" in b:
+            try:
+                LOGCFG["keep_days"] = max(1, min(365, int(b["keep_days"])))
+            except (TypeError, ValueError):
+                err("Введи число дней (1–365)")
+            ldb.execute("INSERT INTO cfg(k,v) VALUES('keep_days',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(LOGCFG["keep_days"]),))
+    log(aid, "actlog_cfg", detail=f"журнал {'вкл' if LOGCFG['on'] else 'выкл'}, хранить {LOGCFG['keep_days']} дн")
+    _prune()   # применить новый срок сразу
+    return {"ok": True, "on": LOGCFG["on"], "keep_days": LOGCFG["keep_days"]}
+
+
+@app.post(R + "/admin/actlog/clear")
+def actlog_clear(aid=Depends(admin)):
+    if aid not in OWNERS:
+        err("Очистить журнал может только владелец")
+    BUF.clear()
+    with LLOCK:
+        ldb.execute("DELETE FROM actlog")
+        try:
+            ldb.execute("VACUUM")
+        except sqlite3.OperationalError:
+            pass
+    log(aid, "actlog_clear", detail="подробный журнал очищен")
+    return {"ok": True}

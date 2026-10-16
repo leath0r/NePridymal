@@ -372,8 +372,24 @@ async function admRender(el = topSheet()) {
       <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Только владелец (ADMIN_IDS в .env)</div>`;
     body.querySelector("#adm-db-file").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f) admDbImport(f); };
   } else {
-    const r = await api("admin/log");
-    body.innerHTML = `<div class="box">${r.log.map(x => `<div class="row kv"><div class="grow"><div class="t">${esc(x.action)}${x.target ? " · " + x.target : ""}</div><div class="s">${esc(x.detail || "")}</div></div><span class="hint" style="font-size:12px">${admDate(x.ts)}</span></div>`).join("") || `<div class="hint" style="padding:14px">Действий пока нет</div>`}</div>`;
+    const [r, al] = await Promise.all([api("admin/log"), api("admin/actlog/cfg")]);
+    const kb = b => b < 1024 ? b + " Б" : b < 1048576 ? (b / 1024).toFixed(0) + " КБ" : (b / 1048576).toFixed(1) + " МБ";
+    const cfg = `<div class="box">
+      <div class="adm-oh"><b>Настройки журналов</b></div>
+      <div class="adm-os" style="margin:2px 0 10px">Админский — действия админов (эта вкладка). Подробный — каждый запрос игроков (отдельная база, для разбора жалоб и откатов).</div>
+      <div class="row kv"><div class="grow"><div class="t">Админский журнал</div><div class="s">${fmt(r.total || 0)} записей${r.oldest ? ` · с ${admDate(r.oldest)}` : ""}</div></div></div>
+      <div class="auto" style="margin:6px 0 2px"><span style="flex:1">Хранить, дней <span class="hint">(0 — всё)</span></span>
+        ${r.canEdit ? `<input class="adm-oi" style="width:64px;text-align:center" inputmode="numeric" id="adm-alog-keep" value="${r.keep_days}"><button class="btn sm gold" data-act="adm-alog-keep">${ic("check")}</button>` : `<b>${r.keep_days || "всё"}</b>`}</div>
+      ${r.canEdit ? `<button class="btn sm red" data-act="adm-alog-clear" style="margin-top:8px">${ic("x")}Очистить админский журнал</button>` : ""}
+      <div style="height:1px;background:rgba(255,255,255,.09);margin:12px 0"></div>
+      <div class="row kv"><div class="grow"><div class="t">Подробный журнал действий</div><div class="s">${fmt(al.rows || 0)} записей · ${kb(al.bytes || 0)}${al.oldest ? ` · с ${admDate(al.oldest)}` : ""}</div></div>
+        ${al.canEdit ? `<button class="sw${al.on ? " on" : ""}" data-act="adm-actlog-on" data-v="${al.on ? 0 : 1}"></button>` : `<b>${al.on ? "вкл" : "выкл"}</b>`}</div>
+      <div class="auto" style="margin:6px 0 2px"><span style="flex:1">Хранить, дней</span>
+        ${al.canEdit ? `<input class="adm-oi" style="width:64px;text-align:center" inputmode="numeric" id="adm-actlog-keep" value="${al.keep_days}"><button class="btn sm gold" data-act="adm-actlog-keep">${ic("check")}</button>` : `<b>${al.keep_days}</b>`}</div>
+      ${al.canEdit ? `<button class="btn sm red" data-act="adm-actlog-clear" style="margin-top:8px">${ic("x")}Очистить подробный журнал</button>` : ""}
+      ${al.canEdit && !al.on ? `<div class="adm-warn" style="margin-top:10px">Подробный журнал выключен — новые действия игроков не записываются.</div>` : ""}
+    </div>`;
+    body.innerHTML = cfg + `<div class="sec-t">Действия админов</div><div class="box">${r.log.map(x => `<div class="row kv"><div class="grow"><div class="t">${esc(x.action)}${x.target ? " · " + x.target : ""}</div><div class="s">${esc(x.detail || "")}</div></div><span class="hint" style="font-size:12px">${admDate(x.ts)}</span></div>`).join("") || `<div class="hint" style="padding:14px">Действий пока нет</div>`}</div>`;
   }
 }
 
@@ -597,6 +613,23 @@ Object.assign(ACT, {
   "adm-odds-rs": async el => {
     if (!await confirmM("Сбросить?", `${esc(el.dataset.n)}: вернуть значение по умолчанию из settings.toml.`, "Сбросить")) return;
     await post("admin/odds", { key: el.dataset.k, value: null }); H.ok(); toast("Сброшено", "ok"); await loadMe(); admRender();
+  },
+  "adm-alog-keep": async () => {
+    await post("admin/log/cfg", { keep_days: topSheet().querySelector("#adm-alog-keep").value }); H.ok(); toast("Сохранено", "ok"); admRender();
+  },
+  "adm-alog-clear": async () => {
+    if (!await confirmM("Очистить админский журнал?", "Все записи о действиях админов будут удалены. Отменить нельзя.", "Очистить")) return;
+    await post("admin/log/clear", {}); H.ok(); toast("Журнал очищен", "ok"); admRender();
+  },
+  "adm-actlog-on": async el => {
+    const on = el.dataset.v === "1"; await post("admin/actlog/cfg", { on }); H.ok(); toast(on ? "Запись включена" : "Запись выключена", "ok"); admRender();
+  },
+  "adm-actlog-keep": async () => {
+    await post("admin/actlog/cfg", { keep_days: topSheet().querySelector("#adm-actlog-keep").value }); H.ok(); toast("Сохранено", "ok"); admRender();
+  },
+  "adm-actlog-clear": async () => {
+    if (!await confirmM("Очистить подробный журнал?", "Все записи действий игроков будут удалены. Отменить нельзя.", "Очистить")) return;
+    await post("admin/actlog/clear", {}); H.ok(); toast("Журнал очищен", "ok"); admRender();
   },
   "adm-tab": el => { ADM.tab = el.dataset.v; H.sel(); const s = topSheet(); s.querySelectorAll("#adm-seg button").forEach(b => b.classList.toggle("on", b === el)); s.querySelector("#adm-body").innerHTML = emptyHTML("hourglass", "Загружаем…"); admRender(s); },
   "adm-sort": el => { ADM.sort = el.dataset.v; H.sel(); admRender(); },
