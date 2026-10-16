@@ -72,6 +72,7 @@ function clanFeedTxt(f) {
   return { create: `${n} основал клан`, join: `${n} вступил в клан`, leave: `${n} покинул клан`, kick: `${n} исключён`,
     donate: `${n} внёс в казну ⭐ ${fmt(+f.data)}`, level: `Клан достиг <b>${f.data} уровня</b>`, owner: `${n} — новый глава`,
     officer: `${n} назначен офицером`, demote: `${n} больше не офицер`,
+    tag: `Глава сменил тег клана на [${esc(f.data)}]`,
     tax: +f.data ? `Глава установил налог ${String(+(f.data * 100).toFixed(1)).replace(".", ",")}% в казну` : "Глава отменил налог",
     spend_pay: `Казна раздала участникам ⭐ ${fmt(+f.data)}`, spend_keys: `Казна купила всем ключ «${esc(f.data)}»`,
     spend_boost: `Включён буст: +${f.data}% к доходу на сутки`, spend_slots: `Клан расширен до ${f.data} мест`,
@@ -175,6 +176,8 @@ Object.assign(ACT, {
   "clan-set": el => {
     const c = topSheet()._clan; if (!c) return;
     const s = openSheet(`<h2 class="gtitle">Настройки клана</h2>
+      ${c.role === "owner" ? `<div class="adm-f"><span>Тег [${esc(c.tag)}]</span><input id="cs-tag" maxlength="4" value="${esc(c.tag)}" placeholder="ТЕГ" style="text-transform:uppercase;max-width:120px"></div>
+      <div class="hint" style="margin:-4px 2px 8px;font-size:12px">2–4 заглавные буквы или цифры. Сменится у всех участников.</div>` : ""}
       <div class="adm-f"><span>Описание</span><input id="cs-d" maxlength="140" value="${esc(c.descr)}" placeholder="Кто мы и куда идём"></div>
       <div class="adm-f"><span>Вступление</span><div class="seg" style="flex:1;margin:0" id="cs-o"><button data-act="cs-open" data-v="1" class="${c.open ? "on" : ""}">Свободное</button><button data-act="cs-open" data-v="0" class="${c.open ? "" : "on"}">По заявкам</button></div></div>
       <div class="sec-t">Герб клана</div>
@@ -185,8 +188,10 @@ Object.assign(ACT, {
   "cs-open": el => { topSheet()._set.open = el.dataset.v === "1"; el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === el)); H.sel(); },
   "cs-emb": el => { const st = topSheet()._set; st.emblem = st.emblem === el.dataset.v ? "" : el.dataset.v; el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === st.emblem)); H.sel(); },
   "cs-save": async () => {
-    const s = topSheet(), st = s._set;
-    await post("clans/settings", { descr: s.querySelector("#cs-d").value, emblem: st.emblem, open: st.open }); H.ok(); toast("Сохранено", "ok"); closeSheet(); await clanRefresh();
+    const s = topSheet(), st = s._set, tagEl = s.querySelector("#cs-tag");
+    const body = { descr: s.querySelector("#cs-d").value, emblem: st.emblem, open: st.open };
+    if (tagEl) body.tag = tagEl.value.trim().toUpperCase();
+    await post("clans/settings", body); H.ok(); toast("Сохранено", "ok"); closeSheet(); await clanRefresh();
   },
   "clan-leave": async () => {
     if (!await confirmM("Выйти из клана?", "Вступить в другой клан можно будет через 12 часов. Взносы в казну не возвращаются.", "Выйти")) return;

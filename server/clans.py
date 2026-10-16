@@ -410,13 +410,29 @@ async def clan_settings(req: Request, uid=Depends(auth)):
     b = await req.json()
     with tx():
         cid = my_clan_id(uid) or err("ты не в клане")
-        if my_role(uid, cid) not in STAFF:
+        role = my_role(uid, cid)
+        if role not in STAFF:
             err("менять клан могут глава и офицеры")
         descr = " ".join(str(b.get("descr", "")).split())[:140]
         emblem = str(b.get("emblem", ""))
         if emblem and emblem not in E.CATALOG:
             err("нет такого подарка")
         db.execute("UPDATE clans SET descr=?, emblem=?, open=? WHERE id=?", (descr, emblem, int(bool(b.get("open", True))), cid))
+        if "tag" in b:   # сменить тег клана — только глава; меняется у всех участников сразу
+            new_tag = str(b.get("tag", "")).strip().upper()
+            cur_tag = q1("SELECT tag FROM clans WHERE id=?", cid)["tag"]
+            if new_tag != cur_tag:
+                if role != "owner":
+                    err("менять тег клана может только глава")
+                if not TAG_RE.match(new_tag):
+                    err("тег: 2–4 заглавные буквы или цифры")
+                if q1("SELECT 1 FROM clans WHERE tag=? AND id<>?", new_tag, cid):
+                    err("такой тег уже занят")
+                db.execute("UPDATE clans SET tag=? WHERE id=?", (new_tag, cid))
+                for m in q("SELECT user FROM clan_members WHERE clan=?", cid):
+                    CLAN_TAG[m["user"]] = new_tag   # обновляем тег в шапке у каждого члена клана
+                _LOOK["ts"] = 0                      # сбросить кэш цвета/уровня тега
+                feed(cid, uid, "tag", new_tag)
     return {"ok": True}
 
 
