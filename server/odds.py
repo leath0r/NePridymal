@@ -28,6 +28,7 @@ KEYS = {g[0]: g for g in GAMES}
 PROMO_FLOOR = {"games.edge": 0.98, "games.crash_edge": 0.98, "games.mines_edge": 0.98, "games.chicken_edge": 0.98,
                "games.hilo_edge": 0.98, "games.avia_rtp": 0.98, "games.upgrade_edge": 0.93, "games.scratch_rtp": 0.96}
 LO, HI = 0.50, 1.50   # больше 100% — игроки в плюсе на дистанции (владелец решает сам, в админке предупреждение)
+HI_KEY = {"games.scratch_rtp": 3.00}   # скретч-картам шире потолок — эффект настройки виден сильнее (до 300%)
 
 
 def _load():
@@ -55,6 +56,7 @@ def _routes():
             v = settings._LIVE.get(key, d)
             eff = edge(v, PROMO_FLOOR[key]) if key in PROMO_FLOOR else v
             out.append({"key": key, "title": title, "value": v, "default": d, "changed": key in settings._LIVE, "effective": eff,
+                        "max": HI_KEY.get(key, HI),
                         "house7": sum(house.get(k, (0, 0))[0] for k in kinds), "rounds7": sum(house.get(k, (0, 0))[1] for k in kinds)})
         return {"list": out, "canEdit": aid in OWNERS, "lo": LO, "hi": HI, "promo": bool(promo())}
 
@@ -76,8 +78,9 @@ def _routes():
                 val = round(float(val), 4)
             except (TypeError, ValueError):
                 err("введи число")
-            if not LO <= val <= HI:
-                err(f"от {LO * 100:g}% до {HI * 100:g}%")
+            hi = HI_KEY.get(key, HI)
+            if not LO <= val <= hi:
+                err(f"от {LO * 100:g}% до {hi * 100:g}%")
             cur[key] = val
             detail = f"{KEYS[key][1]}: {val * 100:g}%"
         with tx():

@@ -155,7 +155,7 @@ async function admRender(el = topSheet()) {
           <button class="btn sm ghost" data-act="adm-odds-all-rs">${ic("refresh")}</button></div></div>`; })() : ""}
       <div class="box">${d.list.map(g => `<div class="adm-odd${g.value > 1 ? " plus" : ""}">
         <div class="adm-oh"><b>${esc(g.title)}</b>${g.value > 1 ? `<span class="adm-tag red">игроки в плюсе</span>` : g.changed ? `<span class="adm-tag">изменено</span>` : ""}</div>
-        <div class="adm-os">по умолчанию ${pc(g.default)}% · банк за 7 дн: <span class="${g.house7 >= 0 ? "tw" : "tl"}">${g.house7 >= 0 ? "+" : "−"}⭐ ${short(Math.abs(g.house7))}</span> · ${fmt(g.rounds7)} игр</div>
+        <div class="adm-os">по умолчанию ${pc(g.default)}% · банк за 7 дн: <span class="${g.house7 >= 0 ? "tw" : "tl"}">${g.house7 >= 0 ? "+" : "−"}⭐ ${short(Math.abs(g.house7))}</span> · ${fmt(g.rounds7)} игр${g.max && g.max !== d.hi ? ` · можно до ${pc(g.max)}%` : ""}</div>
         ${g.effective !== g.value ? `<div class="adm-os tl">сейчас действует ${pc(g.effective)}% — из-за акции</div>` : ""}
         ${d.canEdit ? `<div class="adm-oc"><input class="adm-oi" inputmode="decimal" data-k="${g.key}" value="${pc(g.value)}"><span class="adm-op">%</span>
           <button class="btn sm gold" data-act="adm-odds" data-k="${g.key}">${ic("check")}Сохранить</button>
