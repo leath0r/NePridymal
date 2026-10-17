@@ -260,6 +260,104 @@ def backup(db_path):
     say(f"Бэкап базы: data/backups/game-{stamp}.db.gz")
 
 
+# ---------------- перенос с другого хостинга ----------------
+RESTORE_NAMES = ("restore.tar.gz", "restore.tgz", "restore.db.gz", "restore.db")
+
+
+def _valid_db(path):
+    """Это действительно база игры (SQLite + есть таблица users)?"""
+    try:
+        with open(path, "rb") as f:
+            if f.read(16) != b"SQLite format 3\x00":
+                return False
+        c = sqlite3.connect(path)
+        ok = c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
+        c.close()
+        return bool(ok)
+    except Exception:
+        return False
+
+
+def _find_restore():
+    import glob
+    for n in RESTORE_NAMES:
+        p = os.path.join(ROOT, n)
+        if os.path.exists(p):
+            return p
+    g = sorted(glob.glob(os.path.join(ROOT, "np-snapshot-*.tar.gz")))
+    return g[-1] if g else None
+
+
+def restore_if_present(db_path):
+    """Разворачивание с другого сервера одним файлом. Если рядом с игрой лежит restore.tar.gz /
+    restore.db(.gz) или np-snapshot-*.tar.gz — переносим базу (из снапшота ещё и загрузки web/u) на место,
+    прежнюю базу сохраняем в backups, файл помечаем использованным. Запускается сам при старте."""
+    src = _find_restore()
+    if not src:
+        return
+    say(f"\nНайден файл переноса: {os.path.basename(src)} — разворачиваю состояние игры…")
+    os.makedirs(DATA, exist_ok=True)
+    web_u = os.path.join(ROOT, "web", "u")
+    stamp = time.strftime("%Y-%m-%d-%H%M")
+    staged = os.path.join(DATA, f".restore-{stamp}.db")
+    got_db, n_up = False, 0
+    try:
+        if src.endswith((".tar.gz", ".tgz")):
+            with tarfile.open(src, "r:gz") as tar:
+                for m in tar.getmembers():
+                    if not m.isfile():
+                        continue
+                    name = m.name.replace("\\", "/").lstrip("/")
+                    if ".." in name.split("/"):        # защита от выхода за пределы папки
+                        continue
+                    fobj = tar.extractfile(m)
+                    if fobj is None:
+                        continue
+                    data = fobj.read()
+                    base = os.path.basename(name)
+                    if base == "game.db":
+                        open(staged, "wb").write(data)
+                        got_db = True
+                    elif base == "logs.db":
+                        open(os.path.join(DATA, "logs.db"), "wb").write(data)
+                    elif name.startswith("u/") or "/u/" in ("/" + name):   # загрузки (аватарки/баннеры)
+                        rel = ("/" + name).split("/u/", 1)[1]
+                        dst = os.path.join(web_u, rel)
+                        os.makedirs(os.path.dirname(dst) or web_u, exist_ok=True)
+                        open(dst, "wb").write(data)
+                        n_up += 1
+        else:   # голый game.db или game.db.gz (например, из «Экспорта» в админке)
+            raw = open(src, "rb").read()
+            if src.endswith(".gz"):
+                raw = gzip.decompress(raw)
+            open(staged, "wb").write(raw)
+            got_db = True
+        if got_db:
+            if not _valid_db(staged):
+                say("Файл переноса не похож на базу игры — импорт отменён, запускаюсь как есть.")
+                os.path.exists(staged) and os.remove(staged)
+                return
+            if os.path.exists(db_path):
+                backup(db_path)   # прежнюю базу — в data/backups на всякий случай
+            src_db, dst_db = sqlite3.connect(staged), sqlite3.connect(db_path)
+            src_db.backup(dst_db)   # перенос через backup API — целостно
+            dst_db.close()
+            src_db.close()
+            users = sqlite3.connect(db_path).execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            say(f"База перенесена: {users} игроков" + (f", загрузок (аватарки/баннеры): {n_up}" if n_up else ""))
+        elif n_up:
+            say(f"Перенесены только загрузки: {n_up} файлов (базы game.db в архиве не было).")
+        else:
+            say("В файле переноса не нашлось ни базы, ни загрузок — пропускаю.")
+        used = os.path.join(DATA, f"imported-{stamp}-{os.path.basename(src)}")
+        os.replace(src, used)   # пометили использованным, чтобы не импортировать повторно при каждом старте
+        say(f"Файл переноса убран в data/{os.path.basename(used)} — при следующем старте не тронется.")
+    except Exception as e:
+        say(f"Не удалось развернуть перенос ({e}) — запускаюсь с текущей базой.")
+    finally:
+        os.path.exists(staged) and os.remove(staged)
+
+
 # ---------------- сервер ----------------
 def serve():
     """Дочерний процесс: сам сервер игры (окружение готовит сторож)."""
@@ -298,6 +396,7 @@ def supervise(env):
         sys.exit("Не удалось поднять туннель Cloudflare. Проверь интернет и запусти снова.")
     os.makedirs(DATA, exist_ok=True)
     db_path = os.environ.get("DB_PATH") or os.path.join(DATA, "game.db")
+    restore_if_present(db_path)   # перенос с другого сервера: restore.* / np-snapshot-*.tar.gz рядом с игрой
     child_env = {**os.environ, "BOT_TOKEN": env["BOT_TOKEN"], "BOT_USERNAME": env["BOT_USERNAME"],
                  "ADMIN_IDS": env.get("ADMIN_IDS", ""), "SERVE_WEB": "1", "WEB_DIR": os.path.join(ROOT, "web"),
                  "DB_PATH": db_path, "SETTINGS": os.path.join(ROOT, "settings.toml"), "PORT": str(port),
