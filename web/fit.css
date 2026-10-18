@@ -123,3 +123,21 @@ header>*{flex-shrink:0}header h1{flex-shrink:1}
 /* таблицы в банке/крипте */
 .cxrow .grow,.cx-nm{min-width:0}
 .cx-nm .t,.cx-nm .s{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ===== карточки игр: ничего не выезжает и не перекрывается =====
+   узкая карточка: сверху зона под картинку фиксированной высоты, текст строго под ней;
+   широкая: текст слева (до 54%), картинка справа по центру. Заголовок — одна строка, описание — до 3 строк. */
+.ghub .gcard{justify-content:flex-start;min-width:0}
+.ghub .gcard:not(.wide){padding:104px 12px 12px;min-height:0}
+.ghub .gcard:not(.wide) .gc-img{left:50%;right:auto;top:10px;width:auto;height:86px;max-width:70%;translate:-50% 0}
+.ghub .gcard.wide{padding:16px 46% 14px 16px;min-height:168px;justify-content:center}
+.ghub .gcard.wide .gc-img{right:5%;width:38%;max-height:84%;top:50%;translate:0 -50%}
+.ghub .gc-t{font-size:clamp(17px,5vw,21px);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.ghub .gc-s{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden;font-size:12px;overflow-wrap:anywhere}
+.ghub .gcard:not(.wide) .gc-s{-webkit-line-clamp:3;min-height:calc(1.3em * 3)}
+.ghub .gc-chips{flex-wrap:wrap;gap:4px;margin-top:auto;padding-top:8px}
+.ghub .gcard.wide .gc-chips{margin-top:8px}
+.ghub .gc-chips span{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:10px;padding:3px 7px}
+/* плашки «Закрыто» / «Видишь только ты» — в верхний левый угол, не на чипы */
+.ghub .g-lock,.ghub .g-admb{inset:10px auto auto 10px;max-width:calc(100% - 20px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:4}
+.ghub .gcard:has(.gc-live) .g-admb,.ghub .gcard:has(.gc-live) .g-lock{top:44px}
