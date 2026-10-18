@@ -9,7 +9,7 @@ Object.assign(GAME_OPEN, { jroul: () => openJR(), rlt: () => openRL() });
 const SEG_COL = ["#4aa8ff", "#ff6fb5", "#ffc53d", "#35d07f", "#a77bff", "#ff8a3d", "#2fd6ff", "#ff5c5c"];
 
 // ============================================================ ДЖЕКПОТ НА ПОДАРКИ
-let JR = null, jrPoll = null, jrAnimated = 0, jrAngle = 0;
+let JR = null, jrPoll = null, jrAnimated = 0, jrAngle = 0, jrRevealed = 0, jrRound = 0;   // jrRevealed — раунд, победитель которого уже показан
 async function openJR() {
   const el = openSheet(`${gameHead("Heart Locket", "Джекпот", "Кидай подарки в банк — колесо решит, кто заберёт всё")}
     <div class="jrw"><canvas id="jr-cv" width="600" height="600"></canvas><div class="jrptr"></div>
@@ -22,7 +22,7 @@ async function openJR() {
     </div>
     <div class="sec-t">Участники <span id="jr-n"></span></div><div id="jr-p"></div>`, "jr-s");
   el._onClose = () => clearInterval(jrPoll);
-  jrAnimated = 0;
+  jrAnimated = 0; jrRevealed = 0; jrRound = 0; jrAngle = 0;
   await jrLoad();
   clearInterval(jrPoll); jrPoll = setInterval(() => el.isConnected ? bgOff() || jrLoad() : clearInterval(jrPoll), 1200);
 }
@@ -33,7 +33,16 @@ async function jrLoad() {
 }
 function jrDraw() {
   const cv = $("#jr-cv"); if (!cv || !JR) return;
-  const c = cv.getContext("2d"), R = 300, ps = JR.players, total = JR.total || 1;
+  const ps = JR.players, total = JR.total || 1;
+  if (JR.id !== jrRound) { jrRound = JR.id; cv.style.transform = "none"; jrAngle = 0; }   // новый раунд — колесо с нуля вместе с новым содержимым
+  const shown = JR.status === "open" || jrRevealed === JR.id;   // победителя показываем только после остановки колеса
+  const wk = JR.id + "|" + ps.map(p => p.id + ":" + p.value).join(",");
+  if ((jrAnimated !== JR.id || JR.status === "open") && cv._wk !== wk) { cv._wk = wk; jrWheel(cv, ps, total); }   // колесо — только если поменялись ставки; во время вращения не трогаем
+  if (JR.status !== "open" && jrAnimated !== JR.id) jrSpin();
+  jrInfo(shown);
+}
+function jrWheel(cv, ps, total) {
+  const c = cv.getContext("2d"), R = 300;
   c.clearRect(0, 0, 600, 600);
   if (!ps.length) { c.beginPath(); c.arc(R, R, R - 10, 0, 6.283); c.arc(R, R, R - 90, 0, 6.283, true); c.fillStyle = "rgba(255,255,255,.07)"; c.fill("evenodd"); }
   let a0 = -Math.PI / 2;
@@ -44,39 +53,52 @@ function jrDraw() {
     c.strokeStyle = "#141420"; c.lineWidth = 4; c.stroke();     // зазор между секторами
     a0 = a1;
   });
-  const t = Date.now() / 1000 + (JR.off || 0);
+}
+// HTML меняем только если он реально другой: иначе опрос раз в 1,2 с пересоздавал картинки подарков — мигание и рывки
+const jrSet = (el, h) => { if (el && el._h !== h) { el._h = h; el.innerHTML = h; starify(el); } };
+function jrInfo(shown) {
+  const ps = JR.players, t = Date.now() / 1000 + (JR.off || 0);
   let center;
   if (JR.status === "open") {
     const left = JR.deadline ? Math.max(0, Math.ceil(JR.deadline - t)) : null;
     center = `<span>Банк</span><b>⭐ ${short(JR.total)}</b><em>${left != null ? `розыгрыш через ${left}с` : ps.length ? "ждём второго игрока" : "сделай первую ставку"}</em>`;
+  } else if (!shown) {
+    center = `<span>Крутим…</span><b>⭐ ${short(JR.total)}</b><em>${ps.length} ${plural(ps.length, ["игрок", "игрока", "игроков"])}</em>`;
   } else {
     const w = ps.find(p => p.id === JR.winner);
-    center = `<span>Победитель</span><b>${w ? esc(w.name) : "…"}</b><em>${w ? `шанс был ${w.chance}%` : ""}</em>`;
-    if (jrAnimated !== JR.id) jrSpin();
+    center = `<span>Победитель</span><b class="jr-wn">${w ? (w.id === ME.id ? "Ты!" : esc(w.name)) : "…"}</b><em>${w ? `+⭐ ${short(JR.total)} · шанс ${w.chance}%` : ""}</em>`;
   }
-  $("#jr-c").innerHTML = center;
+  jrSet($("#jr-c"), center);
   $("#jr-n").textContent = ps.length ? `${ps.length} · ⭐ ${fmt(JR.total)}` : "";
-  $("#jr-p").innerHTML = ps.length ? ps.map((p, i) => `<div class="jrp${JR.winner === p.id ? " won" : ""}"><i style="background:${SEG_COL[i % SEG_COL.length]}"></i>${avaHTML(p, 34)}
+  jrSet($("#jr-p"), ps.length ? ps.map((p, i) => `<div class="jrp${shown && JR.winner === p.id ? " jrp-won" : ""}"><i style="background:${SEG_COL[i % SEG_COL.length]}"></i>${avaHTML(p, 34)}
       <div class="grow"><div class="t">${p.id === ME.id ? "Ты" : esc(p.name)}</div><div class="s">⭐ ${fmt(p.value)}${p.stars ? ` · звёзды ${short(p.stars)}` : ""}</div></div>
       <div class="jrg">${p.gifts.slice(0, 4).map(g => `<div>${giftHTML(g, { lite: true, plain: true })}</div>`).join("")}${p.gifts.length > 4 ? `<span>+${p.gifts.length - 4}</span>` : ""}</div>
-      <b class="jrch">${p.chance}%</b></div>`).join("") : emptyHTML("gift", "Банк пуст — закинь подарки первым");
-  $("#jr-h").innerHTML = (JR.history || []).map(h => `<div data-act="profile" data-id="${h.id}">${avaHTML(h, 28)}<span>⭐ ${short(h.total)}</span><small>${h.chance}%</small></div>`).join("");
+      <b class="jrch">${p.chance}%</b></div>`).join("") : emptyHTML("gift", "Банк пуст — закинь подарки первым"));
+  jrSet($("#jr-h"), (JR.history || []).map(h => `<div data-act="profile" data-id="${h.id}">${avaHTML(h, 28)}<span>⭐ ${short(h.total)}</span><small>${h.chance}%</small></div>`).join(""));
 }
 async function jrSpin() {
   jrAnimated = JR.id;
-  const cv = $("#jr-cv"), target = 360 * 6 - JR.ticket * 360, start = jrAngle % 360, dur = (JR.spin || 7) * 1000 - 600, t0 = performance.now();
+  const id = JR.id, cv = $("#jr-cv"), target = 360 * 6 - JR.ticket * 360, dur = (JR.spin || 7) * 1000 - 600;
+  // зашёл посреди вращения — продолжаем с нужного места, а не крутим заново
+  const elapsed = JR.spinAt ? Math.max(0, (Date.now() / 1000 + (JR.off || 0) - JR.spinAt) * 1000) : 0;
+  const t0 = performance.now() - Math.min(elapsed, dur);
+  cv.style.willChange = "transform";
   let last = 0;
   await new Promise(done => (function f(now) {
-    const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 4), a = start + (target - start) * e;
+    if (!cv.isConnected || JR.id !== id) return done();
+    const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 4), a = target * e;
     cv.style.transform = `rotate(${a}deg)`;
     if (a - last > 12) { last = a; H.sel(); }
-    k < 1 && cv.isConnected ? requestAnimationFrame(f) : done();
-  })(t0));
-  jrAngle = target;
-  if (!cv.isConnected) return;
+    k < 1 ? requestAnimationFrame(f) : done();
+  })(performance.now()));
+  cv.style.willChange = "";
+  if (!cv.isConnected || JR.id !== id) return;
+  jrAngle = target; jrRevealed = id;
+  jrInfo(true);
+  const c = $("#jr-c"); if (c) { c.classList.remove("rev"); void c.offsetWidth; c.classList.add("rev"); }
+  if (elapsed >= dur) return;   // открыли окно уже после остановки — без салюта
   if (JR.winner === ME.id) { H.ok(); burstAt(cv); setTimeout(() => burstAt(cv), 300); toast(`Джекпот твой! ⭐ ${fmt(JR.total)}`, "ok"); loadMe(); MYP = null; }
   else if (JR.players.some(p => p.id === ME.id)) H.err();
-  setTimeout(() => { if (cv.isConnected) { cv.style.transform = "none"; jrAngle = 0; } }, 3500);
 }
 
 // ============================================================ РУЛЕТКА (европейская)
