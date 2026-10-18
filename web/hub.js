@@ -142,10 +142,14 @@ renderCases = async function () {
   await _rcHub();
   casesTidy();
   setTimeout(casesTidy, 150);
-  if (Date.now() - SSB_T > 120000) { SSB_T = Date.now(); api("season/brief").then(d => { SSB = d; casesTidy(); }).catch(() => {}); }
-  if (Date.now() - SHB_T > 300000) { SHB_T = Date.now(); api("shop").then(d => { SHOP = d; casesTidy(); }).catch(() => {}); }
-  if (!PREM || Date.now() - PREM_T > 120000) loadPrem().then(() => casesTidy());
-  if (Date.now() - TRB_T > 300000) { TRB_T = Date.now(); api("tournaments").then(d => { TR = d; casesTidy(); }).catch(() => {}); }
+  // карточки листалки (сезон, магазин, предложения, турниры) — после первой отрисовки, не мешая показать главную
+  const later = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1200 }) : setTimeout(f, 300));
+  later(() => {
+    if (Date.now() - SSB_T > 120000) { SSB_T = Date.now(); api("season/brief").then(d => { SSB = d; casesTidy(); }).catch(() => {}); }
+    if (Date.now() - SHB_T > 300000) { SHB_T = Date.now(); api("shop").then(d => { SHOP = d; casesTidy(); }).catch(() => {}); }
+    if (!PREM || Date.now() - PREM_T > 120000) loadPrem().then(() => casesTidy());
+    if (Date.now() - TRB_T > 300000) { TRB_T = Date.now(); api("tournaments").then(d => { TR = d; casesTidy(); }).catch(() => {}); }
+  });
 };
 function seasonCard() {
   if (!SSB) return "";

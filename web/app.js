@@ -157,10 +157,19 @@ const perHourTxt = v => v >= 100 ? fmt(Math.round(v)) : v >= 10 ? v.toFixed(1).r
 const giftName = g => `${esc(g.col)} <small>#${fmt(g.num)}</small>`;
 
 // анимация модели в большой карточке (Lottie)
+let LOTTIE_P = null;
+const lottieLoad = () => LOTTIE_P || (LOTTIE_P = new Promise((ok, no) => {
+  const s = document.createElement("script"); s.src = "lottie-light-5.12.2.min.js?v=1"; s.async = true;
+  s.onload = ok; s.onerror = () => { LOTTIE_P = null; no(); }; document.head.appendChild(s);
+}).catch(() => {}));
 const LOTTIES = new Set();
 function startLottie(root) {
   if (window.LITE) return;   // режим оптимизации: подарки статичными картинками
-  if (!window.lottie) return setTimeout(() => window.lottie && startLottie(root), 600);
+  if (!window.lottie) {   // библиотека анимаций грузится только когда впервые понадобилась (не на старте игры)
+    if (!root.querySelector("[data-lottie]")) return;
+    lottieLoad().then(() => root.isConnected && startLottie(root));
+    return;
+  }
   root.querySelectorAll("[data-lottie]").forEach(el => {
     if (el._l) return;
     const a = lottie.loadAnimation({ container: el, renderer: "svg", loop: true, autoplay: true, path: el.dataset.lottie });
@@ -351,6 +360,17 @@ function setTab(t) {
 const TAB_RENDER = {};
 
 // ============================================================ КЕЙСЫ
+// отложенная отрисовка: первые 6 карточек — сразу, остальные (за экраном) — порциями, когда браузер свободен.
+// В разметке они есть с самого начала (display:none), так что код, ищущий .case, их видит.
+function casesReveal(v) {
+  const step = () => {
+    const rest = v.querySelectorAll(".case.defer"); if (!rest.length) return;
+    [...rest].slice(0, 6).forEach(c => c.classList.remove("defer"));
+    if (rest.length > 6) idle(step);
+  };
+  const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 500 }) : setTimeout(f, 60));
+  requestAnimationFrame(() => idle(step));
+}
 async function renderCases() {
   const v = $("#v-cases");
   if (!CASES.length) CASES = await api("cases");
@@ -366,9 +386,9 @@ async function renderCases() {
       <button data-act="quests" class="${ME.quests ? "ready" : ""}"><span class="pic b">${ic("checks")}</span><div><b>Задания</b><span>${ME.quests ? "награды: " + ME.quests : "на сегодня"}</span></div></button>
     </div>
     <div class="sec-t">Кейсы</div>
-    <div class="cases">${CASES.filter(c => c.id !== "free").sort((a, b) => a.price - b.price).map(c => {
+    <div class="cases">${CASES.filter(c => c.id !== "free").sort((a, b) => a.price - b.price).map((c, ci) => {
       const [k1, k2] = CASE_COL[c.id] || ["#555", "#222"];
-      return `<div class="case${c.id === "mega" ? " mega" : ""}" data-act="case" data-id="${c.id}" style="--k1:${k1};--k2:${k2}">
+      return `<div class="case${c.id === "mega" ? " mega" : ""}${ci >= 6 ? " defer" : ""}" data-act="case" data-id="${c.id}" style="--k1:${k1};--k2:${k2}">
         <div class="cpat">${patHTML(c.cover, c.pat, CPAT)}</div><div class="rays"></div><div class="halo"></div>
         ${c.id === "mega" ? `<span class="hot">${ic("flame")}HOT</span>` : c.level > 1 ? `<span class="lvtag">${c.level} ур.</span>` : ""}
         <img class="cv" src="${A.orig(c.cover)}" alt="" loading="lazy">
@@ -377,6 +397,7 @@ async function renderCases() {
         ${lvl < c.level ? `<div class="lock"><b>${ic("lock")}</b>${c.level} уровень</div>` : ""}</div>`;
     }).join("")}</div>
     <div class="disc">${esc(ME.disclaimer)}</div>`;
+  casesReveal(v);
   loadFeed();
 }
 async function loadFeed() {

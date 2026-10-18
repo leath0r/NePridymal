@@ -54,7 +54,7 @@ html.lite .empty .eic,html.lite .empty .eic::before,html.lite .empty .eic::after
   font-family:"NP Num",-apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1,"lnum" 1}
 
 /* --- «Как играть»: одинаковый блок во всех играх, стрелка раскрытия --- */
-.rules summary{min-height:22px}
+.rules summary{min-height:22px;padding-right:5px}
 .rules summary::after{content:"";flex:none;margin-left:auto;width:7px;height:7px;border-right:2px solid var(--hint);border-bottom:2px solid var(--hint);transform:rotate(45deg) translateY(-2px);transition:transform .2s}
 details.rules[open]>summary::after{transform:rotate(225deg) translateY(-2px)}
 .rules-auto{margin-top:12px}
@@ -132,3 +132,4 @@ html.lite .sc-cell.q.foil::after{animation:none}
 .case .hunttag{top:10px;left:10px;bottom:auto;transform:none}
 /* карточки кейсов за экраном не рисуются вовсе (как карточки игр) — быстрее открывается вкладка «Кейсы» */
 .cases .case{content-visibility:auto;contain-intrinsic-size:auto 230px}
+.case.defer{display:none}
