@@ -27,13 +27,17 @@ GAME_OPEN.drill = () => openDrill();
 AR_NEW.push("drill");
 GAME_NAMES.drill = ["drill", "Бур"];
 
-let DRL = null, drPick = 1, drBusy = false, drRaf = 0;
+let DRL = null, drPick = 1, drBusy = false, drRaf = 0, drMode = "race", drTarget = 6;
+const drMs = () => drMode === "depth" ? DRL.depthMults : DRL.mults;
 async function openDrill() {
   drBusy = false; cancelAnimationFrame(drRaf);
   const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "drill").imgUrl}" alt=""><div><h2>Бур</h2><span>Выбери бур — и пусть победит глубочайший</span></div></div>
     <div class="ar-stage dr-stage" id="dr-stage"><div class="dr-world" id="dr-w">${emptyHTML("hourglass", "Ставим вышки…")}</div>
       <div class="dr-race" id="dr-race"></div></div>
+    <div class="ar-ladder dr-tl" id="dr-tl"></div>
+    <div class="dr-tinfo" id="dr-tinfo"></div>
     <div class="betp">
+      <div class="seg ar-seg dr-modes" id="dr-modes">${[["race", "Гонка", "#2fd4ff"], ["depth", "Глубина", "#ffc53d"]].map(([k, t, c]) => `<button data-act="dr-mode" data-v="${k}" style="--c:${c}" class="${drMode === k ? "on" : ""}"><i></i>${t}<small id="dr-mx-${k}"></small></button>`).join("")}</div>
       <div class="dr-picks" id="dr-picks">${DR_C.map(([c, t], i) => `<button data-act="dr-pick" data-i="${i}" style="--c:${c}" class="${i === drPick ? "on" : ""}"><span class="dr-pb">${drBit(c)}</span><b>${t}</b></button>`).join("")}</div>
       ${betHTML("dr-amt")}
       <button class="btn cta gold" id="dr-btn" data-act="dr-go">Бурить</button>
@@ -42,22 +46,43 @@ async function openDrill() {
   el._onClose = () => { cancelAnimationFrame(drRaf); drBusy = false; };
   DRL = await api("drill").catch(() => null);
   if (!DRL || !$("#dr-stage")) return;
-  $("#dr-rules").innerHTML = `Три бура одновременно идут вглубь и ломаются на случайной глубине. Ставишь на один — если он пробурил глубже обоих соперников, получаешь множитель пласта, где он остановился (на ничью множитель делится между лидерами).
-    Шансы буров одинаковые — выбирай любимый цвет. До каждого пласта доходит: ${DRL.names.slice(1).map((n, i) => `${n.toLowerCase()} — ${String(DRL.reach[i + 1]).replace(".", ",")}%`).join(", ")}. Возврат игроку — ${String(DRL.rtp).replace(".", ",")}%.`;
+  $("#dr-mx-race").textContent = "до " + arX(Math.max(...DRL.mults));
+  $("#dr-mx-depth").textContent = "до " + arX(Math.max(...DRL.depthMults));
+  $("#dr-rules").innerHTML = `<b>Гонка.</b> Три бура одновременно идут вглубь и ломаются на случайной глубине. Ставишь на один — если он пробурил глубже обоих соперников, получаешь множитель пласта, где он остановился (на ничью множитель делится между лидерами).
+    Шансы буров одинаковые — выбирай любимый цвет. До каждого пласта доходит: ${DRL.names.slice(1).map((n, i) => `${n.toLowerCase()} — ${String(DRL.reach[i + 1]).replace(".", ",")}%`).join(", ")}. Возврат игроку — ${String(DRL.rtp).replace(".", ",")}%.<br><br>
+    <b>Глубина.</b> Тапни пласт на разрезе — это цель. Твой бур дошёл до цели или глубже — получаешь её множитель: чем глубже цель, тем реже доходит и тем больше икс (ядро — ${arX(DRL.depthMults[DRL.layers])}). Соперников нет — только ты и земля.`;
   drBuild();
 }
 function drBuild() {
   const w = $("#dr-w"); if (!w) return;
-  const ms = DRL.mults;
+  const ms = drMs(), dep = drMode === "depth";
+  $("#dr-stage").classList.toggle("depth", dep);
   w.style.height = DR_TOP + DRL.layers * DR_LH + "px";
   w.innerHTML = `<div class="dr-sky"><i class="dr-moon"></i><i class="dr-hills"></i></div>` +
-    DRL.names.slice(1).map((n, i) => `<div class="dr-layer L${i + 1}" style="top:${DR_TOP + i * DR_LH}px;height:${DR_LH}px"><span class="dr-ln"><b>${n}</b><em>${arX(ms[i + 1])}</em></span></div>`).join("") +
-    DR_X.map((x, i) => `<div class="dr-col${i === drPick ? " mine" : ""}" id="dr-c${i}" style="left:${x}%;--c:${DR_C[i][0]}">
+    DRL.names.slice(1).map((n, i) => `<div class="dr-layer L${i + 1}${dep && drTarget === i + 1 ? " tgt" : ""}${dep && i + 1 > drTarget ? " deep" : ""}" style="top:${DR_TOP + i * DR_LH}px;height:${DR_LH}px"${dep ? ` data-act="dr-target" data-k="${i + 1}"` : ""}><span class="dr-ln"><b>${n}</b><em>${arX(ms[i + 1])}</em></span>${dep && drTarget === i + 1 ? `<span class="dr-tgt">${ic("target")}ЦЕЛЬ</span>` : ""}</div>`).join("") +
+    DR_X.map((x, i) => `<div class="dr-col${i === drPick ? " mine" : ""}${dep && i !== drPick ? " idle" : ""}" id="dr-c${i}" style="left:${x}%;--c:${DR_C[i][0]}">
       <div class="dr-rig">${drRig(DR_C[i][0])}<span class="dr-you">ТВОЙ</span></div>
       <div class="dr-bore" id="dr-bo${i}"></div><div class="dr-bit" id="dr-b${i}">${drBit(DR_C[i][0])}</div></div>`).join("");
   drPlace([0, 0, 0]);
   drRace([0, 0, 0]);
-  $("#dr-w").style.transform = "translateY(0)";
+  // в «Глубине» камера подъезжает к пласту-цели — глубокие цели тоже видно
+  const H0 = $("#dr-stage").clientHeight, worldH = DR_TOP + DRL.layers * DR_LH;
+  $("#dr-w").style.transform = `translateY(${dep ? -Math.max(0, Math.min(worldH - H0, DR_TOP + (drTarget - .5) * DR_LH - H0 * .55)) : 0}px)`;
+  const tl = $("#dr-tl");
+  if (tl) {
+    tl.style.display = dep ? "" : "none";
+    tl.innerHTML = dep ? DRL.names.slice(1).map((n, i) => `<button class="ar-step${drTarget === i + 1 ? " cur" : ""}" data-act="dr-target" data-k="${i + 1}"><b>${arX(DRL.depthMults[i + 1])}</b><span>${n}</span></button>`).join("") : "";
+    const c = tl.querySelector(".cur"); if (c) tl.scrollLeft = c.offsetLeft - tl.clientWidth / 2 + c.offsetWidth / 2;
+  }
+  drInfo();
+}
+// подсказка над ставкой: в «Глубине» — выбранная цель, её икс и шанс
+function drInfo() {
+  const el = $("#dr-tinfo"); if (!el || !DRL) return;
+  el.innerHTML = drMode === "depth"
+    ? `${ic("target")}<span>Цель: <b>${DRL.names[drTarget]}</b> · ${arX(DRL.depthMults[drTarget])} · шанс ${String(DRL.depthReach[drTarget]).replace(".", ",")}%</span><small>выбери цель в ленте выше или тапни пласт</small>`
+    : `${ic("trophy")}<span>Побеждает бур, который пройдёт <b>глубже всех</b></span>`;
+  starify(el);
 }
 const drY = d => d <= 0 ? DR_TOP - 6 : DR_TOP + (d - .5) * DR_LH;   // где кончик бура на глубине d (в пластах, дробно)
 function drPlace(ds) {
@@ -76,16 +101,30 @@ async function drGo() {
   if (bet > ME.stars) return toast("Не хватает звёзд ⭐");
   drBusy = true; $("#dr-btn").disabled = true;
   let r;
-  try { r = await post("drill/play", { bet, pick: drPick }); } catch (e) { drBusy = false; $("#dr-btn").disabled = false; return; }
+  try { r = await post("drill/play", { bet, pick: drPick, mode: drMode, target: drTarget }); } catch (e) { drBusy = false; $("#dr-btn").disabled = false; return; }
   setStars(r.stars - r.pay); H.imp("heavy"); afterLevelUp(r.levelup);
   if (!$("#dr-stage")) { drBusy = false; setStars(r.stars); return; }
-  DRL.mults = r.mults;
+  DRL.mults = r.mults; if (r.depthMults) DRL.depthMults = r.depthMults;
   drBuild();
   $("#dr-stage").querySelectorAll(".ar-banner").forEach(b => b.remove());
   await drAnimate(r.depths);
   if (!$("#dr-stage")) { drBusy = false; setStars(r.stars); return; }
   setStars(r.stars);
   const st = $("#dr-stage"), top = Math.max(...r.depths);
+  if (r.mode === "depth") {
+    const d = r.depths[r.pick];
+    if (r.won) {
+      $("#dr-c" + r.pick).classList.add("lead"); H.ok();
+      arBanner(st, "win", `Дошёл до «${DRL.names[d]}» · цель «${DRL.names[r.target]}»`, `+⭐ ${fmt(r.pay)}`, arX(r.mult));
+      coinShower(st, Math.min(70, 12 + r.mult * 3));
+      if (r.mult >= 5) await bigWin(r.pay, r.mult);
+    } else {
+      H.err();
+      arBanner(st, "lose", d ? `Сломался: «${DRL.names[d]}»` : "Сломался на старте", `−⭐ ${fmt(r.bet)}`, `цель — «${DRL.names[r.target]}»`);
+    }
+    drBusy = false; if ($("#dr-btn")) $("#dr-btn").disabled = false;
+    return;
+  }
   r.depths.forEach((d, i) => { if (d === top && d > 0) $("#dr-c" + i).classList.add("lead"); });
   if (r.won) {
     H.ok();
@@ -115,7 +154,9 @@ function drAnimate(depths) {
         const v = Math.min(d, front);
         if (!stopped[i] && front >= d) {   // сломался: искры, трещина, бур кренится
           stopped[i] = true;
-          const c = $("#dr-c" + i); c.classList.remove("run"); c.classList.add("broke");
+          const c = $("#dr-c" + i); c.classList.remove("run");
+          if (c.classList.contains("idle")) return v;
+          c.classList.add("broke");
           const sr = st.getBoundingClientRect(), br = $("#dr-b" + i).getBoundingClientRect();
           arSparks(st, br.left - sr.left + br.width / 2, br.bottom - sr.top - 6, 16, [DR_C[i][0], "#fff3c4", "#ff9a3d"], 70);
           SND.crack(); if (i === drPick) H.imp("rigid");
@@ -140,7 +181,17 @@ Object.assign(ACT, {
     drPick = +el.dataset.i; H.sel();
     el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === el));
     [0, 1, 2].forEach(i => { const c = $("#dr-c" + i); if (c) c.classList.toggle("mine", i === drPick); });
-    if (DRL) drRace([0, 0, 0]);
+    if (DRL) { drRace([0, 0, 0]); if (drMode === "depth") drBuild(); }
   },
   "dr-go": () => drGo(),
+  "dr-mode": el => {
+    if (drBusy || !DRL) return;
+    drMode = el.dataset.v; H.sel();
+    el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === el));
+    drBuild();
+  },
+  "dr-target": el => {
+    if (drBusy || drMode !== "depth") return;
+    drTarget = +el.dataset.k; H.sel(); drBuild();
+  },
 });
