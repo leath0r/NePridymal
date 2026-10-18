@@ -143,12 +143,11 @@ header>*{flex-shrink:0}header h1{flex-shrink:1}
 .ghub .gcard:has(.gc-live) .g-admb,.ghub .gcard:has(.gc-live) .g-lock{top:44px}
 
 /* ===== профиль: объём вместо плоскости, ничего не вылезает ===== */
-.pf-cover{height:calc(150px + var(--top))}
-.pf-cover>.banner{background:
+.pf-cover>.banner:not(.photo){background:
   radial-gradient(70% 90% at 85% 0%,color-mix(in srgb,var(--c1) 70%,#fff) 0%,transparent 55%),
   radial-gradient(60% 80% at 10% 100%,color-mix(in srgb,var(--c3) 80%,transparent),transparent 70%),
   radial-gradient(circle at 50% 62%,var(--c1),var(--c2) 90%)}
-.pf-cover>.banner::before{content:"";position:absolute;inset:0;opacity:.07;mix-blend-mode:overlay;
+.pf-cover>.banner:not(.photo)::before{content:"";position:absolute;inset:0;opacity:.07;mix-blend-mode:overlay;
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
 .pf-ava .ava{box-shadow:0 0 0 4px var(--bg),0 12px 30px rgba(0,0,0,.55)}
 .pf .pname h2{font-size:24px}

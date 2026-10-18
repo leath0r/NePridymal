@@ -169,7 +169,10 @@ function tournCard() {
   return `<button class="stc tr-bar" data-act="tourn"><span class="stc-i">${ic("trophy")}</span><span class="stc-t"><b>Турниры</b>
     <small>${TR.items.map(i => esc(i.title)).join(" · ")} · фонд ⭐ ${short(TR.items[0].pool)} · ${dd ? dd + " д " : ""}${hh} ч</small></span>${ic("chev")}</button>`;
 }
-function casesTidy() {
+// перестройку листалки зовут до 7 раз подряд (сразу, по таймеру, после каждого запроса) — склеиваем в одну за кадр
+let tidyQ = 0;
+function casesTidy() { if (!tidyQ) tidyQ = requestAnimationFrame(() => { tidyQ = 0; casesTidyNow(); }); }
+function casesTidyNow() {
   const v = $("#v-cases"); if (!v || !v.innerHTML) return;
   // лента дропов — больше не на главной (полная лента выигрышей — по нажатию на бегущую строку)
   const f = v.querySelector("#feed");
@@ -206,10 +209,15 @@ function casesTidy() {
   track.querySelectorAll(".st-sl").forEach(x => { if (!x.children.length) x.remove(); });   // «Старт новичка» пройден — карточка ушла
   [...track.children].sort((a, b) => ST_ORDER.indexOf(a.dataset.k) - ST_ORDER.indexOf(b.dataset.k)).forEach(x => track.appendChild(x));
   // пустые и скрытые блоки (ивент без ивента и т. п.) не занимают слайд и не дают лишнюю точку
-  track.querySelectorAll(".st-sl").forEach(x => { x.hidden = ![...x.children].some(stShown); });
-  const n = stSlides(track).length;
+  // сначала всё читаем, потом всё пишем: чередование «спросить стиль → поменять hidden» заставляло браузер
+  // пересчитывать стили страницы на каждом слайде (сотни мс при запуске на слабых телефонах)
+  const sls = [...track.querySelectorAll(".st-sl")];
+  sls.forEach(x => { x.hidden = false; });
+  const show = sls.map(x => [...x.children].some(stShown));
+  sls.forEach((x, i) => { x.hidden = !show[i]; });
+  const n = stSlides(track).length, cur = n > 1 ? stIdx(track) : 0;
   st.hidden = !n;
-  st.querySelector(".st-dots").innerHTML = n > 1 ? Array.from({ length: n }, (_, i) => `<i class="${i === stIdx(track) ? "on" : ""}"></i>`).join("") : "";
+  st.querySelector(".st-dots").innerHTML = n > 1 ? Array.from({ length: n }, (_, i) => `<i class="${i === cur ? "on" : ""}"></i>`).join("") : "";
 }
 const stShown = el => !el.hidden && el.innerHTML.trim() !== "" && getComputedStyle(el).display !== "none";
 const stSlides = tr => [...tr.children].filter(x => !x.hidden);
@@ -217,7 +225,8 @@ const stIdx = tr => { const f = stSlides(tr)[0], w = f ? f.offsetWidth + 8 : 1; 
 function stBind(st) {
   const tr = st.querySelector(".st-track");
   let touched = 0;
-  tr.addEventListener("scroll", () => { const i = stIdx(tr); st.querySelectorAll(".st-dots i").forEach((d, j) => d.classList.toggle("on", i === j)); }, { passive: true });
+  let raf = 0;   // точки — раз в кадр, а не на каждое событие прокрутки
+  tr.addEventListener("scroll", () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; const i = stIdx(tr); st.querySelectorAll(".st-dots i").forEach((d, j) => d.classList.toggle("on", i === j)); }); }, { passive: true });
   tr.addEventListener("pointerdown", () => { touched = Date.now(); }, { passive: true });
   const t = setInterval(() => {   // сама листается раз в 6 с, пока игрок её не трогает
     if (!st.isConnected) return clearInterval(t);

@@ -24,3 +24,13 @@ setTab = function (t) {
   v.classList.remove("v-in"); void v.offsetWidth; v.classList.add("v-in");
   clearTimeout(v._vin); v._vin = setTimeout(() => v.classList.remove("v-in"), 400);
 };
+
+// карточки кейсов и игр за экраном ставят анимации на паузу (лучи, мерцание) — меньше работы видеокарте при прокрутке
+(() => {
+  if (!("IntersectionObserver" in window)) return;
+  const io = new IntersectionObserver(es => es.forEach(e => e.target.classList.toggle("off", !e.isIntersecting)), { rootMargin: "120px 0px" });
+  let queued = false;
+  const scan = () => { queued = false; document.querySelectorAll(".case:not([data-io]),.gcard:not([data-io])").forEach(c => { c.dataset.io = "1"; io.observe(c); }); };
+  new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(scan); } }).observe(document.querySelector("main") || document.body, { childList: true, subtree: true });
+  scan();
+})();
