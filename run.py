@@ -582,7 +582,11 @@ def main():
     if HEADLESS and (SYSTEM == "windows" or sys.stdout is None or not sys.stdout.isatty()):
         if SYSTEM == "windows":
             _log_to_file()
-    env = setup(load_env())
+    try:
+        env = setup(load_env())
+    except EOFError:   # запуск без консоли (ввод из файла/NUL) — спросить токен некого
+        sys.exit("Нужно ответить на пару вопросов (токен бота, твой ID): запусти start.bat двойным кликом или ./start.sh в терминале. "
+                 "Либо впиши BOT_TOKEN и BOT_USERNAME в файл .env рядом с run.py.")
     if not HEADLESS and env.get("AUTOSTART_ASKED") != "1":
         env["AUTOSTART_ASKED"] = "1"
         save_env(env)
