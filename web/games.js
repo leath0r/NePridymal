@@ -367,8 +367,8 @@ async function upgGo() {
   const arc = r.chance / 100 * 360;
   const m = Math.min(6, arc * .2);   // отступ от краёв сектора: стрелка не встаёт «на линию»
   const stop = r.win ? m + Math.random() * (arc - 2 * m) : arc + 7 + Math.random() * (346 - arc);
-  const start = UP.angle, to = start - (start % 360) + 360 * 5 + (180 - arc / 2) + stop;   // сектор начинается в 180° − arc/2 (центр снизу)
-  const needle = $("#u-needle"), t0 = performance.now(), dur = UP.fast ? 700 : 4300;
+  const start = UP.angle, to = start - (start % 360) + 360 * (UP.fast ? 1 : 2) + (180 - arc / 2) + stop;   // два оборота — быстро, без затянутой интриги   // сектор начинается в 180° − arc/2 (центр снизу)
+  const needle = $("#u-needle"), t0 = performance.now(), dur = UP.fast ? 700 : 1600;
   let lastTick = start;
   await new Promise(done => (function f(now) {
     const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3.6), a = start + (to - start) * e;
