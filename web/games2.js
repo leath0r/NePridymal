@@ -21,7 +21,7 @@ async function openPlinko() {
     <div class="betp">
       <div class="seg" id="pl-risk">${[["low", "Низкий"], ["mid", "Средний"], ["high", "Высокий"]].map(([k, t]) => `<button data-act="pl-risk" data-v="${k}" class="${PL.risk === k ? "on" : ""}">${t} риск</button>`).join("")}</div>
       ${betHTML("pl-amt")}
-      <div class="pl-drops"><button class="btn cta" data-act="pl-drop" data-n="1">${ic("plus")}Бросить</button><button class="btn cta gold" data-act="pl-drop" data-n="5">×5</button><button class="btn cta gold" data-act="pl-drop" data-n="10">×10</button></div>
+      <div class="pl-drops"><button class="btn cta gold" data-act="pl-drop" data-n="1">${ic("plus")}Бросить</button><button class="btn cta gold" data-act="pl-drop" data-n="5">×5</button><button class="btn cta gold" data-act="pl-drop" data-n="10">×10</button></div>
     </div>`, "plinko-s");
   el._onClose = () => cancelAnimationFrame(PL.raf);
   if (!PL.tables) { const d = await api("plinko"); PL.tables = d.tables; PL.rows = d.rows; }
@@ -106,7 +106,7 @@ async function openTower() {
     <div class="betp" id="tw-ctl">
       <div class="seg" id="tw-mode">${[["easy", "Лёгкая"], ["mid", "Средняя"], ["hard", "Сложная"]].map(([k, t]) => `<button data-act="tw-mode" data-v="${k}" class="${twMode === k ? "on" : ""}">${t}</button>`).join("")}</div>
       ${betHTML("tw-amt")}
-      <button class="btn cta" id="tw-btn" data-act="tw-btn">Играть</button>
+      <button class="btn cta gold" id="tw-btn" data-act="tw-btn">Играть</button>
     </div>`, "tower-s");
   const d = await api("tower"); TWM = d.modes; TW = d; if (TW.active) twMode = TW.mode;
   twDraw();
@@ -131,7 +131,7 @@ function twDraw(boom) {
   $("#tw-win").textContent = TW.active && floor ? "⭐ " + fmt(TW.bet * TW.mult) : TW.pay ? "⭐ " + fmt(TW.pay) : "—";
   const btn = $("#tw-btn");
   if (TW.active) setBtn(btn, floor ? "green cta" : "ghost", floor ? `Забрать ⭐ ${fmt(TW.bet * TW.mult)}` : "Выбери плитку на 1 этаже", !floor);
-  else setBtn(btn, "cta", "Играть", false);
+  else setBtn(btn, "cta gold", "Играть", false);
   document.querySelectorAll("#tw-ctl .amt button, #tw-ctl .quick button, #tw-amt, #tw-mode button").forEach(x => x.disabled = !!TW.active);
 }
 async function twBtn() {
@@ -163,7 +163,7 @@ function openDice() {
     <input type="range" class="drange" id="dc-t" min="2" max="98" step="1" value="${DC.target}">
     <div class="seg" style="margin-top:12px">${[[true, "Больше"], [false, "Меньше"]].map(([k, t]) => `<button data-act="dc-dir" data-v="${k ? 1 : 0}" class="${DC.over === k ? "on" : ""}">${t} <span id="dc-tl${k ? 1 : 0}"></span></button>`).join("")}</div>
     <div class="dstats"><div><span>Шанс</span><b id="dc-ch"></b></div><div><span>Множитель</span><b id="dc-mu"></b></div><div><span>Выигрыш</span><b id="dc-pw"></b></div></div>
-    <div class="betp">${betHTML("dc-amt")}<button class="btn cta" data-act="dc-roll">Бросить кубик</button></div>`, "dice-s");
+    <div class="betp">${betHTML("dc-amt")}<button class="btn cta gold" data-act="dc-roll">Бросить кубик</button></div>`, "dice-s");
   const r = $("#dc-t");
   r.oninput = () => { DC.target = +r.value; H.sel(); dcDraw(); };
   $("#dc-amt").addEventListener("input", dcDraw);
@@ -218,7 +218,7 @@ function openLimbo() {
         <div class="lbc"><span>Шанс</span><b id="lb-ch">48.50%</b></div></div>
       <div class="quick">${[1.5, 2, 5, 10, 100].map(x => `<button data-act="lb-q" data-v="${x}">x${x}</button>`).join("")}</div>
       <div style="height:8px"></div>${betHTML("lb-amt")}
-      <button class="btn cta" data-act="lb-go">Играть</button>
+      <button class="btn cta gold" data-act="lb-go">Играть</button>
     </div>`, "limbo-s");
   $("#lb-t").oninput = lbDraw; lbDraw();
 }

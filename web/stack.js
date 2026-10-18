@@ -263,7 +263,7 @@ function stkOverlay(kind, score, r) {
   if (!kind) { ov.className = "stk-ov"; ov.innerHTML = ""; return; }
   const d = STK.d;
   ov.className = "stk-ov on";
-  if (kind === "start") ov.innerHTML = `<div class="stk-card"><b class="stk-big">Тапни, чтобы поставить блок</b>
+  if (kind === "start") ov.innerHTML = `<div class="stk-card start"><b class="stk-big">Тапни, чтобы поставить блок</b>
       <span>Что свисает — отрезается. Ровно в край — «идеально»: три подряд расширяют блок</span>
       <button class="btn gold" data-act="stk-go">${ic("play")}Играть</button></div>`;
   else if (kind === "wait") ov.innerHTML = `<div class="stk-card"><span>Этажей</span><b class="stk-big">${score}</b><span>Проверяем результат…</span></div>`;

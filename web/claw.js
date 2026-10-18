@@ -68,7 +68,7 @@ function fillClaw(el) {
     <div class="betp">${betHTML("cl-amt", keepBet)}
       <div class="cl-btns"><button class="btn cta gold" id="cl-go" data-act="cl-go">Хватай!</button>
         <button class="btn ghost cl-sh" data-act="cl-shuf">${ic("refresh")}</button></div>
-      <div class="hint cl-note">Чем больше множитель — тем хуже клешня держит приз. Шанс честный, возврат ${String(CLW.rtp).replace(".", ",")}%.</div></div>`;
+</div>`;
   clPanelPaint();
 }
 function clPanelPaint() { const p = document.getElementById("cl-panel"); if (!p || !CLW) return; const h = clPanel(); if (p._h !== h) { p._h = h; p.innerHTML = h; } }

@@ -18,7 +18,7 @@ async function openJR() {
     <div class="betp">
       <button class="btn cta gold" data-act="jr-gifts">${ic("gift")}Поставить подарки</button>
       <div class="jrst"><label class="amtf"><span>⭐</span><input id="jr-amt" inputmode="numeric" value="500"></label><button class="btn ghost" data-act="jr-stars">Поставить звёзды</button></div>
-      <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Шанс = твой вклад / весь банк. Когда игроков двое — 45 секунд на ставки, потом колесо. Победитель забирает все подарки и звёзды (комиссия ${feeP("jackpot", .05)} только со звёзд).</div>
+
     </div>
     <div class="sec-t">Участники <span id="jr-n"></span></div><div id="jr-p"></div>`, "jr-s");
   el._onClose = () => clearInterval(jrPoll);
@@ -93,7 +93,7 @@ function openRL() {
     <div class="rlboard" id="rl-b"></div>
     <div class="betp"><div class="btns" style="margin:0"><button class="btn ghost" data-act="rl-clear">${ic("x")}Очистить</button><button class="btn ghost" data-act="rl-dbl">×2</button></div>
       <button class="btn cta gold" id="rl-go" data-act="rl-spin">Крутить</button></div>
-    <div class="disc">Число — x36, дюжина и колонка — x3, цвет, чёт/нечет, половины — x2. На зеро проигрывают все ставки, кроме ставки на 0.</div>`, "rl-s");
+    `, "rl-s");
   rlWheel(); rlBoard();
 }
 function rlWheel() {

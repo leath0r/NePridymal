@@ -32,7 +32,7 @@ function scBlank() {   // пустой билет-витрина до покуп
   const [, name, c1, c2] = scTierCol();
   $("#sc-t").style.setProperty("--t1", c1); $("#sc-t").style.setProperty("--t2", c2);
   $("#sc-t").innerHTML = `<div class="sc-top"><b>${name.toUpperCase()}</b><span>три одинаковых — выигрыш</span></div>
-    <div class="sc-grid">${Array.from({ length: 9 }, () => `<div class="sc-cell q">?</div>`).join("")}</div>`;
+    <div class="sc-grid">${Array.from({ length: 9 }, (_, i) => `<div class="sc-cell q foil" style="--d:${(i % 3 + (i / 3 | 0)) * .18}s"><svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.3l-5.8 3.1 1.1-6.5L2.6 9.3l6.5-.9Z"/></svg></div>`).join("")}</div>`;
 }
 function scButtons() {
   const b = $("#sc-btns"); if (!b) return;
@@ -65,13 +65,33 @@ function scFoil() {
   cv.width = W * d; cv.height = Hh * d;
   const g = cv.getContext("2d"); g.scale(d, d);
   const [, , c1, c2] = scTierCol();
-  const gr = g.createLinearGradient(0, 0, W, Hh);
-  gr.addColorStop(0, "#e9ecf2"); gr.addColorStop(.25, c1); gr.addColorStop(.5, "#f8f9fc"); gr.addColorStop(.75, c1); gr.addColorStop(1, "#c9ced8");
-  g.fillStyle = gr; g.fillRect(0, 0, W, Hh);
-  g.globalAlpha = .18; g.fillStyle = c2;
-  for (let y = 10; y < Hh; y += 26) for (let x = (y / 26 % 2) * 22; x < W; x += 44) { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); }
-  g.globalAlpha = .55; g.fillStyle = c2; g.font = "900 15px -apple-system,Roboto,sans-serif"; g.textAlign = "center";
-  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) g.fillText("СОТРИ", W / 6 + x * W / 3, Hh / 6 + y * Hh / 3 + 5);
+  // фольга как у лотерейного билета: металлическая подложка, на каждой клетке — плашка с брашированными штрихами,
+  // выдавленной звездой и надписью; поверх — диагональный блик
+  const base = g.createLinearGradient(0, 0, W, Hh);
+  base.addColorStop(0, "#d9dde6"); base.addColorStop(.5, c1); base.addColorStop(1, "#9aa1b0");
+  g.fillStyle = base; g.fillRect(0, 0, W, Hh);
+  const gap = 8, cw = (W - gap * 2) / 3, chh = (Hh - gap * 2) / 3;
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const star = (cx, cy, R) => { g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? R * .45 : R; g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); } g.closePath(); };
+  for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) {
+    const x = col * (cw + gap), y = row * (chh + gap);
+    const pg = g.createLinearGradient(x, y, x + cw, y + chh);
+    pg.addColorStop(0, "#f4f6fa"); pg.addColorStop(.35, c1); pg.addColorStop(.6, "#fdfdff"); pg.addColorStop(1, c2);
+    rr(x, y, cw, chh, 14); g.fillStyle = pg; g.fill();
+    g.save(); rr(x, y, cw, chh, 14); g.clip();
+    g.globalAlpha = .12; g.strokeStyle = "#fff"; g.lineWidth = 1;   // браширование
+    for (let k = -chh; k < cw; k += 4) { g.beginPath(); g.moveTo(x + k, y); g.lineTo(x + k + chh * .6, y + chh); g.stroke(); }
+    g.globalAlpha = 1; g.restore();
+    const R = Math.min(cw, chh) * .2, cx = x + cw / 2, cy = y + chh / 2 - 6;
+    star(cx + 1, cy + 1.5, R); g.fillStyle = "rgba(255,255,255,.55)"; g.fill();   // тиснение: светлая кромка снизу
+    star(cx, cy, R); g.fillStyle = c2; g.globalAlpha = .55; g.fill(); g.globalAlpha = 1;
+    g.font = "900 10px -apple-system,Roboto,sans-serif"; g.textAlign = "center"; g.fillStyle = c2; g.globalAlpha = .7;
+    g.fillText("СОТРИ", cx, y + chh - 10); g.globalAlpha = 1;
+    rr(x + .5, y + .5, cw - 1, chh - 1, 14); g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 1; g.stroke();
+  }
+  const sh = g.createLinearGradient(0, 0, W, Hh);   // общий блик
+  sh.addColorStop(.3, "rgba(255,255,255,0)"); sh.addColorStop(.42, "rgba(255,255,255,.35)"); sh.addColorStop(.5, "rgba(255,255,255,0)");
+  g.fillStyle = sh; g.fillRect(0, 0, W, Hh);
   g.globalAlpha = 1; g.globalCompositeOperation = "destination-out";
   let down = false, last = null, lastH = 0, lastCheck = 0;
   const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };

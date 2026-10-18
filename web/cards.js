@@ -44,7 +44,7 @@ async function bjTabDraw() {
       <div id="bj-p" class="hrow"></div><div class="fl"><span>Ты</span></div>
     </div>
     <div class="betp" id="bj-ctl"></div>
-    <div class="disc">Дилер добирает до 17. Блэкджек платит 3:2, ничья возвращает ставку.</div>`;
+`;
   BJ = await api("bj");
   bjDraw();
 }
@@ -58,9 +58,9 @@ function bjDraw(res) {
   const R = { win: ["Победа!", "win"], blackjack: ["Блэкджек!", "win"], push: ["Ничья", "meh"], lose: ["Дилер выиграл", "lose"], bust: ["Перебор", "lose"] }[res];
   $("#bj-res").innerHTML = R ? `<span class="${R[1]}">${R[0]}${BJ.pay ? ` · ⭐ ${fmt(BJ.pay)}` : ""}</span>` : "";
   $("#bj-ctl").innerHTML = act
-    ? `<div class="btns" style="margin:0"><button class="btn cta" data-act="bj" data-v="hit">${ic("plus")}Ещё</button><button class="btn cta gold" data-act="bj" data-v="stand">Хватит</button></div>
+    ? `<div class="btns" style="margin:0"><button class="btn cta gold" data-act="bj" data-v="hit">${ic("plus")}Ещё</button><button class="btn cta green" data-act="bj" data-v="stand">Хватит</button></div>
        ${BJ.player.length === 2 ? `<button class="btn ghost" style="margin-top:8px" data-act="bj" data-v="double">Удвоить · ⭐ ${fmt(BJ.bet)}</button>` : ""}`
-    : `${betHTML("bj-amt")}<button class="btn cta" data-act="bj-deal">Раздать</button>`;
+    : `${betHTML("bj-amt")}<button class="btn cta gold" data-act="bj-deal">Раздать</button>`;
 }
 async function bjAct(a) {
   if (bjBusy) return; bjBusy = true;
@@ -101,7 +101,7 @@ function tablesHTML(game) {
       <div class="mn" style="margin:0 0 10px"><span>Игроков</span><div class="quick">${[2, 3, 4].map(n => `<button data-act="tb-maxp" data-v="${n}" class="${TB.maxp === n ? "on" : ""}">${n}</button>`).join("")}</div></div>
       <div class="dopp" id="tb-inv"></div>
       <div id="tb-stake">${TB.kind === "gifts" ? "" : betHTML("tb-amt", TB.stake)}</div>
-      <button class="btn cta" data-act="tb-new" data-g="${game}">${ic(TB.kind === "gifts" ? "gift" : "plus")}${TB.kind === "gifts" ? "Выбрать подарки и создать" : "Создать стол"}</button>
+      <button class="btn cta gold" data-act="tb-new" data-g="${game}">${ic(TB.kind === "gifts" ? "gift" : "plus")}${TB.kind === "gifts" ? "Выбрать подарки и создать" : "Создать стол"}</button>
       <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">${TB.kind === "gifts"
         ? "Каждый кладёт подарки (не меньше 80% ценности ставки хозяина), победитель забирает все."
         : `Ставка с каждого игрока, победитель забирает банк (комиссия ${feeP("room", .05)}).`} На ход — 45 секунд.</div>
@@ -175,11 +175,11 @@ function roomDraw() {
   let center = "";
   if (v.status === "waiting") {
     center = `<div class="wait"><b>Ждём игроков ${v.players.length}/${v.maxp}</b><span>Банк растёт с каждым игроком</span>
-      <div class="btns">${v.host === ME.id ? `<button class="btn cta" data-act="rm" data-v="start" ${v.players.length < 2 ? "disabled" : ""}>Начать игру</button>` : `<button class="btn ghost" disabled>Ждём, пока хозяин начнёт</button>`}</div>
+      <div class="btns">${v.host === ME.id ? `<button class="btn cta gold" data-act="rm" data-v="start" ${v.players.length < 2 ? "disabled" : ""}>Начать игру</button>` : `<button class="btn ghost" disabled>Ждём, пока хозяин начнёт</button>`}</div>
       <div class="btns"><button class="btn ghost" data-act="rm-inv">${ic("userPlus")}Позвать друга</button><button class="btn red" data-act="rm" data-v="${v.host === ME.id ? "cancel" : "leave"}">${v.host === ME.id ? "Отменить стол" : "Встать"}</button></div></div>`;
   } else if (v.game === "21") {
     center = me && me.cards ? `<div class="felt sm"><div class="fl"><span>Твоя рука</span></div><div class="hrow">${handHTML(me.cards)}${bjScore(me.value)}</div></div>` : "";
-    if (myTurn) center += `<div class="btns"><button class="btn cta" data-act="rm-act" data-v="hit">${ic("plus")}Ещё</button><button class="btn cta gold" data-act="rm-act" data-v="stand">Хватит</button></div>`;
+    if (myTurn) center += `<div class="btns"><button class="btn cta gold" data-act="rm-act" data-v="hit">${ic("plus")}Ещё</button><button class="btn cta green" data-act="rm-act" data-v="stand">Хватит</button></div>`;
   } else {
     const SU = v.suit, last = (v.log || []).slice(-1)[0];
     const cardTxt = t => esc(t).replace(/([6-9TJQKA])([SHDC])/g, (m, r, s) => `<i class="${s === "H" || s === "D" ? "red" : ""}">${r === "T" ? "10" : r}${suitSVG(s)}</i>`).replace(/→ ([SHDC])/, (m, s) => "→ " + SUIT_NAME[s]);
@@ -202,7 +202,7 @@ function roomDraw() {
   if (v.status === "done") {
     const won = v.result.winners.includes(ME.id);
     center += `<div class="rres ${won ? "win" : "lose"}">${won ? (v.kind === "gifts" ? `Победа! Подарки банка твои` : `Победа! +⭐ ${fmt(v.result.share)}`) : `Победил ${v.players.filter(p => v.result.winners.includes(p.id)).map(p => esc(p.name)).join(", ")}`}</div>
-      <div class="btns"><button class="btn ghost" data-act="close">Закрыть</button><button class="btn cta" data-act="rm-again">${ic("refresh")}Новый стол</button></div>`;
+      <div class="btns"><button class="btn ghost" data-act="close">Закрыть</button><button class="btn cta gold" data-act="rm-again">${ic("refresh")}Новый стол</button></div>`;
   } else if (v.status === "cancelled") center += `<div class="rres lose">Стол отменён, ставки вернулись</div>`;
   const potBox = v.kind === "gifts" && v.potGifts && v.potGifts.length ? `<div class="potg">${v.potGifts.slice(0, 12).map(g => `<div data-act="gift" data-k="${reg({ g })}">${giftHTML(g, { lite: true, plain: true })}</div>`).join("")}${v.potGifts.length > 12 ? `<span>+${v.potGifts.length - 12}</span>` : ""}</div>` : "";
   box.innerHTML = `<div class="rhead"><h2>${esc(v.title)}</h2><span>${v.kind === "gifts" ? `${ic("gift")}Игра на подарки` : `Ставка ⭐ ${fmt(v.stake)}`}</span></div>

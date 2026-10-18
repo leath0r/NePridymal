@@ -67,10 +67,10 @@ function openCrash() {
       ${betHTML("camt")}
       <div class="auto"><button class="sw${autoOn ? " on" : ""}" id="csw" data-act="auto-tog"></button><span style="flex:1">Автовывод</span>
         <label class="autof"><input id="cauto" inputmode="decimal" value="2.00"><span>x</span></label></div>
-      <div class="cbtns"><button class="btn cta" id="cbtn" data-act="crash-btn">…</button><button class="allin" id="callin" data-act="crash-allin">${ic("flame")}<b>ALL IN</b></button></div>
+      <div class="cbtns"><button class="btn cta gold" id="cbtn" data-act="crash-btn">…</button><button class="allin" id="callin" data-act="crash-allin">${ic("flame")}<b>ALL IN</b></button></div>
     </div>
     <div class="sec-t">Игроки раунда <span id="ccount"></span></div><div class="box" id="cbets"></div>
-    <div class="disc">Множитель растёт, пока ракета не взорвётся. ${esc(ME.disclaimer)}</div>`, "crash-s");
+    <div class="disc">${esc(ME.disclaimer)}</div>`, "crash-s");
   el._onClose = () => { CRASH_ON = false; stopCrash(); };
   if (!cVisHook) { cVisHook = true; document.addEventListener("visibilitychange", () => { if (CRASH_ON && !bgOff()) pollCrash(); }); }   // вернулись в игру — сразу свежий раунд
   CRASH_ON = true; CS = null; cBoom = null;
@@ -174,14 +174,14 @@ function crashFrame(now) {
   const my = CS.my;
   const ai = $("#callin"); if (ai) { ai.disabled = !(CS.phase === "bet" && !my && !crashLate()) || ME.stars < 10; $("#cbox").classList.toggle("allin-on", !!(my && CRASH_ALLIN === CS.round)); }
   if (CS.phase === "bet") {
-    if (my) setBtn(btn, "ghost", `Ставка ⭐ ${fmt(my.amount)} принята${my.auto ? " · авто " + my.auto + "x" : ""}`, true);
-    else if (crashLate()) setBtn(btn, "ghost", "Старт — жди следующий раунд", true);
-    else setBtn(btn, "cta", `Поставить ⭐ ${fmt(betVal("camt"))}`, false);
+    if (my) setBtn(btn, "ghost placed", `Ставка ⭐ ${fmt(my.amount)} принята · старт через ${Math.max(0, Math.ceil(CS.until - st))} с${my.auto ? " · авто " + my.auto + "x" : ""}`, true);
+    else if (crashLate()) setBtn(btn, "ghost wait", "Старт — ставка на следующий раунд", true);
+    else setBtn(btn, "cta gold", `Поставить ⭐ ${fmt(betVal("camt"))}`, false);
   } else if (CS.phase === "run" && my && !my.cashed) {
     setBtn(btn, "green cta", `Забрать ⭐ ${fmt(my.amount * m)}`, false);
   } else if (my && my.cashed) {
-    setBtn(btn, "ghost", `Забрал x${my.cashed.toFixed(2)} · +⭐ ${fmt(my.amount * my.cashed)}`, true);
-  } else setBtn(btn, "ghost", CS.phase === "end" ? "Новый раунд через пару секунд" : "Раунд идёт — жди следующий", true);
+    setBtn(btn, "ghost placed", `Забрал x${my.cashed.toFixed(2)} · +⭐ ${fmt(my.amount * my.cashed)}`, true);
+  } else setBtn(btn, "ghost wait", CS.phase === "end" ? `Ставки через ${Math.max(1, Math.ceil(CS.until - st))} с` : `В полёте x${m.toFixed(2)} · ставки после взрыва`, true);
 }
 // сервер закрывает приём за 0,2 с до старта; с запасом на пинг гасим кнопку за 0,6 с — иначе «приём ставок закрыт»
 const crashLate = () => CS && CS.phase === "bet" && Date.now() / 1000 + cOff > CS.until - 0.6;
@@ -292,7 +292,7 @@ function openUpgrade() {
       <div class="hist" id="u-cols" style="margin:8px -16px 10px"></div>
       <div class="ggrid" id="u-targets"></div>
     </div>
-    <div class="disc">Загрузи до 10 подарков и выбери до 5 целей. Шанс = ценность ставки / ценность целей × ${String(gEdge("upg")).replace(".", ",")} (максимум 80%). Проиграл — все подарки ставки сгорают.</div>`, "upgs");
+    `, "upgs");
   const q = $("#u-q"); let tt;
   q.oninput = () => { clearTimeout(tt); tt = setTimeout(() => { UP.f.qs = q.value.trim(); upgLoad(); }, 300); };
   upgDraw();
@@ -322,14 +322,18 @@ function upgDraw(result, marks) {
   setH(to, stackHTML(UP.ts, "Цель", ["target", UP.gs.length ? "Выбери ниже" : "—"]));
   const ch = upgChance(), t0 = UP.ts[0];
   setH($("#u-center"), result ? `<div class="ures ${result}">${result === "win" ? "АПГРЕЙД!" : "СГОРЕЛ"}</div>`
-    : t0 ? `<img src="${A.model(t0.col, t0.model, 256)}" alt=""><b>${ch.toFixed(ch < 10 ? 1 : 0)}%</b><span>шанс</span>` : `<b class="hint">—</b><span>шанс</span>`);
+    : t0 ? `<img src="${A.model(t0.col, t0.model, 256)}" alt=""><b>${ch.toFixed(ch < 10 ? 1 : 0)}%</b><span>шанс</span>`
+    : !UP.gs.length ? `<div class="u-hello">${["Toy Bear", "Plush Pepe", "Ion Gem"].map((g, i) => `<img class="uh${i}" src="${A.orig(g, 128)}" alt="">`).join("")}</div><b class="u-ht">Выбери подарок</b><span>и цель подороже</span>`
+    : `<b class="u-ht">Выбери цель</b><span>ниже — шанс посчитается</span>`);
   const C = 2 * Math.PI * 47;
   $("#u-arc").style.strokeDasharray = `${C * ch / 100} ${C}`;
   $("#u-arc").style.transform = `rotate(${90 - ch * 1.8}deg)`;   // сектор шанса — по центру снизу (как на кейс-сайтах), а не от 12 часов вбок
   $("#u-ring").className = "uring" + (result ? " " + result : "");
   const go = $("#u-go"), bad = UP.ts.length && upTV() < 1.2 * upSV();
-  go.disabled = !(UP.gs.length && UP.ts.length) || UP.busy || bad;
-  go.textContent = !UP.gs.length ? "Выбери подарки" : !UP.ts.length ? "Выбери цель" : bad ? "Цели должны быть дороже ставки в 1.2 раза" : `Апгрейд · шанс ${ch.toFixed(1)}%`;
+  go.disabled = !!UP.gs.length && (!UP.ts.length || UP.busy || bad);
+  go.dataset.act = UP.gs.length ? "upg-go" : "upg-pick";   // пусто — кнопка сразу открывает выбор подарков
+  $("#u-from").classList.toggle("u-call", !UP.gs.length);
+  go.textContent = !UP.gs.length ? "Выбрать подарки для ставки" : !UP.ts.length ? "Выбери цель" : bad ? "Цели должны быть дороже ставки в 1.2 раза" : `Апгрейд · шанс ${ch.toFixed(1)}%`;
   $("#u-pick").style.display = UP.gs.length ? "" : "none";
   $("#u-quick").style.display = UP.gs.length ? "" : "none";
   document.querySelectorAll("#u-quick [data-act=upg-x]").forEach(b => b.classList.toggle("on", !!(UP.ts.length && UP.gs.length && Math.abs(upTV() / upSV() - +b.dataset.v) / +b.dataset.v < .2)));
@@ -408,7 +412,7 @@ async function openMines() {
     <div class="betp" id="m-ctl">
       ${betHTML("m-amt")}
       <div class="mn"><span>Мин</span><div class="quick" id="m-n">${[1, 3, 5, 10, 24].map(n => `<button data-act="mines-n" data-v="${n}" class="${n === minesN ? "on" : ""}">${n}</button>`).join("")}</div></div>
-      <button class="btn cta" id="m-btn" data-act="mines-btn">Играть</button>
+      <button class="btn cta gold" id="m-btn" data-act="mines-btn">Играть</button>
     </div>`, "mines-s");
   MS = await api("mines");
   if (MS.active) minesN = MS.n;
@@ -436,7 +440,7 @@ function minesDraw(boomCell) {
   $("#m-win").textContent = MS.active && k ? "⭐ " + fmt(MS.bet * MS.mult) : MS.pay ? "⭐ " + fmt(MS.pay) : "—";
   const btn = $("#m-btn");
   if (MS.active) setBtn(btn, k ? "green cta" : "ghost", k ? `Забрать ⭐ ${fmt(MS.bet * MS.mult)}` : "Открой первую клетку", !k);
-  else setBtn(btn, "cta", "Играть", false);
+  else setBtn(btn, "cta gold", "Играть", false);
   document.querySelectorAll("#m-ctl .amt button, #m-ctl .quick button, #m-amt").forEach(x => x.disabled = !!MS.active);
 }
 async function minesBtn() {

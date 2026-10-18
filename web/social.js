@@ -29,6 +29,7 @@ function drawInventory() {
   const gifts = p.gifts, total = gifts.reduce((s, g) => s + g.value, 0);
   const owned = new Set(gifts.map(g => g.col));
   const top = [...gifts].sort((a, b) => b.value - a.value).slice(0, 3);
+  if (!gifts.length && INV.mode === "gifts" && !INV.col) { v.innerHTML = invStartHTML(); drawSelBar(); return; }
   let body = "";
   if (INV.mode === "gifts") {
     let list = INV.col ? gifts.filter(g => g.col === INV.col) : [...gifts];
@@ -70,6 +71,21 @@ function drawInventory() {
     <div class="seg">${[["gifts", "grid", "Подарки"], ["cols", "layers", "Коллекции"]].map(([k, i, t]) => `<button data-act="inv-mode" data-v="${k}" class="${INV.mode === k ? "on" : ""}">${ic(i)}${t}</button>`).join("")}</div>
     ${body}`;
   drawSelBar();
+}
+// пустая сумка у новичка: не нули, а понятный первый шаг
+function invStartHTML() {
+  const free = ME && !ME.freeIn;
+  return `<div class="invstart">
+    <div class="is-art">${["Toy Bear", "Plush Pepe", "Ion Gem"].map((g, i) => `<img class="is-g g${i}" src="${A.orig(g, 128)}" alt="">`).join("")}<i class="is-glow"></i></div>
+    <h2>Сумка пока пустая</h2>
+    <p>Открой кейс — выпавшие подарки лягут сюда и начнут приносить звёзды каждый час.</p>
+    ${free ? `<button class="btn cta gold" data-act="case" data-id="free">${ic("gift")}Открыть бесплатный кейс</button>`
+      : `<button class="btn cta gold" data-tab="cases">${ic("gift")}К кейсам</button>`}
+    <div class="is-steps">
+      <div><span>1</span><b>Открой кейс</b><small>${free ? "бесплатный доступен сейчас" : "бесплатный — каждые несколько часов"}</small></div>
+      <div><span>2</span><b>Получай доход</b><small>подарки приносят звёзды каждый час</small></div>
+      <div><span>3</span><b>Прокачивай</b><small>апгрейд, обмен, коллекции</small></div>
+    </div></div>`;
 }
 function drawSelBar() {
   let bar = $("#selbar");

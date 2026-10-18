@@ -52,3 +52,64 @@ html.lite .empty .eic,html.lite .empty .eic::before,html.lite .empty .eic::after
 .bal .num,.ar-x,.dicebig b,.limbo b,.inchero>b,.pf-stats>span b,.vlh-t b,.vlh-t em,.bksh-top b,
 .bks-top b,.bkh-stats b,.dr-ln em,.ar-step b,.ar-banner b,.pmenu em,.cl-prize em,.mk2-hero b,.pr-o-body b,.qb-p>b{
   font-family:"NP Num",-apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1,"lnum" 1}
+
+/* --- «Как играть»: одинаковый блок во всех играх, стрелка раскрытия --- */
+.rules summary{min-height:22px}
+.rules summary::after{content:"";flex:none;margin-left:auto;width:7px;height:7px;border-right:2px solid var(--hint);border-bottom:2px solid var(--hint);transform:rotate(45deg) translateY(-2px);transition:transform .2s}
+details.rules[open]>summary::after{transform:rotate(225deg) translateY(-2px)}
+.rules-auto{margin-top:12px}
+
+/* --- пустая сумка новичка --- */
+.invstart{text-align:center;padding:8px 4px 4px}
+.is-art{position:relative;height:150px;margin:6px auto 6px;max-width:260px}
+.is-glow{position:absolute;left:50%;top:50%;width:180px;height:180px;margin:-90px 0 0 -90px;border-radius:50%;z-index:0;
+  background:radial-gradient(circle,rgba(255,111,181,.35),rgba(123,92,255,.18) 45%,transparent 70%);animation:np-etw 2.6s ease-in-out infinite alternate}
+.is-g{position:absolute;z-index:1;object-fit:contain;filter:drop-shadow(0 12px 18px rgba(0,0,0,.45));animation:np-efloat 3.4s ease-in-out infinite}
+.is-g.g0{left:6%;top:38px;width:78px;height:78px;transform:rotate(-12deg);animation-delay:-1s}
+.is-g.g1{left:50%;top:6px;width:112px;height:112px;margin-left:-56px;z-index:2}
+.is-g.g2{right:6%;top:44px;width:72px;height:72px;transform:rotate(10deg);animation-delay:-2s}
+.invstart h2{margin:4px 0 6px;font-size:22px;font-weight:900}
+.invstart p{margin:0 auto 14px;max-width:300px;font-size:14px;line-height:1.45;color:var(--hint)}
+.invstart>.btn{max-width:320px;margin:0 auto}
+.is-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:16px;text-align:left}
+.is-steps>div{min-width:0;padding:10px;border-radius:16px;background:linear-gradient(180deg,color-mix(in srgb,var(--text) 6%,var(--card)),var(--card));box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+.is-steps span{display:grid;place-items:center;width:24px;height:24px;margin-bottom:6px;border-radius:8px;font-size:12px;font-weight:900;color:#3a2300;background:linear-gradient(135deg,#ffe58a,#ffb52e)}
+.is-steps b{display:block;font-size:13px;line-height:1.2}
+.is-steps small{display:block;margin-top:3px;font-size:11px;line-height:1.3;color:var(--hint)}
+
+/* --- Краш: живые состояния кнопки вместо серых заглушек --- */
+.btn.ghost.wait{color:#fff;background:linear-gradient(90deg,rgba(124,92,255,.22),rgba(255,111,181,.18));box-shadow:inset 0 0 0 1px rgba(160,130,255,.35);opacity:1;font-size:14.5px;font-variant-numeric:tabular-nums}
+.btn.ghost.wait::before{content:"";position:absolute;inset:0;z-index:-1;background:repeating-linear-gradient(115deg,transparent 0 14px,rgba(255,255,255,.05) 14px 28px);background-size:200% 100%;animation:np-wait 1.6s linear infinite}
+@keyframes np-wait{to{background-position:-60px 0}}
+.btn.ghost.placed{color:#5cf5ab;background:color-mix(in srgb,#35d07f 14%,var(--card2));box-shadow:inset 0 0 0 1px rgba(76,240,160,.4);opacity:1;font-size:14.5px}
+.btn[disabled].wait,.btn[disabled].placed{opacity:1}
+.allin[disabled]{opacity:1;background:var(--card2);color:var(--hint);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--text) 8%,transparent);filter:none}
+.allin[disabled] .ic{opacity:.6}
+
+/* --- Апгрейд в покое: в круге подарки и подсказка, слот «Ставка» зовёт, кнопка сразу открывает выбор --- */
+.uc .u-hello{position:relative;width:70%;height:42%;margin-bottom:4px}
+.u-hello img{position:absolute;bottom:0;object-fit:contain;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45));animation:np-efloat 3.2s ease-in-out infinite}
+.u-hello .uh0{left:0;width:38%;transform:rotate(-12deg);opacity:.85;animation-delay:-1s}
+.u-hello .uh1{left:50%;width:50%;margin-left:-25%;z-index:1}
+.u-hello .uh2{right:0;width:36%;transform:rotate(12deg);opacity:.85;animation-delay:-2s}
+.uc b.u-ht{font-size:16px;font-weight:900;line-height:1.15;text-align:center}
+.uslot.u-call{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--gold) 70%,transparent),0 0 24px -8px var(--gold);animation:np-ucall 1.8s ease-in-out infinite}
+.uslot.u-call .uempty b{color:var(--gold)}
+@keyframes np-ucall{50%{box-shadow:inset 0 0 0 2px var(--gold),0 0 30px -4px var(--gold)}}
+
+/* --- Стопка: стартовая карточка компактная и внизу — сверху видно игровое поле --- */
+.stk-card.start b.stk-big{font-size:21px}
+.stk-ov:has(.stk-card.start){align-items:flex-end;padding-bottom:16px;background:linear-gradient(180deg,transparent 45%,rgba(8,12,30,.7))}
+.stk-card.start{gap:8px;padding:14px 16px}
+.stk-card.start .btn{margin-top:4px}
+
+/* --- скретч-карты: в покое клетки — фольга цвета билета со звездой и пробегающим бликом --- */
+.sc-cell.q.foil{position:relative;overflow:hidden;color:transparent;
+  background:linear-gradient(135deg,#f4f6fa 0%,var(--t1) 38%,#fdfdff 60%,color-mix(in srgb,var(--t2) 80%,var(--t1)) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.55),inset 0 -3px 6px rgba(0,0,0,.18),0 4px 10px -4px rgba(0,0,0,.5)}
+.sc-cell.q.foil::before{content:"";position:absolute;inset:0;opacity:.14;background:repeating-linear-gradient(60deg,#fff 0 1px,transparent 1px 4px)}
+.sc-cell.q.foil::after{content:"";position:absolute;inset:-40%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.55) 50%,transparent 60%);
+  transform:translateX(-80%);animation:np-foil 3.2s ease-in-out infinite;animation-delay:var(--d,0s)}
+@keyframes np-foil{0%,55%{transform:translateX(-80%)}100%{transform:translateX(80%)}}
+.sc-cell.q.foil svg{position:relative;width:40%;height:40%;fill:var(--t2);opacity:.55;filter:drop-shadow(1px 1.5px 0 rgba(255,255,255,.6))}
+html.lite .sc-cell.q.foil::after{animation:none}

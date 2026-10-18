@@ -269,3 +269,12 @@ header .fr-btn:not(.pay-pill),header .bell-btn{width:34px;height:34px}
 header .fr-btn .ic{width:19px;height:19px}
 header .me-btn .ava{width:36px!important;height:36px!important;--s:36px}
 @media (max-width:350px){header{gap:4px;padding-left:10px;padding-right:12px}header .fr-btn:not(.pay-pill),header .bell-btn{width:31px;height:31px}}
+
+/* главная: «Бесплатный / Бонус дня / Задания» — три ровные колонки, иконка над текстом, ничего не уезжает за край */
+.promo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.promo>button{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:8px;min-width:0;padding:11px 10px 10px;border-radius:16px}
+.promo>button>div{min-width:0;width:100%}
+.promo>button b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.promo>button span:not(.pic){display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.promo .pic{width:34px;height:34px;border-radius:11px}
+.promo .ready .pic{box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 60%,transparent),0 6px 14px -6px var(--gold)}

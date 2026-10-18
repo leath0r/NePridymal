@@ -125,7 +125,7 @@ function fillHL(el, last) {
         <div class="dres ${last.res === "lose" ? "lose" : "win"}">${last.res === "lose" ? `Мимо — −⭐ ${fmt(last.bet)}` : `Забрал ⭐ ${fmt(last.pay)} · x${(+last.mult).toFixed(2)}`}</div>` :
       `<div class="hl-table">${hlCard(13, 0, "back")}</div>`}
       <div class="betp">${betHTML("hl-amt", 100)}<button class="btn cta gold" data-act="hl-start">${ic("play")}Начать</button>
-      <div class="hint" style="font-size:12.5px;text-align:center;margin-top:8px">Карты 2…A. «Выше или так же» и «ниже или так же». Чем меньше шанс — тем больше икс. Забрать можно после первого угадывания. Пропустить карту — бесплатно.</div></div>`;
+</div>`;
     return;
   }
   const o = HL.odds, hist = HL.hist.slice(-8);
@@ -165,7 +165,7 @@ function fillCraft(el) {
       <div class="mid"><b>23%</b><span>⭐ ${total ? short(Math.round(total * .95)) + "–" + short(Math.round(total * 1.5)) : "×0,95–1,5"}</span></div>
       <div class="top"><b>5%</b><span>⭐ ${total ? short(Math.round(total * 1.5)) + "–" + short(Math.round(total * 2.5)) : "×1,5–2,5"}</span></div></div>
     <button class="btn cta gold" data-act="cr-go" ${CR.gifts.length >= 3 ? "" : "disabled"}>${ic("flame")}Скрафтить${CR.gifts.length ? ` ${CR.gifts.length} → 1` : ""}</button>
-    <div class="hint" style="font-size:12.5px;text-align:center;margin-top:8px">Выбранные подарки сгорят. Взамен — один подарок выбранной коллекции, его ценность зависит от удачи (в среднем ~90% суммы).</div>`;
+`;
 }
 
 // ------------------------------------------------------------ действия

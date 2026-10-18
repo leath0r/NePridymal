@@ -34,8 +34,8 @@ async function openDuels(to = null) {
       <div class="dsub" id="d-sub">${DGAMES[DUEL.game][2]}</div>
       <div class="dopp" id="d-opp"></div>
       ${betHTML("d-amt", 500)}
-      <button class="btn cta" data-act="duel-go">${ic("target")}Бросить вызов</button>
-      <div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Ставка списывается сразу. Не приняли за 24 часа — вернётся. Комиссия ${feeP("duel", .05)} с банка.</div>
+      <button class="btn cta gold" data-act="duel-go">${ic("target")}Бросить вызов</button>
+
     </div>
     <div id="d-lists">${emptyHTML("hourglass", "Загружаем…")}</div>`, "duels-s");
   el._duels = true;
