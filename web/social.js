@@ -64,7 +64,7 @@ function drawInventory() {
       <div class="ih-l">
         <div class="ih-two"><div><span>Ценность</span><b>⭐ ${short(total)}</b></div>
           <div class="ih-hr" data-act="inc"><span>Доход в час</span><b>+⭐ ${perHourTxt(gifts.filter(g => g.price == null).reduce((s, g) => s + giftPerHour(g), 0))}</b></div></div>
-        <small>${gifts.length} ${plural(gifts.length, ["подарок", "подарка", "подарков"])} · ${owned.size} ${plural(owned.size, ["коллекция", "коллекции", "коллекций"])} · ⭐ ${fmt(Math.round(gifts.filter(g => g.price == null).reduce((s, g) => s + giftPerHour(g), 0) * 24))} в день</small></div>
+        <small>${gifts.length} ${plural(gifts.length, ["подарок", "подарка", "подарков"])} · ${owned.size} ${plural(owned.size, ["коллекция", "коллекции", "коллекций"])} · ⭐ ${fmt(Math.round(gifts.filter(g => g.price == null).reduce((s, g) => s + giftPerHour(g), 0) * 24))}&nbsp;в&nbsp;день</small></div>
       <div class="ih-r">${top.map((g, i) => `<div class="ih-g" style="--i:${i}">${giftHTML(g, { lite: true, plain: true })}</div>`).join("")}</div>
     </div>
     <div class="seg">${[["gifts", "grid", "Подарки"], ["cols", "layers", "Коллекции"]].map(([k, i, t]) => `<button data-act="inv-mode" data-v="${k}" class="${INV.mode === k ? "on" : ""}">${ic(i)}${t}</button>`).join("")}</div>

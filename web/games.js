@@ -84,7 +84,7 @@ const mClass = m => m < 1.5 ? "m-lo" : m < 3 ? "m-mid" : m < 10 ? "m-hi" : "m-to
 const mColor = m => m < 2 ? "#ffffff" : m < 5 ? "#4cf0a0" : m < 10 ? "#ffd04d" : "#ff7ac2";
 async function pollCrash() {
   try { CS = await api("crash"); } catch (e) { return; }
-  if (!CRASH_ON) return;
+  if (!CRASH_ON || !$("#chist")) { if (CRASH_ON) stopCrash(), CRASH_ON = false; return; }   // окно краша уже закрыто — опрос гасим
   cOff = CS.now - Date.now() / 1000;
   setStars(CS.stars);
   $("#chist").innerHTML = CS.history.map(m => `<span class="${mClass(m)}">${m.toFixed(2)}x</span>`).join("");

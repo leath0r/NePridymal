@@ -564,7 +564,7 @@ function bannerHTML(p) {
   if (p.bannerImg) return `<div class="banner photo" style="background-image:url('${esc(p.bannerImg)}')"></div>`;
   const b = p.banner && BANNERS && BANNERS.find(x => x.name === p.banner);
   const g0 = p.pinned[0] || p.gifts[0];
-  const c = b ? b.c : g0 ? g0.c : ["#4a5a7a", "#1a2030", "#2a3550", "#fff"];
+  const c = b ? b.c : g0 ? g0.c : ["#7b5cff", "#140f33", "#3a2a8f", "#fff"];   // без подарков — фирменный фиолетовый, а не серый
   let pat = "";
   if (g0) {
     const u = A.pat(g0.col, g0.symbol);

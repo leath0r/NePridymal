@@ -37,8 +37,8 @@
 .stk-prz .t1{background:linear-gradient(160deg,#ffd76a33,var(--card) 70%);box-shadow:inset 0 0 0 1px #ffd76a55}
 .stk-prz .t2{background:linear-gradient(160deg,#d6e0f033,var(--card) 70%)}
 .stk-prz .t3{background:linear-gradient(160deg,#e3a06a33,var(--card) 70%)}
-.stk-rule{display:flex;gap:7px;align-items:flex-start;font-size:12px;color:var(--hint);line-height:1.4;margin:8px 2px 0}
-.stk-rule .ic{width:14px;height:14px;flex:none;margin-top:1px}
+.stk-rule{display:block;font-size:12px;color:var(--hint);line-height:1.45;margin:8px 2px 0}
+.stk-rule .ic{display:inline-block;width:14px;height:14px;vertical-align:-2px;margin-right:6px}
 .stk-top{padding:4px 0}
 .stk-row{display:flex;align-items:center;gap:10px;padding:7px 12px}
 .stk-row+.stk-row{border-top:1px solid color-mix(in srgb,var(--hint) 14%,transparent)}
