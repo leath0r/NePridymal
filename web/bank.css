@@ -124,3 +124,34 @@
 .bkg h2{margin:0 0 8px;font-size:22px}
 .bkg p{margin:0 auto;max-width:320px;color:var(--hint);font-size:14px}
 .bkg-addr{display:inline-block;margin-top:12px;padding:7px 12px;border-radius:10px;background:var(--card);font:700 12px ui-monospace,Menlo,Consolas,monospace;color:var(--gold)}
+/* кризис банка */
+.bkcr{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;padding:14px;border-radius:20px;color:#fff;
+  background:radial-gradient(120% 140% at 0% 0%,#7a0f1c,#3a0810 60%,#1c0408);box-shadow:inset 0 0 0 1px rgba(255,90,100,.45),0 14px 34px -18px #ff3b4e;animation:bkcr 2.4s ease-in-out infinite}
+@keyframes bkcr{50%{box-shadow:inset 0 0 0 1px rgba(255,90,100,.8),0 14px 40px -12px #ff3b4e}}
+.bkcr-i{flex:none;width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#ff6b6b,#d1102e);box-shadow:0 6px 16px -6px #ff3b4e}
+.bkcr-i .ic{width:22px;height:22px}
+.bkcr b{display:block;font-size:16px;font-weight:900;letter-spacing:.02em;text-transform:uppercase}
+.bkcr span{display:block;font-size:12.5px;opacity:.82;margin-top:2px}
+.bkcr em{display:block;font-style:normal;font-size:12.5px;font-weight:800;color:#ffd76a;margin-top:6px}
+.bkh.crisis{background:radial-gradient(130% 120% at 100% 0%,#8a1a1a 0%,#4a0c0c 45%,#1a0404 100%);box-shadow:0 18px 40px -22px #ff3b4e,inset 0 0 0 1px rgba(255,120,120,.25)}
+/* плашка банка в «Играх»: кризис и тикер выигрышей */
+.bankbar{position:relative}
+.bankbar.crisis{background:linear-gradient(135deg,#3a0810,#1c0408);box-shadow:inset 0 0 0 1px rgba(255,90,100,.45)}
+.bk-crt{display:inline-flex;align-self:flex-start;width:max-content;align-items:center;gap:3px;margin-top:2px;padding:2px 7px;border-radius:7px;font-size:10.5px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;
+  color:#fff;background:linear-gradient(135deg,#ff6b6b,#d1102e);animation:bkcr-b 1.2s ease-in-out infinite}
+.bk-crt .ic{width:11px;height:11px}
+@keyframes bkcr-b{50%{opacity:.6}}
+.bankbar.hit #bank-v{animation:bk-hit 1.2s ease-out}
+@keyframes bk-hit{0%,30%{color:#ff6b78;text-shadow:0 0 12px rgba(255,80,100,.7)}100%{color:inherit}}
+.bk-tick{position:absolute;right:10px;top:50%;z-index:2;display:flex;flex-direction:column;align-items:flex-end;gap:1px;padding:6px 10px;border-radius:12px;pointer-events:none;
+  background:#16060b;box-shadow:0 8px 20px -6px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,90,100,.5);animation:bk-tick 4.2s cubic-bezier(.2,1.4,.4,1) forwards}
+.bk-tick b{font-size:14px;font-weight:900;color:#ff6b78;white-space:nowrap}
+.bk-tick span{text-transform:none;letter-spacing:0;opacity:1;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.7);white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+@keyframes bk-tick{0%{opacity:0;transform:translate(30px,-50%)}10%{opacity:1;transform:translate(0,-50%)}85%{opacity:1;transform:translate(0,-50%)}100%{opacity:0;transform:translate(0,-80%)}}
+/* акции банка у клана */
+.clsh{margin-top:6px;padding:10px;border-radius:14px;background:rgba(0,0,0,.18)}
+.clsh-top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:6px}
+.clsh-top>div{text-align:center;min-width:0}
+.clsh-top span{display:block;font-size:11px;color:var(--hint);font-weight:700}
+.clsh-top b{font-size:15px;font-weight:900;white-space:nowrap}
+.bks-buy button:disabled{opacity:.38;filter:grayscale(.7)}

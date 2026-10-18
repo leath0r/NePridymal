@@ -625,5 +625,6 @@ async function loadBank() {
     const d = await api("bank");
     document.querySelectorAll("#bank-v").forEach(e => e.textContent = "⭐ " + fmt(d.bank));
     document.querySelectorAll("#bank-d").forEach(e => { e.className = d.today >= 0 ? "up" : "down"; e.textContent = `сегодня ${d.today >= 0 ? "+" : "−"}${short(Math.abs(d.today))}`; });
+    if (typeof bankTicker === "function") bankTicker(d);
   } catch (e) {}
 }

@@ -72,7 +72,10 @@ function bkTopHTML() {
   if (bkTop === "robbers") return bkPeople(BK.robbers, u => `<b class="tw">+⭐ ${short(u.sum)}</b>`, "Банк пока никто не обыграл");
   if (bkTop === "sponsors") return bkPeople(BK.sponsors, u => `<b class="tl">−⭐ ${short(-u.sum)}</b>`, "Пока никто не проиграл");
   if (bkTop === "donors") return bkPeople(BK.donors, u => `<b class="tw">⭐ ${short(u.sum)}</b>`, "Банку пока никто ничего не дарил — стань первым меценатом");
-  return bkPeople(BK.holders, u => `<b>${fmt(u.n)} акц.</b>`, "Акции пока никто не купил — будь первым");
+  if (bkTop === "saviors") return bkPeople((BK.crisis || {}).saviors || [], u => `<b class="tw">⭐ ${short(u.sum)}</b>`, "Спасителей пока нет — подари банку в кризис");
+  const clans = (BK.clanHolders || []).map(c => `<div class="row tap" data-act="clan" data-id="${c.id}"><span class="place">${ic("users")}</span>
+    <div class="grow"><div class="t">[${esc(c.tag)}] ${esc(c.name)}</div><div class="s">клан · дивиденды в казну</div></div><b>${fmt(c.n)} акц.</b></div>`).join("");
+  return bkPeople(BK.holders, u => `<b>${fmt(u.n)} акц.</b>`, "Акции пока никто не купил — будь первым") + clans;
 }
 function fillBK(el) {
   if (!BK || !el.isConnected) return;
@@ -81,8 +84,12 @@ function fillBK(el) {
   const since = BK.bank - BK.start, d14 = BK.days.reduce((s, d) => s + d.profit, 0);
   const ps = bkPriceSeries(), pch = ps[0] ? (ps[ps.length - 1] / ps[0] - 1) * 100 : 0;
   const pct = v => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2).replace(".", ",") + "%";
+  const cr = BK.crisis || {};
   el.querySelector("#bk-body").innerHTML = `
-    <div class="bkh">
+    ${cr.on ? `<div class="bkcr"><div class="bkcr-i">${ic("flame")}</div><div class="grow"><b>Банк в кризисе</b>
+      <span>Банк ниже ⭐ ${short(cr.at)}. Ставки — не больше ⭐ ${short(cr.maxBet)}, дивиденды на паузе. Не хватает ⭐ ${short(cr.need)}.</span>
+      <em>Подари банку ⭐ ${short(cr.saviorMin)}+ — получишь титул «Спаситель банка»${cr.mine ? ` · ты уже спас на ⭐ ${short(cr.mine)}` : ""}</em></div></div>` : ""}
+    <div class="bkh${cr.on ? " crisis" : ""}">
       <div class="bkh-top"><span class="bkh-i">${ic("bank")}</span><div><span>Банк игры</span><b>⭐ ${fmt(BK.bank)}</b></div></div>
       <div class="bkh-stats">
         <div><span>Сегодня</span><b class="${BK.today >= 0 ? "up" : "dn"}">${sgn(BK.today)}</b></div>
@@ -118,11 +125,34 @@ function fillBK(el) {
       <p>Каждый день в 00:00 UTC (11:00 по Сахалину) ${Math.round(BK.divShare * 100)}% вчерашней прибыли банка делится на акции у игроков (если акций у игроков меньше ${short(BK.divFloor || 10000)} — делится как на ${short(BK.divFloor || 10000)}, остаток остаётся в банке). В убыточный для банка день дивидендов нет.</p>
       <p>Не больше ${fmt(BK.maxPer)} акций в одни руки. Продать можно через сутки после покупки, комиссия ${pctF(BK.sellFee)}.</p></details>
 
-    <div class="seg bk-tabs">${[["holders", "Акционеры"], ["robbers", "Обыграли"], ["sponsors", "Спонсоры"], ["donors", "Меценаты"]].map(([k, t]) => `<button data-act="bk-top" data-v="${k}" class="${k === bkTop ? "on" : ""}">${t}</button>`).join("")}</div>
+    <div class="seg bk-tabs">${[["holders", "Акционеры"], ["robbers", "Обыграли"], ["sponsors", "Спонсоры"], ["donors", "Меценаты"], ...((BK.crisis || {}).on || ((BK.crisis || {}).saviors || []).length ? [["saviors", "Спасители"]] : [])].map(([k, t]) => `<button data-act="bk-top" data-v="${k}" class="${k === bkTop ? "on" : ""}">${t}</button>`).join("")}</div>
     <div class="box" id="bk-top">${bkTopHTML()}</div>
     <div class="disc">Банк = 50 млн стартового резерва + всё, что игроки проиграли, − всё, что выиграли, − розыгрыши и дивиденды. ${esc(ME.disclaimer)}</div>`;
   bkBindChart(el);
 }
+
+// плашка банка: тикер крупных выигрышей («банк −52K») и пометка кризиса; опрос раз в 5 с, пока открыты «Игры»
+let bkLastWin = null;
+function bankTicker(d) {
+  document.querySelectorAll(".bankbar").forEach(bar => {
+    bar.classList.toggle("crisis", !!d.crisis);
+    let tag = bar.querySelector(".bk-crt");
+    if (d.crisis && !tag) bar.querySelector("div").insertAdjacentHTML("beforeend", `<span class="bk-crt">${ic("flame")}кризис</span>`);
+    if (!d.crisis && tag) tag.remove();
+  });
+  const w = d.win;
+  if (bkLastWin === null) { bkLastWin = w ? w.id : 0; return; }   // при первом заходе старые выигрыши не показываем
+  if (!w || w.id <= bkLastWin) return;
+  bkLastWin = w.id;
+  document.querySelectorAll(".bankbar").forEach(bar => {
+    bar.classList.remove("hit"); void bar.offsetWidth; bar.classList.add("hit");
+    bar.querySelectorAll(".bk-tick").forEach(t => t.remove());
+    const t = document.createElement("div"); t.className = "bk-tick";
+    t.innerHTML = `<b>−⭐ ${short(w.amount)}</b><span>${esc(w.name)} · ${esc(w.game)}</span>`;
+    bar.appendChild(t); starify(t); setTimeout(() => t.remove(), 4200);
+  });
+}
+setInterval(() => { if (typeof TAB !== "undefined" && TAB === "games" && !bgOff() && document.querySelector("#v-games .bankbar")) loadBank(); }, 5000);
 
 // подарок банку: просто так, без комиссии и без награды — банк растёт, акции дорожают
 function openBankGift() {

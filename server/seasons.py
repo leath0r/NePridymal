@@ -29,6 +29,7 @@ TITLES = [  # id, название, условие (текст)
     ("clanlord", "Вождь", "глава клана 3+ уровня"),
     ("rich", "Богач", "быть в топ-10 богачей"),
     ("champion", "Чемпион сезона", "занять 1 место в сезоне"),
+    ("savior", "Спаситель банка", "подарить банку ⭐ 10 000 во время кризиса"),
 ]
 TITLE_NAME = {t[0]: t[1] for t in TITLES}
 import app as _app   # noqa: E402
@@ -89,6 +90,13 @@ def unlocked(uid):
             got.add("clanlord")
     if RICH_RANK.get(uid):
         got.add("rich")
+    try:
+        import bank
+        sv = q1("SELECT amount FROM bank_saviors WHERE user=?", uid)
+        if sv and sv["amount"] >= bank.SAVIOR_MIN:
+            got.add("savior")
+    except Exception:
+        pass
     for r in q("SELECT result FROM season_results"):
         if any(x["place"] == 1 and x["user"] == uid for x in json.loads(r["result"])):
             got.add("champion")

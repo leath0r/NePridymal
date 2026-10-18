@@ -1256,8 +1256,14 @@ def bal(uid):
 MAX_BET = conf("games.max_bet", 1_000_000)
 
 
+BET_CAP = None   # bank.py: в кризис банка — потолок ставки
+
+
 def check_bet(uid, amount, lo=10, hi=None):
     hi = hi or MAX_BET
+    cap = BET_CAP() if BET_CAP else None
+    if cap and amount > cap:
+        err(f"Банк в кризисе — ставка не больше {cap:,} ⭐".replace(",", " "))
     if not lo <= amount <= hi:
         err(f"ставка от {lo} до {hi:,} ⭐".replace(",", " "))
     if bal(uid) < amount:
@@ -1934,7 +1940,7 @@ def bank(uid=Depends(auth)):
     import bank as _bank   # тот же расчёт, что в bank.py (с учётом сброса банка на вайпе)
     total = BANK_START - _bank.bank_value()
     today = q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind IN {GAME_KINDS} AND ts>=?", day_start())["s"]
-    return {"bank": BANK_START - total, "today": -today}
+    return {"bank": BANK_START - total, "today": -today, **_bank.ticker()}
 
 
 # --- «Пёсики»: слот 5×3, вайлд-будка, фриспины с липкими вайлдами ---

@@ -4,11 +4,16 @@ import time
 
 from fastapi import Depends, Request
 
+import app as A
 from app import R, app, auth, bal, db, err, event, notify, now, q, q1, tx, user_brief, day_start, GAME_KINDS, BANK_START, kv_get
+from settings import conf
 
 db.executescript("""
 CREATE TABLE IF NOT EXISTS shares(user INTEGER PRIMARY KEY, n INTEGER DEFAULT 0, cost INTEGER DEFAULT 0, ts INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS div_days(day INTEGER PRIMARY KEY, profit INTEGER, per_share REAL, total INTEGER, holders INTEGER, ts INTEGER);
+CREATE TABLE IF NOT EXISTS clan_shares(clan INTEGER PRIMARY KEY, n INTEGER DEFAULT 0, cost INTEGER DEFAULT 0, ts INTEGER DEFAULT 0, div INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS bank_saviors(user INTEGER PRIMARY KEY, amount INTEGER DEFAULT 0, ts INTEGER);
+CREATE TABLE IF NOT EXISTS crisis_log(id INTEGER PRIMARY KEY, start INTEGER, end INTEGER DEFAULT 0, low INTEGER);
 """)
 SUPPLY = 100_000        # всего акций: цена = банк / SUPPLY
 MAX_PER_USER = 2_000    # не больше 2% казино в одни руки
@@ -16,11 +21,59 @@ DIV_SHARE = 0.20        # доля дневной прибыли казино, �
 DIV_FLOOR = 10_000      # делим минимум на столько акций: пара акций у единственного держателя не должна забирать всю долю
 SELL_FEE = 0.03
 LOCK = 86400            # продать можно через сутки после последней покупки
-BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback','frcut','flash','thanks','bankgift')"
+BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback','frcut','flash','thanks','bankgift','clanshare','clandiv')"
 
 
 _BV = {"ts": 0, "v": 0}
 DONATE_MIN = 1
+CLAN_MAX = 5_000                                         # акций у одного клана (из казны)
+# кризис банка: банк ниже порога → ставки ограничены, дивиденды на паузе, подарки банку дают титул «Спаситель банка»
+CRISIS_AT = conf("bank.crisis_at", 35_000_000)
+CRISIS_MAX_BET = conf("bank.crisis_max_bet", 100_000)
+SAVIOR_MIN = conf("bank.savior_min", 10_000)
+
+
+def crisis():
+    return bank_value() < CRISIS_AT
+
+
+A.BET_CAP = lambda: CRISIS_MAX_BET if crisis() else None   # app.check_bet режет ставку в кризис
+
+
+def crisis_since():
+    r = q1("SELECT start FROM crisis_log WHERE end=0 ORDER BY id DESC LIMIT 1")
+    return r["start"] if r else 0
+
+
+def _owners():
+    try:
+        from admin import OWNERS
+        return list(OWNERS)
+    except Exception:
+        return []
+
+
+def _crisis_watch():
+    """Раз в минуту: вход/выход из кризиса — в журнал и владельцам в личку."""
+    on, since, b = crisis(), crisis_since(), bank_value()
+    if on and not since:
+        with tx():
+            db.execute("INSERT INTO crisis_log(start,low) VALUES(?,?)", (now(), b))
+        for o in _owners():
+            notify(o, f"🚨 Банк игры упал ниже ⭐ {CRISIS_AT:,} — включён КРИЗИС: ставки до ⭐ {CRISIS_MAX_BET:,}, дивиденды на паузе.".replace(",", " "))
+    elif on:
+        with tx():
+            db.execute("UPDATE crisis_log SET low=MIN(low,?) WHERE end=0", (b,))
+    elif since:
+        with tx():
+            db.execute("UPDATE crisis_log SET end=? WHERE end=0", (now(),))
+        for o in _owners():
+            notify(o, f"✅ Банк снова выше ⭐ {CRISIS_AT:,} — кризис закончился.".replace(",", " "))
+
+
+def held_total():
+    """Все акции на руках: у игроков и у кланов."""
+    return q1("SELECT COALESCE(SUM(n),0) s FROM shares")["s"] + q1("SELECT COALESCE(SUM(n),0) s FROM clan_shares")["s"]
 
 
 def bank_addr():
@@ -39,6 +92,9 @@ def donate(uid, amount):
             err("Не хватает звёзд")
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount, uid))
         event(uid, "bankgift", -amount)
+        if crisis():   # в кризис подарок засчитывается в «Спасители банка»
+            db.execute("INSERT INTO bank_saviors(user,amount,ts) VALUES(?,?,?) ON CONFLICT(user) DO UPDATE SET amount=amount+excluded.amount, ts=excluded.ts",
+                       (uid, amount, now()))
     _BV["ts"] = 0
     return {"ok": True, "stars": bal(uid), "bank": bank_value()}
 
@@ -70,16 +126,29 @@ def _pay(day):
             return []
         profit = house_profit(day)
         holders = q("SELECT user, n FROM shares WHERE n>0")
-        held = sum(h["n"] for h in holders)
-        per = DIV_SHARE * profit / max(held, DIV_FLOOR) if profit > 0 and held else 0
-        paid = []
+        clans_h = q("SELECT clan, n FROM clan_shares WHERE n>0")
+        held = sum(h["n"] for h in holders) + sum(c["n"] for c in clans_h)
+        per = DIV_SHARE * profit / max(held, DIV_FLOOR) if profit > 0 and held and not crisis() else 0   # в кризис дивиденды на паузе
+        paid, cpaid = [], []
+        for c in clans_h:   # клановые акции — дивиденды в казну клана
+            amount = int(per * c["n"])
+            if amount > 0:
+                db.execute("UPDATE clans SET bank=bank+? WHERE id=?", (amount, c["clan"]))
+                db.execute("UPDATE clan_shares SET div=div+? WHERE clan=?", (amount, c["clan"]))
+                event(0, "clandiv", amount)
+                cpaid.append((c["clan"], amount))
         for h in holders:
             amount = int(per * h["n"])
             if amount > 0:
                 db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amount, h["user"]))
                 event(h["user"], "div", amount)
                 paid.append((h["user"], amount))
-        db.execute("INSERT INTO div_days VALUES(?,?,?,?,?,?)", (day, profit, per, sum(a for _, a in paid), len(paid), now()))
+        db.execute("INSERT INTO div_days VALUES(?,?,?,?,?,?)", (day, profit, per, sum(a for _, a in paid) + sum(a for _, a in cpaid), len(paid), now()))
+        if cpaid:
+            import clans
+            for cid, a in cpaid:
+                o = q1("SELECT owner FROM clans WHERE id=?", cid)
+                clans.feed(cid, o["owner"] if o else 0, "sharediv", a)
     for u, a in paid:
         notify(u, f"Дивиденды банка: +{a} ⭐ (игровых) за вчера.")
     return paid
@@ -91,6 +160,10 @@ async def div_loop():
             await asyncio.get_running_loop().run_in_executor(None, _pay, day_start() - 86400)
         except Exception as e:
             print("div:", e, flush=True)
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, _crisis_watch)
+        except Exception as e:
+            print("crisis:", e, flush=True)
         await asyncio.sleep(60)
 
 
@@ -108,7 +181,7 @@ def bank_info(uid=Depends(auth)):
         days.append({"day": s, "profit": house_profit(s)})
     me = q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind IN {GAME_KINDS} AND ts>=?", uid, bank_from())["s"]
     sh = q1("SELECT * FROM shares WHERE user=?", uid)
-    held = q1("SELECT COALESCE(SUM(n),0) s FROM shares")["s"]
+    held = held_total()
     last = q1("SELECT * FROM div_days ORDER BY day DESC LIMIT 1")
     my_div = q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind='div'", uid)["s"]
 
@@ -125,6 +198,14 @@ def bank_info(uid=Depends(auth)):
         if u:
             donors.append({**user_brief(u), "sum": r["s"]})
     gifted = q1("SELECT COALESCE(-SUM(delta),0) s FROM events WHERE user=? AND kind='bankgift'", uid)["s"]
+    saviors = []
+    for r in q("SELECT * FROM bank_saviors ORDER BY amount DESC LIMIT 5"):
+        u = q1("SELECT * FROM users WHERE id=?", r["user"])
+        if u:
+            saviors.append({**user_brief(u), "sum": r["amount"]})
+    sv = q1("SELECT amount FROM bank_saviors WHERE user=?", uid)
+    clan_holders = [{"id": r["id"], "tag": r["tag"], "name": r["name"], "n": r["n"]}
+                    for r in q("SELECT c.id, c.tag, c.name, s.n FROM clan_shares s JOIN clans c ON c.id=s.clan WHERE s.n>0 ORDER BY s.n DESC LIMIT 5")]
     holders = []
     for r in q("SELECT * FROM shares WHERE n>0 ORDER BY n DESC LIMIT 5"):
         u = q1("SELECT * FROM users WHERE id=?", r["user"])
@@ -141,8 +222,86 @@ def bank_info(uid=Depends(auth)):
                  "est": int(DIV_SHARE * max(0, today) / max(held, DIV_FLOOR) * n) if n else 0},
         "lastDiv": {"perShare": round(last["per_share"], 2), "total": last["total"], "profit": last["profit"]} if last else None,
         "endsIn": d + 86400 - now(), "robbers": top("DESC"), "sponsors": top("ASC"), "holders": holders,
-        "addr": bank_addr(), "donors": donors, "gifted": gifted,
+        "addr": bank_addr(), "donors": donors, "gifted": gifted, "clanHolders": clan_holders, "clanMax": CLAN_MAX,
+        "crisis": {"on": crisis(), "at": CRISIS_AT, "maxBet": CRISIS_MAX_BET, "since": crisis_since(), "saviorMin": SAVIOR_MIN,
+                   "saviors": saviors, "mine": sv["amount"] if sv else 0, "need": max(0, CRISIS_AT - bank_value())},
     }
+
+
+def ticker():
+    """Для плашки банка: кризис и последний крупный выигрыш (не старше минуты)."""
+    w = q1("SELECT * FROM bigwins WHERE ts>=? ORDER BY id DESC LIMIT 1", now() - 60)
+    win = None
+    if w:
+        import live
+        u = q1("SELECT * FROM users WHERE id=?", w["user"])
+        win = {"id": w["id"], "amount": w["amount"], "game": live.NAMES.get(w["kind"], w["kind"]), "name": user_brief(u)["name"] if u else "Игрок"}
+    return {"crisis": crisis(), "crisisAt": CRISIS_AT, "win": win}
+
+
+# ---------------- акции банка у кланов: покупает и продаёт глава из казны, дивиденды — в казну ----------------
+def _my_clan(uid):
+    import clans
+    cid = clans.my_clan_id(uid)
+    return (cid, clans.my_role(uid, cid)) if cid else (None, None)
+
+
+@app.get(R + "/bank/clan")
+def bank_clan(uid=Depends(auth)):
+    cid, role = _my_clan(uid)
+    if not cid:
+        return {"clan": None}
+    c = q1("SELECT bank FROM clans WHERE id=?", cid)
+    sh = q1("SELECT * FROM clan_shares WHERE clan=?", cid)
+    n, p, held = (sh["n"] if sh else 0), price(), held_total()
+    return {"clan": cid, "owner": role == "owner", "pool": c["bank"] or 0, "n": n, "cost": sh["cost"] if sh else 0, "value": n * p, "price": p,
+            "div": sh["div"] if sh else 0, "max": CLAN_MAX, "room": max(0, min(CLAN_MAX - n, SUPPLY - held)),
+            "sellIn": max(0, sh["ts"] + LOCK - now()) if n else 0, "sellFee": SELL_FEE, "crisis": crisis(),
+            "est": int(DIV_SHARE * max(0, house_profit(day_start())) / max(held, DIV_FLOOR) * n) if n and not crisis() else 0}
+
+
+@app.post(R + "/bank/clan")
+async def bank_clan_trade(req: Request, uid=Depends(auth)):
+    n = int((await req.json()).get("n", 0))
+    if not n or abs(n) > CLAN_MAX:
+        err("Неверное количество")
+    import clans
+    with tx():
+        cid, role = _my_clan(uid)
+        if not cid:
+            err("ты не в клане")
+        if role != "owner":
+            err("акциями клана распоряжается только глава")
+        p = price()
+        c = q1("SELECT bank FROM clans WHERE id=?", cid)
+        sh = q1("SELECT * FROM clan_shares WHERE clan=?", cid) or {"n": 0, "cost": 0, "ts": 0}
+        if n > 0:
+            if sh["n"] + n > CLAN_MAX:
+                err(f"клан может держать не больше {CLAN_MAX:,} акций".replace(",", " "))
+            if held_total() + n > SUPPLY:
+                err("Свободных акций не осталось")
+            cost = n * p
+            if (c["bank"] or 0) < cost:
+                err(f"в казне только ⭐ {c['bank'] or 0:,}".replace(",", " "))
+            db.execute("UPDATE clans SET bank=bank-? WHERE id=?", (cost, cid))
+            db.execute("INSERT INTO clan_shares(clan,n,cost,ts) VALUES(?,?,?,?) ON CONFLICT(clan) DO UPDATE SET n=n+?, cost=cost+?, ts=?",
+                       (cid, n, cost, now(), n, cost, now()))
+            event(0, "clanshare", -cost)
+            clans.feed(cid, uid, "sharebuy", n)
+        else:
+            n = -n
+            if n > sh["n"]:
+                err("у клана нет столько акций")
+            if sh["ts"] + LOCK > now():
+                left = sh["ts"] + LOCK - now()
+                err(f"Продать можно через {left // 3600} ч {left % 3600 // 60} мин после покупки")
+            got = int(n * p * (1 - SELL_FEE))
+            db.execute("UPDATE clans SET bank=bank+? WHERE id=?", (got, cid))
+            db.execute("UPDATE clan_shares SET n=n-?, cost=cost-? WHERE clan=?", (n, round(sh["cost"] * n / sh["n"]), cid))
+            event(0, "clanshare", got)
+            clans.feed(cid, uid, "sharesell", got)
+    _BV["ts"] = 0
+    return bank_clan(uid)
 
 
 @app.post(R + "/bank/donate")
@@ -167,7 +326,7 @@ async def bank_shares(req: Request, uid=Depends(auth)):
         if n > 0:
             if sh["n"] + n > MAX_PER_USER:
                 err(f"Можно держать не больше {MAX_PER_USER} акций")
-            held = q1("SELECT COALESCE(SUM(n),0) s FROM shares")["s"]
+            held = held_total()
             if held + n > SUPPLY:
                 err("Свободных акций не осталось")
             cost = n * p

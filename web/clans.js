@@ -48,9 +48,32 @@ function clanBankHTML(c) {
           <button data-act="clan-boost" data-p="${sp.boost}">${ic("trend")}<b>Буст +${sp.boostPct}% к доходу</b><span>на сутки · ⭐ ${short(sp.boost)}</span></button>
           ${Object.entries(sp.keys).map(([k, p]) => `<button data-act="clan-keys" data-v="${k}" data-p="${p}">${ic("lock")}<b>Ключ «${esc(sp.keyTitles[k])}» всем</b><span>⭐ ${short(p)}</span></button>`).join("")}
           ${sp.slots ? `<button data-act="clan-slots" data-p="${sp.slots}">${ic("plus")}<b>+${sp.slotsStep} мест в клане</b><span>⭐ ${short(sp.slots)}</span></button>` : ""}
-        </div>` : `<div class="hint" style="font-size:12px;margin-top:8px">Казна пополняется взносами${c.tax ? " и налогом с выигрышей" : ""}. Тратит её глава: раздачи, ключи всем, бусты, расширение клана.</div>`}
+        </div>` : ""}
+      <div id="cl-shares"></div>
+      ${owner ? "" : `<div class="hint" style="font-size:12px;margin-top:8px">Казна пополняется взносами${c.tax ? " и налогом с выигрышей" : ""}. Тратит её глава: раздачи, ключи всем, бусты, расширение клана, акции банка.</div>`}
     </div>`;
 }
+// акции банка у клана: дивиденды идут в казну; покупает и продаёт глава
+async function clSharesFill() {
+  const box = $("#cl-shares"); if (!box) return;
+  let d; try { d = await api("bank/clan"); } catch (e) { return; }
+  if (!d.clan || !box.isConnected) return;
+  const pl = d.value - d.cost, sell = Math.floor(d.n * d.price * (1 - d.sellFee));
+  box.innerHTML = `<div class="clb-sec">Акции банка <span class="hint">— дивиденды каждый день идут в казну</span></div>
+    <div class="clsh">
+      <div class="clsh-top"><div><span>У клана</span><b>${fmt(d.n)}</b></div><div><span>Стоимость</span><b>⭐ ${short(d.value)}</b></div>
+        <div><span>Прибыль</span><b class="${pl >= 0 ? "tw" : "tl"}">${d.n ? (pl >= 0 ? "+" : "−") + short(Math.abs(pl)) : "—"}</b></div></div>
+      ${d.n ? `<div class="bks-row"><span>${d.crisis ? "Дивиденды на паузе — банк в кризисе" : "Дивиденды сегодня (прогноз)"}</span><b class="tw">${d.crisis ? "—" : "+⭐ " + fmt(d.est)}</b></div>
+        <div class="bks-row"><span>Получено в казну</span><b>⭐ ${fmt(d.div)}</b></div>` : ""}
+      ${d.owner ? `${d.room > 0 ? `<div class="jpbuy bks-buy">${[10, 100, 500, 1000].filter(n => n <= d.room).map(n => `<button data-act="clsh-buy" data-v="${n}" ${n * d.price > d.pool ? "disabled" : ""}><b>+${n}</b><span>⭐ ${short(n * d.price)}</span></button>`).join("")}</div>`
+          : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Лимит клана — ${fmt(d.max)} акций</div>`}
+        ${d.n ? `<button class="btn ghost bks-sell" data-act="clsh-sell" data-n="${d.n}" data-g="${sell}" ${d.sellIn ? "disabled" : ""}>${d.sellIn ? `${ic("lock")}Продажа через ${Math.floor(d.sellIn / 3600)} ч ${Math.floor(d.sellIn % 3600 / 60)} мин` : `${ic("coins")}Продать все · ⭐ ${short(sell)} в казну`}</button>` : ""}`
+        : `<div class="hint" style="font-size:12px;margin-top:6px">Покупает и продаёт акции глава клана — из казны.</div>`}
+    </div>`;
+  starify(box);
+}
+const _clBankHTML = clanBankHTML;
+clanBankHTML = function (c) { setTimeout(clSharesFill, 0); return _clBankHTML(c); };
 // подарки для герба клана (коллекции)
 const CLAN_EMBLEMS = ["Plush Pepe", "Durov's Cap", "Heart Locket", "Precious Peach", "Mighty Arm", "Loot Bag", "Ion Gem", "Astral Shard",
   "Signet Ring", "Swiss Watch", "Scared Cat", "Toy Bear", "Kissed Frog", "Magic Potion", "Genie Lamp", "Neko Helmet",
@@ -76,6 +99,8 @@ function clanFeedTxt(f) {
     tax: +f.data ? `Глава установил налог ${String(+(f.data * 100).toFixed(1)).replace(".", ",")}% в казну` : "Глава отменил налог",
     spend_pay: `Казна раздала участникам ⭐ ${fmt(+f.data)}`, spend_keys: `Казна купила всем ключ «${esc(f.data)}»`,
     spend_boost: `Включён буст: +${f.data}% к доходу на сутки`, spend_slots: `Клан расширен до ${f.data} мест`,
+    sharebuy: `${n} купил клану ${fmt(+f.data)} ${plural(+f.data, ["акцию", "акции", "акций"])} банка`, sharesell: `Клан продал акции банка: +⭐ ${fmt(+f.data)} в казну`,
+    sharediv: `Дивиденды по акциям банка: +⭐ ${fmt(+f.data)} в казну`,
     goal: (() => { const [need, key] = String(f.data).split("|"); return `Цель недели: оборот ⭐ ${short(+need)} — всем ключ «${esc(key)}»`; })() }[f.kind] || n;
 }
 async function openClan(id) {
@@ -172,6 +197,15 @@ Object.assign(ACT, {
   },
   "clan-boost": async el => { if (!await confirmM("Включить буст?", `+10% к доходу всем участникам на сутки за ⭐ ${fmt(+el.dataset.p)} из казны.`, "Включить")) return; await post("clans/spend", { kind: "boost" }); H.ok(); toast("Буст включён", "ok"); await clanRefresh(); },
   "clan-keys": async el => { if (!await confirmM("Купить ключи всем?", `Каждый участник получит ключ. Цена ⭐ ${fmt(+el.dataset.p)} из казны.`, "Купить")) return; await post("clans/spend", { kind: "keys", cid: el.dataset.v }); H.ok(); toast("Ключи розданы", "ok"); CASES = []; await clanRefresh(); },
+  "clsh-buy": async el => {
+    const n = +el.dataset.v;
+    if (!await confirmM(`Купить клану ${fmt(n)} ${plural(n, ["акцию", "акции", "акций"])} банка?`, "Звёзды спишутся из казны. Дивиденды будут каждый день приходить в казну.", "Купить")) return;
+    await post("bank/clan", { n }); H.ok(); toast("Акции куплены", "ok"); await clanRefresh();
+  },
+  "clsh-sell": async el => {
+    if (!await confirmM("Продать все акции клана?", `В казну придёт ⭐ ${fmt(+el.dataset.g)} (комиссия 3%).`, "Продать")) return;
+    await post("bank/clan", { n: -(+el.dataset.n) }); H.ok(); toast("Продано — звёзды в казне", "ok"); await clanRefresh();
+  },
   "clan-slots": async el => { if (!await confirmM("Расширить клан?", `+5 мест за ⭐ ${fmt(+el.dataset.p)} из казны.`, "Расширить")) return; await post("clans/spend", { kind: "slots" }); H.ok(); toast("Клан расширен", "ok"); await clanRefresh(); },
   "clan-set": el => {
     const c = topSheet()._clan; if (!c) return;
