@@ -18,7 +18,7 @@ STARTS = {   # id карточки в «Играх» → какие POST нач�
     "jroul": [r"/jroul/bet"], "rlt": [r"/rlt"], "tower": [r"/tower/start"], "slots": [r"/slots"], "dice": [r"/dice"], "limbo": [r"/limbo"],
     "101": [r"/rooms", r"/rooms/\d+/join"], "blackjack": [r"/bj/start"], "starfall": [r"/starfall/bet"], "hilo": [r"/hilo/start"],
     "craft": [r"/craft"], "stack": [r"/stack/start"], "claw": [r"/claw/play"],
-    "pump": [r"/pump/start"], "drill": [r"/drill/play"], "darts": [r"/darts/throw"], "fish": [r"/fish/cast"],
+    "plinko": [r"/plinko"], "pump": [r"/pump/start"], "drill": [r"/drill/play"], "darts": [r"/darts/throw"], "fish": [r"/fish/cast"],
 }
 STATES = ("on", "closed", "hidden", "admin")
 _RX = [(gid, re.compile("^" + re.escape(R) + p + "$")) for gid, ps in STARTS.items() for p in ps]

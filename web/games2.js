@@ -10,90 +10,7 @@ GAMES.push(
   { id: "dice", t: "Кубик", s: "Больше или меньше — сам выбираешь шанс", img: "Evil Eye", k: ["#8a5cff", "#1f0b4a"], chips: ["x1.01–x48"] },
   { id: "limbo", t: "Лимбо", s: "Загадай икс — выпадет больше, и ты в плюсе", img: "Astral Shard", k: ["#4ad0ff", "#0b2550"], chips: ["до x1000"] });
 const WIDE_GAMES = new Set(["crash", "duels", "slots"]);
-const GAME_OPEN = { plinko: () => openPlinko(), tower: () => openTower(), slots: () => openSlots(), dice: () => openDice(), limbo: () => openLimbo() };
-
-// ============================================================ ПЛИНКО
-const PL = { risk: "mid", tables: null, rows: 12, balls: [], raf: 0, hits: {} };
-async function openPlinko() {
-  const el = openSheet(`${gameHead("Snow Globe", "Плинко", "Шарик падает по штырькам — лови иксы по краям")}
-    <div class="plinko"><canvas id="pl-cv"></canvas></div>
-    <div class="plast" id="pl-last"></div>
-    <div class="betp">
-      <div class="seg" id="pl-risk">${[["low", "Низкий"], ["mid", "Средний"], ["high", "Высокий"]].map(([k, t]) => `<button data-act="pl-risk" data-v="${k}" class="${PL.risk === k ? "on" : ""}">${t} риск</button>`).join("")}</div>
-      ${betHTML("pl-amt")}
-      <div class="pl-drops"><button class="btn cta gold" data-act="pl-drop" data-n="1">${ic("plus")}Бросить</button><button class="btn cta gold" data-act="pl-drop" data-n="5">×5</button><button class="btn cta gold" data-act="pl-drop" data-n="10">×10</button></div>
-    </div>`, "plinko-s");
-  el._onClose = () => cancelAnimationFrame(PL.raf);
-  if (!PL.tables) { const d = await api("plinko"); PL.tables = d.tables; PL.rows = d.rows; }
-  PL.balls = []; PL.hits = {};
-  cancelAnimationFrame(PL.raf); PL.raf = requestAnimationFrame(plFrame);
-}
-const plColor = m => m >= 10 ? "#ff3d6e" : m >= 3 ? "#ff8a3d" : m >= 1.5 ? "#ffc53d" : m >= 1 ? "#4cf0a0" : "#4b5a78";
-function plGeom(cv) {
-  const W = cv.clientWidth, H = cv.clientHeight, rows = PL.rows, sp = W / (rows + 2.2), top = 26, rowH = (H - top - 46) / rows;
-  return { W, H, rows, sp, top, rowH, cx: W / 2 };
-}
-function plFrame(now) {
-  PL.raf = requestAnimationFrame(plFrame);
-  const cv = $("#pl-cv"); if (!cv || !PL.tables) return;
-  const d = Math.min(devicePixelRatio || 1, 2);
-  if (cv.width !== Math.round(cv.clientWidth * d)) { cv.width = cv.clientWidth * d; cv.height = cv.clientHeight * d; }
-  const c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
-  const g = plGeom(cv); c.clearRect(0, 0, g.W, g.H);
-  // штырьки
-  for (let r = 0; r < g.rows; r++) for (let i = 0; i <= r + 2; i++) {
-    const x = g.cx + (i - (r + 2) / 2) * g.sp, y = g.top + r * g.rowH;
-    c.beginPath(); c.arc(x, y, 3, 0, 6.283); c.fillStyle = "rgba(255,255,255,.75)"; c.fill();
-  }
-  // лунки
-  const tab = PL.tables[PL.risk], sy = g.top + g.rows * g.rowH + 6, bw = g.sp - 4;
-  tab.forEach((m, k) => {
-    const x = g.cx + (k - g.rows / 2) * g.sp, hit = PL.hits[k] && now - PL.hits[k] < 400;
-    const y = sy + (hit ? 4 : 0);
-    c.fillStyle = plColor(m); c.globalAlpha = hit ? 1 : .88;
-    c.beginPath(); c.roundRect ? c.roundRect(x - bw / 2, y, bw, 26, 6) : c.rect(x - bw / 2, y, bw, 26); c.fill(); c.globalAlpha = 1;
-    c.fillStyle = m >= 1 ? "#1a1203" : "#fff"; c.font = `800 ${g.sp < 26 ? 8.5 : 10}px -apple-system,Segoe UI,sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillText(m >= 100 ? Math.round(m) : m, x, y + 13);
-  });
-  // шарики
-  for (const b of PL.balls) {
-    if (now < b.t0) continue;   // шарик из очереди ещё не стартовал
-    const k = Math.min(1, (now - b.t0) / b.dur), steps = g.rows, f = k * steps, i = Math.min(steps - 1, Math.floor(f)), fr = f - i;
-    const off = j => b.path.slice(0, j).reduce((s, v) => s + (v ? .5 : -.5), 0);
-    const x0 = g.cx + off(i) * g.sp, x1 = g.cx + off(i + 1) * g.sp;
-    const y0 = g.top - g.rowH * .6 + i * g.rowH, y1 = y0 + g.rowH;
-    const x = x0 + (x1 - x0) * fr, y = y0 + (y1 - y0) * fr - Math.sin(fr * Math.PI) * g.rowH * .35;
-    if (Math.floor(f) !== b.last) { b.last = Math.floor(f); if (b.last < steps) H.sel(); }
-    const gr = c.createRadialGradient(x - 2, y - 2, 1, x, y, 7); gr.addColorStop(0, "#fff7d1"); gr.addColorStop(1, "#ff9d1f");
-    c.beginPath(); c.arc(x, y, 6.5, 0, 6.283); c.fillStyle = gr; c.shadowColor = "#ffb340"; c.shadowBlur = 10; c.fill(); c.shadowBlur = 0;
-    if (k >= 1 && !b.done) { b.done = true; PL.hits[b.slot] = now; plLanded(b); }
-  }
-  PL.balls = PL.balls.filter(b => !b.done || now - b.t0 < b.dur + 50);
-}
-function plLanded(b) {
-  const win = b.pay > b.bet;
-  win ? H.ok() : H.imp("light");
-  const el = $("#pl-last");
-  if (el) el.insertAdjacentHTML("afterbegin", `<span style="--c:${plColor(b.mult)}">x${b.mult}</span>`);
-  if (el && el.children.length > 12) el.lastElementChild.remove();
-  if (b.multi) { setStars(ME.stars + b.pay); if (b.final) { setStars(b.final.stars); if (b.final.levelup) afterLevelUp(b.final.levelup); } }
-  else { setStars(b.stars); if (b.levelup) afterLevelUp(b.levelup); }
-  if (b.mult >= 10) coinShower($("#pl-cv"), Math.min(60, 10 + b.mult));
-  if (b.mult >= 50 && !document.querySelector(".bw-ov")) bigWin(b.pay, b.mult);
-}
-async function plDrop(n = 1) {
-  const bet = betVal("pl-amt");
-  if (bet * n > ME.stars) return toast("Не хватает звёзд ⭐");
-  if (PL.balls.filter(b => !b.done).length + n > 30) return;
-  setStars(ME.stars - bet * n);
-  try {
-    const r = await post("plinko", { bet, risk: PL.risk, n });
-    const now = performance.now();
-    if (r.balls) r.balls.forEach((x, i) => PL.balls.push({ ...x, bet, t0: now + i * 140, dur: 2300, last: -1, multi: true, final: i === r.balls.length - 1 ? r : null }));   // очередь шариков
-    else PL.balls.push({ ...r, bet, t0: now, dur: 2300, last: -1 });
-    H.imp(n > 1 ? "medium" : "light");
-  } catch (e) { loadMe(); }
-}
+const GAME_OPEN = { tower: () => openTower(), slots: () => openSlots(), dice: () => openDice(), limbo: () => openLimbo() };
 
 // ============================================================ БАШНЯ
 let TW = { active: false }, twMode = "mid", twBusy = false, TWM = null;
@@ -330,8 +247,6 @@ async function slSpin() {
 const _gameAct = ACT.game;
 Object.assign(ACT, {
   game: el => GAME_OPEN[el.dataset.id] ? (H.imp("light"), GAME_OPEN[el.dataset.id]()) : _gameAct(el),
-  "pl-risk": el => { PL.risk = el.dataset.v; H.sel(); document.querySelectorAll("#pl-risk button").forEach(b => b.classList.toggle("on", b === el)); },
-  "pl-drop": el => plDrop(+el.dataset.n || 1),
   "tw-mode": el => { if (TW.active) return; twMode = el.dataset.v; H.sel(); document.querySelectorAll("#tw-mode button").forEach(b => b.classList.toggle("on", b === el)); twDraw(); },
   "tw-btn": () => twBtn(),
   "tw-step": el => twStep(+el.dataset.t),

@@ -1741,56 +1741,70 @@ async def limbo(req: Request, uid=Depends(auth)):
 
 
 # --- плинко: 12 рядов, 13 лунок, три уровня риска ---
+# 2026-10: игру абузили («станок»): бонус за уровень возвращал ~6% оборота + низкий риск ≈99% + по 10 шариков.
+# Теперь: бонус за уровень ≈0,4% оборота (add_xp), возврат — из админки (games.plinko_rtp, по умолчанию 96%),
+# лимиты и кризисный потолок — на СУММУ всех шариков, не чаще PLINKO_GAP секунды на игрока.
 PLINKO_ROWS = 12
-_PSHAPE = {
-    "low": [9, 3, 1.5, 1.3, 1.1, 1, .45, 1, 1.1, 1.3, 1.5, 3, 9],          # ≈96,4%
-    "mid": [30, 10, 4, 2, 1.1, .55, .3, .55, 1.1, 2, 4, 10, 30],         # ≈96,3%
-    "high": [150, 22, 8, 2, .7, .2, .2, .2, .7, 2, 8, 22, 150],          # ≈96,7%
+PLINKO_RTP = conf("games.plinko_rtp", 0.96)
+PLINKO_GAP = 0.25
+_PSHAPE = {   # форма таблиц; итоговые множители — масштаб под возврат, округление вниз
+    "low": [9, 3, 1.5, 1.3, 1.1, 1, .45, 1, 1.1, 1.3, 1.5, 3, 9],
+    "mid": [30, 10, 4, 2, 1.1, .55, .3, .55, 1.1, 2, 4, 10, 30],
+    "high": [150, 22, 8, 2, .7, .2, .2, .2, .7, 2, 8, 22, 150],
 }
+_PPROB = [math.comb(PLINKO_ROWS, i) / 2 ** PLINKO_ROWS for i in range(PLINKO_ROWS + 1)]
+_PLAST = {}
 
 
-def _plinko_tables():
+def plinko_tables():
+    rtp = edge(tuned("games.plinko_rtp", PLINKO_RTP))
     out = {}
     for risk, shape in _PSHAPE.items():
-        # 2026-10-10: срезали с ≈99% до ≈96,5% — ×1 оставлены целыми, урезаны края и центр
-        out[risk] = list(shape)
+        k = rtp / sum(p * m for p, m in zip(_PPROB, shape))
+        out[risk] = [math.floor(m * k * 100) / 100 for m in shape]
     return out
-
-
-PLINKO = _plinko_tables()
 
 
 @app.get(R + "/plinko")
 def plinko_info(uid=Depends(auth)):
-    return {"rows": PLINKO_ROWS, "tables": PLINKO}
+    return {"rows": PLINKO_ROWS, "tables": plinko_tables(), "rtp": round(edge(tuned("games.plinko_rtp", PLINKO_RTP)) * 100, 1),
+            "chances": [round(p * 100, 3) for p in _PPROB]}
 
 
 @app.post(R + "/plinko")
 async def plinko(req: Request, uid=Depends(auth)):
-    err("Плинко больше нет — загляни в другие игры")   # 2026-10-10: игра удалена
     b = await req.json()
-    bet, risk = int(b.get("bet", 0)), str(b.get("risk", "mid"))
-    if risk not in PLINKO:
+    try:
+        bet, risk, n = int(b.get("bet", 0)), str(b.get("risk", "mid")), int(b.get("n", 1))
+    except (TypeError, ValueError):
+        err("Неверные данные — обнови экран")
+    tables = plinko_tables()
+    if risk not in tables:
         err("Действие устарело — обнови экран")
-    n = max(1, min(10, int(b.get("n", 1))))   # до 10 шариков за раз
+    if n not in (1, 5, 10):
+        err("шариков — 1, 5 или 10")
+    t = time.time()
+    if t - _PLAST.get(uid, 0) < PLINKO_GAP:
+        err("Не так быстро")
+    _PLAST[uid] = t
     balls = []
     for _ in range(n):
         path = [random.randint(0, 1) for _ in range(PLINKO_ROWS)]
         slot = sum(path)
-        mult = PLINKO[risk][slot]
+        mult = tables[risk][slot]
         balls.append({"path": path, "slot": slot, "mult": mult, "pay": int(bet * mult)})
-    if n == 1:
-        x = balls[0]
-        return {**x, **_bet_tx(uid, bet, "plinko", x["pay"])}
     with tx():
-        check_bet(uid, bet)
-        if bal(uid) < bet * n:
-            err("Не хватает звёзд")
-        db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet * n, sum(x["pay"] for x in balls), uid))
+        if not 10 <= bet:
+            err("ставка от 10 ⭐ за шарик")
+        if bet * n > MAX_BET:
+            err(f"за один бросок не больше ⭐ {MAX_BET:,} — уменьши ставку или число шариков".replace(",", " "))
+        check_bet(uid, bet * n, 10 * n)   # лимит, баланс и кризисный потолок — на всю сумму
+        pay = sum(x["pay"] for x in balls)
+        db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet * n, pay, uid))
         for x in balls:
             event(uid, "plinko", x["pay"] - bet)
         lvl = add_xp(uid, max(1, bet * n // 20))
-    return {"balls": balls, "stars": bal(uid), "levelup": lvl}
+    return {"balls": balls, "bet": bet, "pay": pay, "stars": bal(uid), "levelup": lvl}
 
 
 # --- башня: 8 этажей, на каждом одна мина среди плиток ---
