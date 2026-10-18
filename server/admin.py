@@ -31,8 +31,13 @@ def admin(uid=Depends(auth)):
     return uid
 
 
-def log(aid, action, target=None, detail=""):
-    db.execute("INSERT INTO admin_log(ts,admin,action,target,detail) VALUES(?,?,?,?,?)", (now(), aid, action, target, detail))
+def log(aid, action, target=None, detail="", undo=None):
+    """Запись в журнал админа. undo — как отменить действие (ops.py → «Отменить» в журнале)."""
+    if undo is None:
+        db.execute("INSERT INTO admin_log(ts,admin,action,target,detail) VALUES(?,?,?,?,?)", (now(), aid, action, target, detail))
+    else:
+        import json as _j
+        db.execute("INSERT INTO admin_log(ts,admin,action,target,detail,undo) VALUES(?,?,?,?,?,?)", (now(), aid, action, target, detail, _j.dumps(undo)))
 
 
 # ---------------- «режим секретности» (защита от подсматривания + мьют уведомлений) ----------------
@@ -194,7 +199,7 @@ async def adjust(tid: int, req: Request, aid=Depends(admin)):
             err(f"у игрока только ⭐ {u['stars']}")
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (delta, tid))
         event(tid, "admin", delta)
-        log(aid, "stars", tid, f"{delta:+d} {reason}".strip())
+        log(aid, "stars", tid, f"{delta:+d} {reason}".strip(), undo={"t": "stars", "delta": -delta})
     return {"ok": True, "stars": bal(tid)}
 
 
@@ -206,7 +211,7 @@ async def ban(tid: int, req: Request, aid=Depends(admin)):
     with tx():
         q1("SELECT 1 FROM users WHERE id=?", tid) or err("нет такого игрока", 404)
         db.execute("UPDATE users SET banned=? WHERE id=?", (int(on), tid))
-        log(aid, "ban" if on else "unban", tid)
+        log(aid, "ban" if on else "unban", tid, undo={"t": "ban", "on": not on})
     (BANNED.add if on else BANNED.discard)(tid)
     return {"ok": True, "banned": on}
 
@@ -382,7 +387,18 @@ def admin_log(aid=Depends(admin)):
     if keep:
         db.execute("DELETE FROM admin_log WHERE ts<?", (now() - keep * 86400,))
     st = q1("SELECT COUNT(*) c, MIN(ts) o FROM admin_log")
-    return {"log": [dict(r) for r in q("SELECT * FROM admin_log ORDER BY id DESC LIMIT 50")],
+    rows = [dict(r) for r in q("SELECT * FROM admin_log ORDER BY id DESC LIMIT 80")]
+    names = {}
+    for r in rows:   # имена админа и игрока — чтобы журнал читался без поиска по id
+        for k in ("admin", "target"):
+            i = r.get(k)
+            if i and i not in names:
+                u = q1("SELECT name FROM users WHERE id=?", i)
+                names[i] = u["name"] if u else f"id {i}"
+        r["adminName"], r["targetName"] = names.get(r["admin"]), names.get(r["target"])
+        r["canUndo"] = bool(r.get("undo")) and not r.get("undone") and (aid in OWNERS or r["admin"] == aid)
+        r.pop("undo", None)
+    return {"log": rows,
             "keep_days": keep, "total": st["c"], "oldest": st["o"], "canEdit": aid in OWNERS}
 
 
@@ -447,7 +463,7 @@ async def give_gift(tid: int, req: Request, aid=Depends(admin)):
             if b.get("feed"):   # по желанию админа — показать в живой ленте
                 db.execute("INSERT INTO feed(user,gift,cs,ts) VALUES(?,?,?,?)", (tid, cur.lastrowid, "admin", t))
             out.append(gift_out(q1("SELECT * FROM gifts WHERE id=?", cur.lastrowid)))
-        log(aid, "gift", tid, f"{n}× {b.get('col')} {b.get('model') or ''}".strip())
+        log(aid, "gift", tid, f"{n}× {b.get('col')} {b.get('model') or ''}".strip(), undo={"t": "gift", "ids": [g["id"] for g in out]})
     if b.get("notify", True):
         notify(tid, f"🎁 Тебе подарок от администрации: <b>{esc(out[0]['col'])}</b>" + (f" и ещё {n - 1}" if n > 1 else "") + ". Загляни в сумку!")
     return {"ok": True, "gifts": out}
@@ -463,7 +479,7 @@ async def give_keys(tid: int, req: Request, aid=Depends(admin)):
     with tx():
         q1("SELECT 1 FROM users WHERE id=?", tid) or err("нет такого игрока", 404)
         db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,?) ON CONFLICT(user,cid) DO UPDATE SET n=n+?", (tid, cid, n, n))
-        log(aid, "keys", tid, f"{n}× {c['title']}")
+        log(aid, "keys", tid, f"{n}× {c['title']}", undo={"t": "keys", "cid": cid, "n": n})
     if b.get("notify", True):
         notify(tid, f"🔑 Тебе выдали {n} {'кейс' if n == 1 else 'кейса' if n < 5 else 'кейсов'} «{esc(c['title'])}» — открывай бесплатно!")
     return {"ok": True}

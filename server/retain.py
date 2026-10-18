@@ -1,8 +1,10 @@
 """Удержание игроков.
 1) Кэшбэк недели: в понедельник каждому, кто за прошлую неделю ушёл в минус в играх, возвращаем 5% чистого проигрыша
    (от ⭐ 2000 минуса, не больше ⭐ 250K). В среднем это ~0,2% оборота — преимущество казино сохраняется.
-2) «Возвращайся»: игроку, который не заходил 2+ дня (но не дольше 14), бот пишет раз в 7 дней
-   и кладёт ключ от «Ширпотреба». Только тем, кто реально играл (от 30 раундов), и с включёнными уведомлениями."""
+2) «Возвращайся» — три ступени по тому, сколько игрок не заходил: 2–6 дней — ключ от «Ширпотреба»,
+   7–14 — ключ «Удача» + звёзды, 15–45 — ключ «Роскошь» + звёзды побольше. Каждая ступень — не чаще своего интервала.
+   Только тем, кто реально играл (от 30 раундов), и с включёнными уведомлениями. Кто вернулся за 3 дня — отмечаем
+   в comeback_log (статистика в админке → Обзор)."""
 from settings import conf
 import asyncio
 import time
@@ -22,7 +24,13 @@ BACK_HOURS = range(6, 19)   # 9:00–21:00 по Москве
 db.executescript("""
 CREATE TABLE IF NOT EXISTS cashback(week INTEGER, user INTEGER, loss INTEGER, amount INTEGER, ts INTEGER, PRIMARY KEY(week, user));
 CREATE TABLE IF NOT EXISTS comeback(user INTEGER PRIMARY KEY, ts INTEGER);
+CREATE TABLE IF NOT EXISTS comeback_log(id INTEGER PRIMARY KEY, user INTEGER, tier INTEGER, ts INTEGER, back INTEGER DEFAULT 0);
+CREATE INDEX IF NOT EXISTS comeback_log_ts ON comeback_log(ts);
 """)
+# ступени: (не заходил от, до, ключ, звёзды, не чаще)
+TIERS = [(2 * 86400, 7 * 86400, conf("comeback.case", "starter"), 0, 7 * 86400),
+         (7 * 86400, 15 * 86400, "luck", 1_000, 7 * 86400),
+         (15 * 86400, 45 * 86400, "lux", 3_000, 30 * 86400)]
 
 
 def week_net(uid, since=None):
@@ -61,26 +69,42 @@ def _cashback():
 
 
 def _comeback():
+    t = now()
+    # кто вернулся в течение 3 дней после письма — для статистики
+    with tx():
+        db.execute("UPDATE comeback_log SET back=1 WHERE back=0 AND ts>? AND user IN (SELECT id FROM users WHERE seen>comeback_log.ts)", (t - 3 * 86400,))
     if time.gmtime().tm_hour not in BACK_HOURS:
         return
-    t = now()
     import economy as E
-    title = E.CASES[BACK_CASE]["title"]
     msgs = []
     with tx():
-        for u in q("SELECT * FROM users WHERE seen<? AND seen>? LIMIT 200", t - BACK_AFTER, t - BACK_UNTIL):
-            if "notif" in u.keys() and not u["notif"]:
+        for tier, (lo, hi, cid, stars, every) in enumerate(TIERS, 1):
+            if cid not in E.CASES:
                 continue
-            last = q1("SELECT ts FROM comeback WHERE user=?", u["id"])
-            if last and t - last["ts"] < BACK_EVERY:
-                continue
-            if q1(f"SELECT COUNT(*) n FROM (SELECT 1 FROM events WHERE user=? AND kind IN {GAME_KINDS} LIMIT ?)", u["id"], BACK_ROUNDS)["n"] < BACK_ROUNDS:
-                continue
-            db.execute("INSERT INTO comeback(user,ts) VALUES(?,?) ON CONFLICT(user) DO UPDATE SET ts=excluded.ts", (u["id"], t))
-            db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (u["id"], BACK_CASE))
-            msgs.append((u["id"], f"👋 {esc(u['name'])}, давно не виделись! Положили тебе ключ от кейса «{esc(title)}» — "
-                                  f"открой бесплатно. Бонус дня тоже ждёт 🎁"))
-            if len(msgs) >= 40:   # не больше 40 писем за проход — без всплесков к Telegram API
+            title = E.CASES[cid]["title"]
+            for u in q("SELECT * FROM users WHERE seen<? AND seen>? AND banned=0 LIMIT 200", t - lo, t - hi):
+                if "notif" in u.keys() and not u["notif"]:
+                    continue
+                last = q1("SELECT ts FROM comeback_log WHERE user=? AND tier=? ORDER BY id DESC LIMIT 1", u["id"], tier)
+                if last and t - last["ts"] < every:
+                    continue
+                if q1(f"SELECT COUNT(*) n FROM (SELECT 1 FROM events WHERE user=? AND kind IN {GAME_KINDS} LIMIT ?)", u["id"], BACK_ROUNDS)["n"] < BACK_ROUNDS:
+                    continue
+                db.execute("INSERT INTO comeback(user,ts) VALUES(?,?) ON CONFLICT(user) DO UPDATE SET ts=excluded.ts", (u["id"], t))
+                db.execute("INSERT INTO comeback_log(user,tier,ts) VALUES(?,?,?)", (u["id"], tier, t))
+                db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (u["id"], cid))
+                if stars:
+                    db.execute("UPDATE users SET stars=stars+? WHERE id=?", (stars, u["id"]))
+                    event(u["id"], "comeback", stars)
+                days = (t - u["seen"]) // 86400
+                gift = f"ключ от кейса «{esc(title)}»" + (f" и {stars:,} ⭐".replace(",", " ") if stars else "")
+                text = (f"👋 {esc(u['name'])}, давно не виделись! Положили тебе {gift} — открой бесплатно. Бонус дня тоже ждёт 🎁" if tier == 1 else
+                        f"🎁 {esc(u['name'])}, тебя не было {days} дн. — мы скучали! Держи {gift}. Заходи забрать, пока не сгорело." if tier == 2 else
+                        f"💎 {esc(u['name'])}, без тебя тут не то. Подарок за возвращение: {gift}. Всё уже в игре — открывай!")
+                msgs.append((u["id"], text))
+                if len(msgs) >= 40:   # не больше 40 писем за проход — без всплесков к Telegram API
+                    break
+            if len(msgs) >= 40:
                 break
     for u, text in msgs:
         notify(u, text)

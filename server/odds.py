@@ -76,6 +76,7 @@ def _routes():
             err("нет такой игры")
         val = b.get("value")
         cur = dict(settings._LIVE)
+        prev = cur.get(key)
         if val is None:
             cur.pop(key, None)
             detail = f"{KEYS[key][1]}: сброс на {KEYS[key][3]() * 100:g}%"
@@ -91,7 +92,7 @@ def _routes():
             detail = f"{KEYS[key][1]}: {val * 100:g}%"
         with tx():
             db.execute("INSERT INTO kv(k,v) VALUES('odds',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur),))
-            log(aid, "odds", None, detail)
+            log(aid, "odds", None, detail, undo={"t": "odds", "key": key, "prev": prev})
         settings._LIVE.clear()
         settings._LIVE.update(cur)
         return {"ok": True}

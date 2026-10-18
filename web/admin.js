@@ -87,10 +87,10 @@ function openAdmin() {
 async function admRender(el = topSheet()) {
   const body = el.querySelector("#adm-body"); if (!body) return;
   if (ADM.tab === "stats") {
-    const [s, pr, ev, adm] = await Promise.all([api("admin/stats"), api("admin/promo"), api("admin/event"), api("admin/admins")]), v = s.server;
+    const [s, pr, ev, adm, pl] = await Promise.all([api("admin/stats"), api("admin/promo"), api("admin/event"), api("admin/admins"), api("admin/pulse").catch(() => null)]), v = s.server;
     const kinds = Object.entries(s.kinds24).sort((a, b) => b[1].n - a[1].n);
-    body.innerHTML = `
-      <div class="sec-t" style="margin-top:0">Акция «Щедрые выходные» ${pr.active ? `<span class="tw">· идёт</span>` : ""}</div>
+    body.innerHTML = `${pl ? admPulseHTML(pl) : ""}
+      <div class="sec-t">Акция «Щедрые выходные» ${pr.active ? `<span class="tw">· идёт</span>` : ""}</div>
       <div class="seg">${[["auto", "Авто (сб–вс)"], ["on", "Включить"], ["off", "Выключить"]].map(([k, t]) => `<button data-act="adm-promo" data-v="${k}" class="${pr.mode === k ? "on" : ""}">${t}</button>`).join("")}</div>
       <div class="sec-t">Сезонный ивент ${ev.active ? `<span class="tw">· ${esc(ev.active.title)} идёт</span>` : ""}</div>
       <div class="seg">${[["auto", "Авто (по датам)"], ...ev.events.map(e => [e.id, "Вкл: " + e.title]), ["off", "Выключить"]].map(([k, t]) => `<button data-act="adm-event" data-v="${k}" class="${ev.mode === k ? "on" : ""}">${esc(t)}</button>`).join("")}</div>
@@ -389,21 +389,22 @@ async function admRender(el = topSheet()) {
       ${al.canEdit ? `<button class="btn sm red" data-act="adm-actlog-clear" style="margin-top:8px">${ic("x")}Очистить подробный журнал</button>` : ""}
       ${al.canEdit && !al.on ? `<div class="adm-warn" style="margin-top:10px">Подробный журнал выключен — новые действия игроков не записываются.</div>` : ""}
     </div>`;
-    body.innerHTML = cfg + `<div class="sec-t">Действия админов</div><div class="box">${r.log.map(x => `<div class="row kv"><div class="grow"><div class="t">${esc(x.action)}${x.target ? " · " + x.target : ""}</div><div class="s">${esc(x.detail || "")}</div></div><span class="hint" style="font-size:12px">${admDate(x.ts)}</span></div>`).join("") || `<div class="hint" style="padding:14px">Действий пока нет</div>`}</div>`;
+    body.innerHTML = `<div class="sec-t" style="margin-top:0">Действия админов</div>${admLogHTML(r.log)}` + `<div class="sec-t">Настройки</div>` + cfg;
   }
 }
 
 async function openAdmUser(id) {
   const el = openSheet(emptyHTML("hourglass", "Загружаем…"));
   const draw = async () => {
-    const [u, cs, fr, tr] = await Promise.all([api("admin/user/" + id), api(`admin/user/${id}/cosm`), api(`admin/user/${id}/friends`),
-      api(`admin/user/${id}/transfers`).catch(() => ({ sent: 0, got: 0, list: [] }))]);
+    const [u, cs, fr, tr, ins] = await Promise.all([api("admin/user/" + id), api(`admin/user/${id}/cosm`), api(`admin/user/${id}/friends`),
+      api(`admin/user/${id}/transfers`).catch(() => ({ sent: 0, got: 0, list: [] })), api(`admin/user/${id}/insight`).catch(() => null)]);
     const frRow = (f, s) => `<div class="row tap" data-act="adm-user" data-id="${f.id}">${avaHTML(f, 32)}<div class="grow"><div class="t">${esc(f.name)}</div><div class="s">${s} · был ${admDate(f.seen)}</div></div>${ic("chev")}</div>`;
     replaceSheet(el, `<div style="display:flex;align-items:center;gap:12px;margin:4px 0 12px">${avaHTML(u, 48)}<div class="grow"><b style="font-size:19px">${esc(u.name)}</b>
         <div class="hint" style="font-size:13px">${u.username ? "@" + esc(u.username) + " · " : ""}id ${u.id}${u.banned ? ` · <span class="tl">заблокирован</span>` : ""}</div></div></div>
       <div class="box">${admKv("Баланс", `<b>⭐ ${fmt(u.stars)}</b>`)}${admKv("Подарков", `<b>${fmt(u.gifts)} · ⭐ ${fmt(u.giftsValue)}</b>`)}
         ${admKv("Итог в играх 24 ч / всего", `<span>${admSgn(u.pnl24)} / ${admSgn(u.pnlAll)}</span>`)}${admKv("Кейсов открыто", `<b>${fmt(u.opened)}</b>`)}
         ${admKv("Рефералов", `<b>${fmt(u.refs)}</b>`)}${admKv("Регистрация / был", `<b>${admDate(u.created)} / ${admDate(u.seen)}</b>`)}</div>
+      ${ins ? admInsightHTML(ins) : ""}
       <div class="sec-t">Кто пригласил</div>
       <div class="box">${u.inviter ? `<div class="row tap" data-act="adm-user" data-id="${u.inviter.id}">${avaHTML(u.inviter, 36)}<div class="grow"><div class="t">${esc(u.inviter.name)}</div>
         <div class="s">${u.refSrc === "gift" ? "через подарок по ссылке" : "по реферальной ссылке"} · ${u.inviter.username ? "@" + esc(u.inviter.username) + " · " : ""}id ${u.inviter.id}</div></div>${ic("chev")}</div>`

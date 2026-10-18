@@ -9,7 +9,7 @@
 .st-tabs .ic{width:16px;height:16px}
 .st-dot{position:absolute;top:6px;right:10px;width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px var(--card)}
 .st-pane{display:none}
-.st-s[data-tab=shop] .st-pane[data-p=shop],.st-s[data-tab=daily] .st-pane[data-p=daily]{display:block;animation:np-vin .3s cubic-bezier(.2,.8,.2,1) both}
+.st-s[data-stab=shop] .st-pane[data-p=shop],.st-s[data-stab=daily] .st-pane[data-p=daily]{display:block;animation:np-vin .3s cubic-bezier(.2,.8,.2,1) both}
 .st-s.no-shop .st-tabs{display:none}
 
 /* --- магазин --- */

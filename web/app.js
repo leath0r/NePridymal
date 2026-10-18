@@ -333,6 +333,7 @@ function moveTabInd() {
 addEventListener("resize", moveTabInd);
 const TITLES = { cases: "Кейсы", games: "Игры", inv: "Инвентарь", market: "Маркет", top: "Топ", crypto: "Крипта" };
 function setTab(t) {
+  if (!$("#v-" + t)) return;   // не вкладка (data-tab на постороннем элементе) — ничего не делаем
   if (t === TAB && $("#v-" + t).innerHTML) return;
   TAB = t;
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
@@ -536,7 +537,7 @@ function openDaily(tab) {
 function stTab(el, t) {
   if (!el) return;
   if (el.classList.contains("no-shop")) t = "daily";
-  el.dataset.tab = t;
+  el.dataset.stab = t;   // не data-tab: на него реагирует переключатель нижних вкладок (клик внутри окна сломал бы вкладку)
   el.querySelectorAll(".st-tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === t));
 }
 

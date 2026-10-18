@@ -82,13 +82,14 @@ def _admin_routes():
             from app import err
             err("неверные параметры")
         cur = dict(states())
+        prev = cur.get(gid, "on")
         if st == "on":
             cur.pop(gid, None)
         else:
             cur[gid] = st
         with tx():
             db.execute("INSERT INTO kv(k,v) VALUES('games',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur),))
-            log(aid, "game", None, f"{gid}={st}")
+            log(aid, "game", None, f"{gid}={st}", undo={"t": "game", "gid": gid, "prev": prev})
         _C["t"] = 0
         return {"states": states()}
 
