@@ -7,7 +7,7 @@ const PK_RISK = [["low", "Низкий", "#35d07f"], ["mid", "Средний", "
 // цвет лунки по множителю: холодный центр → горячие края
 const pkCol = m => m >= 50 ? ["#ff3d6e", "#a3103a"] : m >= 10 ? ["#ff5a3d", "#b3210f"] : m >= 3 ? ["#ff9a2e", "#c25a06"] : m >= 1.5 ? ["#ffd23f", "#c98a00"]
   : m >= 1 ? ["#4cf0a0", "#12935a"] : m >= .5 ? ["#5aa8ff", "#2259c9"] : ["#8a7bff", "#4a35c9"];
-const pkFmt = m => (m >= 100 ? Math.round(m) : m >= 10 ? m.toFixed(1).replace(/\.0$/, "") : String(m)).replace(".", ",");
+const pkFmt = m => String(m >= 100 ? Math.round(m) : m >= 10 ? m.toFixed(1).replace(/\.0$/, "") : String(m)).replace(".", ",");
 GAMES.push({ id: "plinko", t: "Плинко", s: "Шарик падает по штырькам — лови иксы по краям", imgUrl: "", k: ["#7b5cff", "#130b33"], chips: ["до x150", "10 шариков"] });
 GAMES[GAMES.length - 1].imgUrl = "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><defs>
   <radialGradient id="b" cx=".35" cy=".3" r=".7"><stop offset="0" stop-color="#fffbe6"/><stop offset=".5" stop-color="#ffc53d"/><stop offset="1" stop-color="#c26a00"/></radialGradient>
@@ -25,7 +25,8 @@ const PKS = { risk: "mid", d: null, balls: [], fx: [], flash: {}, hits: {}, raf:
 async function openPlinko() {
   const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "plinko").imgUrl}" alt=""><div><h2>Плинко</h2><span>Шарик падает по штырькам — лови иксы по краям</span></div></div>
     <div class="pk-hist" id="pk-hist"><span class="pk-h0">Здесь будут твои броски</span></div>
-    <div class="ar-stage pk-stage" id="pk-stage"><canvas id="pk-cv"></canvas><div class="pk-pops" id="pk-pops"></div></div>
+    <div class="ar-stage pk-stage" id="pk-stage"><canvas id="pk-cv"></canvas><div class="pk-pops" id="pk-pops"></div>
+      <div class="pk-board" id="pk-board"><span>Последний</span><b>—</b></div></div>
     <div class="betp">
       <div class="seg ar-seg" id="pk-risk">${PK_RISK.map(([k, t, c]) => `<button data-act="pk-risk" data-v="${k}" style="--c:${c}" class="${PKS.risk === k ? "on" : ""}"><i></i>${t}</button>`).join("")}</div>
       ${betHTML("pk-amt")}
@@ -37,44 +38,107 @@ async function openPlinko() {
   if (!PKS.d || !$("#pk-cv")) return;
   pkDraw(performance.now());
 }
-// геометрия доски
+// геометрия доски: треугольник штырьков, воронка сверху, лунки-корзины снизу
 function pkGeom(cv) {
-  const W = cv.clientWidth, Hh = cv.clientHeight, rows = PKS.d.rows, sp = W / (rows + 2.4), top = 30, slotH = 34, rowH = (Hh - top - slotH - 24) / rows;
-  return { W, Hh, rows, sp, top, rowH, cx: W / 2, slotY: top + rows * rowH + 8, slotH };
+  const W = cv.clientWidth, Hh = cv.clientHeight, rows = PKS.d.rows, sp = Math.min(34, W / (rows + 2.2)), top = 54, slotH = 40;
+  const rowH = (Hh - top - slotH - 30) / rows, pr = Math.max(3, Math.min(5, sp * .15));
+  return { W, Hh, rows, sp, top, rowH, pr, cx: W / 2, slotY: top + rows * rowH + 6, slotH, bw: sp - 4 };
+}
+const pkPeg = (g, r, i) => [g.cx + (i - (r + 2) / 2) * g.sp, g.top + r * g.rowH];
+// статичный слой (фон, направляющие, штырьки, воронка) — рисуем один раз в кэш, в кадре только копируем
+function pkStatic(g, d) {
+  const key = [g.W, g.Hh, d].join("x");
+  if (PKS.st && PKS.st.key === key) return PKS.st.cv;
+  const cv = document.createElement("canvas"); cv.width = Math.round(g.W * d); cv.height = Math.round(g.Hh * d);
+  const c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
+  // свет за треугольником
+  const [lx, ly] = pkPeg(g, 0, 1), [bx0] = pkPeg(g, g.rows - 1, 0), [bx1, by] = pkPeg(g, g.rows - 1, g.rows + 1);
+  const glow = c.createRadialGradient(g.cx, g.top + g.rows * g.rowH * .55, 10, g.cx, g.top + g.rows * g.rowH * .55, g.W * .7);
+  glow.addColorStop(0, "rgba(140,110,255,.32)"); glow.addColorStop(1, "rgba(140,110,255,0)");
+  c.fillStyle = glow; c.fillRect(0, 0, g.W, g.Hh);
+  // тонкая сетка-«пол»
+  c.strokeStyle = "rgba(255,255,255,.035)"; c.lineWidth = 1;
+  for (let x = (g.cx % 24); x < g.W; x += 24) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, g.Hh); c.stroke(); }
+  for (let y = 0; y < g.Hh; y += 24) { c.beginPath(); c.moveTo(0, y); c.lineTo(g.W, y); c.stroke(); }
+  // треугольная «стеклянная» подложка доски
+  c.beginPath(); c.moveTo(lx - g.sp * .9, ly - g.rowH * .7); c.lineTo(pkPeg(g, 0, 2)[0] + g.sp * .9, ly - g.rowH * .7);
+  c.lineTo(bx1 + g.sp * .75, by + g.rowH * .55); c.lineTo(bx0 - g.sp * .75, by + g.rowH * .55); c.closePath();
+  const pane = c.createLinearGradient(0, ly, 0, by);
+  pane.addColorStop(0, "rgba(255,255,255,.06)"); pane.addColorStop(1, "rgba(255,255,255,.015)");
+  c.fillStyle = pane; c.fill();
+  // светящиеся направляющие по краям
+  const rail = (x0, y0, x1, y1) => {
+    const gr = c.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, "rgba(255,215,106,.85)"); gr.addColorStop(1, "rgba(167,123,255,.65)");
+    c.save(); c.shadowColor = "#a77bff"; c.shadowBlur = 10; c.strokeStyle = gr; c.lineWidth = 2.2; c.lineCap = "round";
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.restore();
+  };
+  rail(lx - g.sp * .9, ly - g.rowH * .7, bx0 - g.sp * .75, by + g.rowH * .55);
+  rail(pkPeg(g, 0, 2)[0] + g.sp * .9, ly - g.rowH * .7, bx1 + g.sp * .75, by + g.rowH * .55);
+  // штырьки: тень, металлический шарик, блик
+  for (let r = 0; r < g.rows; r++) for (let i = 0; i <= r + 2; i++) {
+    const [x, y] = pkPeg(g, r, i);
+    c.beginPath(); c.ellipse(x + 1, y + g.pr * .9, g.pr * 1.05, g.pr * .5, 0, 0, 6.283); c.fillStyle = "rgba(0,0,0,.45)"; c.fill();
+    const pg = c.createRadialGradient(x - g.pr * .4, y - g.pr * .45, g.pr * .1, x, y, g.pr * 1.1);
+    pg.addColorStop(0, "#ffffff"); pg.addColorStop(.45, "#d9d4ff"); pg.addColorStop(1, "#6b5fb8");
+    c.beginPath(); c.arc(x, y, g.pr, 0, 6.283); c.fillStyle = pg; c.fill();
+  }
+  // воронка-раздатчик сверху
+  const fy = 6, fw = g.sp * 1.9;
+  const fg = c.createLinearGradient(g.cx - fw, 0, g.cx + fw, 0);
+  fg.addColorStop(0, "#5d6275"); fg.addColorStop(.4, "#f1f3f8"); fg.addColorStop(.6, "#b3b8c8"); fg.addColorStop(1, "#4a4f60");
+  c.beginPath(); c.moveTo(g.cx - fw, fy); c.lineTo(g.cx + fw, fy); c.lineTo(g.cx + g.sp * .42, fy + 22); c.lineTo(g.cx - g.sp * .42, fy + 22); c.closePath();
+  c.fillStyle = fg; c.fill();
+  c.fillStyle = "#ffc53d"; c.beginPath(); c.roundRect ? c.roundRect(g.cx - fw - 2, fy - 3, fw * 2 + 4, 5, 2.5) : c.rect(g.cx - fw - 2, fy - 3, fw * 2 + 4, 5); c.fill();
+  c.fillStyle = "#0b0722"; c.beginPath(); c.roundRect ? c.roundRect(g.cx - g.sp * .42, fy + 20, g.sp * .84, 5, 2) : c.rect(g.cx - g.sp * .42, fy + 20, g.sp * .84, 5); c.fill();
+  // «пол» под лунками — отражение
+  const fl = c.createLinearGradient(0, g.slotY + g.slotH, 0, g.Hh);
+  fl.addColorStop(0, "rgba(167,123,255,.18)"); fl.addColorStop(1, "rgba(167,123,255,0)");
+  c.fillStyle = fl; c.fillRect(0, g.slotY + g.slotH, g.W, g.Hh);
+  PKS.st = { key, cv };
+  return cv;
 }
 // путь шарика: для шага j — смещение по горизонтали (в долях шага штырьков)
 const pkOff = (path, j) => { let s = 0; for (let i = 0; i < j; i++) s += path[i] ? .5 : -.5; return s; };
 function pkKick() { if (!PKS.raf) PKS.raf = requestAnimationFrame(pkDraw); }
+const rr = (c, x, y, w, h, r) => { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); };
 function pkDraw(now) {
   PKS.raf = 0;
   const cv = $("#pk-cv"); if (!cv || !PKS.d) return;
   const d = Math.min(devicePixelRatio || 1, 2);
   if (cv.width !== Math.round(cv.clientWidth * d) || cv.height !== Math.round(cv.clientHeight * d)) { cv.width = Math.round(cv.clientWidth * d); cv.height = Math.round(cv.clientHeight * d); }
-  const c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
-  const g = pkGeom(cv); c.clearRect(0, 0, g.W, g.Hh);
-  // штырьки: мягкий свет, вспышка при ударе
-  for (let r = 0; r < g.rows; r++) for (let i = 0; i <= r + 2; i++) {
-    const x = g.cx + (i - (r + 2) / 2) * g.sp, y = g.top + r * g.rowH, f = PKS.flash[r + ":" + i], k = f ? Math.max(0, 1 - (now - f) / 380) : 0;
-    if (k > 0) { c.beginPath(); c.arc(x, y, 4 + k * 9, 0, 6.283); c.fillStyle = `rgba(255,214,110,${.35 * k})`; c.fill(); }
-    c.beginPath(); c.arc(x, y, 3.2 + k * 1.2, 0, 6.283);
-    const pg = c.createRadialGradient(x - 1, y - 1, .5, x, y, 4); pg.addColorStop(0, "#fff"); pg.addColorStop(1, k > 0 ? "#ffd76a" : "rgba(200,205,255,.75)");
-    c.fillStyle = pg; c.fill();
+  const c = cv.getContext("2d"); c.setTransform(1, 0, 0, 1, 0, 0);
+  const g = pkGeom(cv);
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.drawImage(pkStatic(g, d), 0, 0);
+  c.setTransform(d, 0, 0, d, 0, 0);
+  // вспышки штырьков: кольцо расходится от удара
+  for (const [k, t] of Object.entries(PKS.flash)) {
+    const a = (now - t) / 420; if (a >= 1) { delete PKS.flash[k]; continue; }
+    const [r, i] = k.split(":").map(Number), [x, y] = pkPeg(g, r, i);
+    c.beginPath(); c.arc(x, y, g.pr + a * 12, 0, 6.283); c.strokeStyle = `rgba(255,215,106,${.7 * (1 - a)})`; c.lineWidth = 2; c.stroke();
+    c.beginPath(); c.arc(x, y, g.pr + .6, 0, 6.283); c.fillStyle = `rgba(255,230,150,${1 - a})`; c.fill();
   }
-  // лунки: градиент по множителю, при попадании — проседают и светятся
-  const tab = PKS.d.tables[PKS.risk], bw = g.sp - 3;
+  // лунки-корзины
+  const tab = PKS.d.tables[PKS.risk];
   tab.forEach((m, k) => {
-    const x = g.cx + (k - g.rows / 2) * g.sp, h = PKS.hits[k], hk = h ? Math.max(0, 1 - (now - h) / 450) : 0, y = g.slotY + Math.sin(hk * Math.PI) * 6;
-    const [c1, c2] = pkCol(m), gr = c.createLinearGradient(0, y, 0, y + g.slotH);
-    gr.addColorStop(0, c1); gr.addColorStop(1, c2);
-    if (hk > 0) { c.shadowColor = c1; c.shadowBlur = 18 * hk; }
-    c.fillStyle = gr; c.beginPath(); c.roundRect ? c.roundRect(x - bw / 2, y, bw, g.slotH, 7) : c.rect(x - bw / 2, y, bw, g.slotH); c.fill();
-    c.shadowBlur = 0;
-    c.fillStyle = "rgba(255,255,255,.28)"; c.beginPath(); c.roundRect ? c.roundRect(x - bw / 2 + 2, y + 2, bw - 4, 5, 3) : c.rect(x - bw / 2 + 2, y + 2, bw - 4, 5); c.fill();
+    const x = g.cx + (k - g.rows / 2) * g.sp - g.bw / 2, h = PKS.hits[k], hk = h ? Math.max(0, 1 - (now - h) / 520) : 0;
+    const y = g.slotY + Math.sin(Math.min(1, hk * 1.4) * Math.PI) * 7, [c1, c2] = pkCol(m);
+    c.save();
+    c.shadowColor = c1; c.shadowBlur = 6 + 22 * hk;
+    const gr = c.createLinearGradient(0, y, 0, y + g.slotH); gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+    rr(c, x, y, g.bw, g.slotH, 8); c.fillStyle = gr; c.fill();
+    c.restore();
+    rr(c, x + 2, y + 2, g.bw - 4, g.slotH * .38, 6); c.fillStyle = "rgba(255,255,255,.3)"; c.fill();   // блик
+    rr(c, x, y + g.slotH - 5, g.bw, 5, 3); c.fillStyle = "rgba(0,0,0,.22)"; c.fill();                  // донышко
+    if (hk > 0) { rr(c, x - 2, y - 2, g.bw + 4, g.slotH + 4, 10); c.strokeStyle = `rgba(255,255,255,${.8 * hk})`; c.lineWidth = 2; c.stroke(); }
     c.fillStyle = m >= 1 && m < 50 ? "#1a1203" : "#fff";
-    c.font = `900 ${bw < 22 ? 8.5 : bw < 26 ? 9.5 : 11}px -apple-system,Roboto,"Segoe UI",sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillText(pkFmt(m), x, y + g.slotH / 2 + 2);
+    c.font = `900 ${g.bw < 20 ? 8.5 : g.bw < 24 ? 10 : 11.5}px -apple-system,Roboto,"Segoe UI",sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
+    const t = pkFmt(m); if (g.bw < 22 && t.length > 3) { c.save(); c.translate(x + g.bw / 2, y + g.slotH / 2 + 1); c.scale(.85, 1); c.fillText(t, 0, 0); c.restore(); }
+    else c.fillText(t, x + g.bw / 2, y + g.slotH / 2 + 1);
+    // отражение лунки на полу
+    c.globalAlpha = .14 + .3 * hk; rr(c, x, g.slotY + g.slotH + 4, g.bw, 10, 4); c.fillStyle = c1; c.fill(); c.globalAlpha = 1;
   });
-  // шарики: дуга от штырька к штырьку, шлейф и свечение
+  // шарики
   let moving = false;
   for (const b of PKS.balls) {
     if (b.done) continue;
@@ -86,25 +150,22 @@ function pkDraw(now) {
       const x0 = g.cx + pkOff(b.path, i) * g.sp, x1 = g.cx + pkOff(b.path, i + 1) * g.sp;
       const y0 = g.top - g.rowH * .55 + i * g.rowH, y1 = y0 + g.rowH;
       x = x0 + (x1 - x0) * fr; y = y0 + (y1 - y0) * fr - Math.sin(fr * Math.PI) * g.rowH * .42;
-      if (i !== b.last) {   // удар о штырёк этого ряда
-        b.last = i;
-        const pegI = Math.round(pkOff(b.path, i) + (i + 2) / 2);
-        PKS.flash[i + ":" + pegI] = now; if (i % 2 === 0) SND.tick();
-      }
-    } else {   // последний отрезок — в лунку
-      const xs = g.cx + pkOff(b.path, steps) * g.sp;
-      x = xs; y = g.top - g.rowH * .55 + steps * g.rowH + fr * (g.slotY - (g.top - g.rowH * .55 + steps * g.rowH) + 8);
+      if (i !== b.last) { b.last = i; PKS.flash[i + ":" + Math.round(pkOff(b.path, i) + (i + 2) / 2)] = now; if (i % 2 === 0) SND.tick(); }
+    } else {
+      const xs = g.cx + pkOff(b.path, steps) * g.sp, ys = g.top - g.rowH * .55 + steps * g.rowH;
+      x = xs; y = ys + fr * (g.slotY - ys + 10);
       if (fr > .85) { b.done = true; pkLanded(b, now, xs, g.slotY); }
     }
-    b.trail.push([x, y]); if (b.trail.length > 7) b.trail.shift();
-    b.trail.forEach(([tx, ty], j) => { c.beginPath(); c.arc(tx, ty, 2 + j * .55, 0, 6.283); c.fillStyle = `rgba(255,190,70,${(j + 1) / b.trail.length * .22})`; c.fill(); });
-    const bg = c.createRadialGradient(x - 2.2, y - 2.2, .8, x, y, 7.5);
-    bg.addColorStop(0, "#fffbe6"); bg.addColorStop(.45, "#ffcf4a"); bg.addColorStop(1, "#c26a00");
-    c.shadowColor = "#ffb340"; c.shadowBlur = 14; c.beginPath(); c.arc(x, y, 6.8, 0, 6.283); c.fillStyle = bg; c.fill(); c.shadowBlur = 0;
+    b.trail.push([x, y]); if (b.trail.length > 8) b.trail.shift();
+    b.trail.forEach(([tx, ty], j) => { c.beginPath(); c.arc(tx, ty, 1.8 + j * .6, 0, 6.283); c.fillStyle = `rgba(255,190,70,${(j + 1) / b.trail.length * .25})`; c.fill(); });
+    const R = Math.max(5.5, g.pr * 1.45), bg = c.createRadialGradient(x - R * .35, y - R * .4, R * .1, x, y, R * 1.1);
+    bg.addColorStop(0, "#fffbe6"); bg.addColorStop(.4, "#ffd34d"); bg.addColorStop(1, "#b85e00");
+    c.save(); c.shadowColor = "#ffb340"; c.shadowBlur = 16; c.beginPath(); c.arc(x, y, R, 0, 6.283); c.fillStyle = bg; c.fill(); c.restore();
+    c.beginPath(); c.arc(x - R * .35, y - R * .4, R * .28, 0, 6.283); c.fillStyle = "rgba(255,255,255,.85)"; c.fill();
   }
   PKS.balls = PKS.balls.filter(b => !b.done);
-  const flashing = Object.values(PKS.flash).some(t => now - t < 400) || Object.values(PKS.hits).some(t => now - t < 460);
-  if (moving || flashing) PKS.raf = requestAnimationFrame(pkDraw);
+  const busy = moving || Object.keys(PKS.flash).length || Object.values(PKS.hits).some(t => now - t < 540);
+  if (busy) PKS.raf = requestAnimationFrame(pkDraw);
 }
 function pkLanded(b, now, x, y) {
   PKS.hits[b.slot] = now;
@@ -119,6 +180,9 @@ function pkLanded(b, now, x, y) {
     p.style.cssText = `left:${x}px;top:${y - 6}px;--c:${pkCol(b.mult)[0]}`; p.textContent = "x" + pkFmt(b.mult);
     pops.appendChild(p); setTimeout(() => p.remove(), 1100);
   }
+  const bd = $("#pk-board");
+  if (bd) { bd.className = "pk-board" + (win ? " w" : " l") + (big ? " big" : ""); bd.style.setProperty("--c", pkCol(b.mult)[0]);
+    bd.innerHTML = `<span>x${pkFmt(b.mult)}</span><b>${win ? "+" : ""}⭐ ${short(b.pay)}</b>`; starify(bd); arBump(bd.querySelector("b")); }
   const h = $("#pk-hist");
   if (h) {
     const z = h.querySelector(".pk-h0"); if (z) z.remove();
@@ -147,7 +211,7 @@ async function pkDrop(n) {
 Object.assign(ACT, {
   "pk-risk": el => {
     if (PKS.balls.length) return toast("Дождись, пока упадут шарики");
-    PKS.risk = el.dataset.v; H.sel();
+    PKS.risk = el.dataset.v; H.sel(); PKS.st = null;
     el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === el));
     pkKick();
   },
