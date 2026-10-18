@@ -492,32 +492,52 @@ async function doOpenInner(sheet, id, c, n) {
 const DAILY_KEYS = { 2: "Охота на Пепе", 3: "Удача", 5: "Охота на Сердце", 7: "Роскошь" };
 // как на сервере (STREAK_KEYS): ключ на 2, 3, 5, 7 день, дальше «Роскошь» каждые 7 дней (14, 21, 28…)
 const dailyKey = d => DAILY_KEYS[d] || (d > 7 && d % 7 === 0 ? DAILY_KEYS[7] : null);
-function openDaily() {
+function openDaily(tab) {
   const next = ME.streakNext || ME.streak + 1, cur = ME.dailyIn ? ME.streak : next;
   const w0 = Math.floor((Math.max(1, cur) - 1) / 7) * 7;   // показываем текущую неделю серии: 1–7, 8–14, 15–21…
   const pay = d => (300 + 100 * Math.min(d, 7)) * (ME.promo ? 2 : 1);
-  const days = [1, 2, 3, 4, 5, 6, 7].map(i => w0 + i).map(d => `<div style="flex:1;text-align:center;padding:8px 0;border-radius:12px;background:${d <= ME.streak && ME.dailyIn ? "color-mix(in srgb,var(--gold) 22%,transparent)" : "var(--card)"};${d === next && !ME.dailyIn ? "box-shadow:inset 0 0 0 2px var(--gold)" : ""}">
-    <div style="font-size:11px" class="hint">день ${d}</div><b style="font-size:13px">${short(pay(d))}</b>${dailyKey(d) ? `<div class="dkey">${ic("lock")}</div>` : ""}</div>`).join("");
-  openSheet(`<div style="text-align:center;padding-top:10px"><div style="font-size:72px">⭐</div><h2 style="margin:4px 0">Ежедневный бонус</h2>
-    <p class="hint" style="margin:0 0 ${ME.streakBest > 1 ? "6" : "14"}px">Заходи каждый день — награда растёт до 7 дня. На 2, 3, 5 и 7 день — <b>ключ от кейса</b>, дальше ключ «Роскошь» каждые 7 дней${ME.promo ? " · сегодня x2" : ""}</p>
-    ${ME.streakBest > 1 ? `<div class="hint" style="margin:0 0 14px;font-size:12px">Рекорд серии: 🔥 ${ME.streakBest} дн.</div>` : ""}</div>
-    <div id="shop-box"></div>
-    <div class="sec-t">${ic("calendar")}Бонус дня</div>
-    <div style="display:flex;gap:4px">${days}</div>
-    <div class="btns" style="margin-top:16px">${ME.dailyIn ? `<button class="btn ghost" disabled>Через ${clock(ME.dailyIn)}</button>`
-      : `<button class="btn gold" data-act="claim-daily">Забрать ⭐ ${pay(next)}${dailyKey(next) ? " + ключ" : ""}</button>`}</div>
-    ${ME.streakMs ? `<div class="box" style="margin-top:12px;display:flex;align-items:center;gap:10px">
-      <span class="pic y">${ic("trophy")}</span>
-      <div class="grow"><div class="t">Награда за ${ME.streakMs.day} дней подряд</div>
-      <div class="s">+${fmt(ME.streakMs.stars)} ⭐ + ключ «${ME.streakMs.key}» · осталось ${Math.max(0, ME.streakMs.day - ME.streak)} дн.</div></div></div>` : ""}
-    <div class="sec-t">Ещё звёзды</div>
-    <div class="box">
-      <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">${ME.ref && ME.ref.on ? `до +${fmt((ME.ref.join || 0) + ME.ref.l1[1] + ME.ref.l2[1])} ⭐ за друга + топ недели` : "играйте вместе"}</div></div><span class="pill">${ME.refs}</span></div>
-      ${ME.franchise ? `<div class="row tap" data-act="franchise-info"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.cutTotal ? `Пассивный доход: получено ${fmt(ME.franchise.cutTotal)} ⭐` : ME.franchise.create || ME.franchise.reward ? `Создай за 1 тап · до +${fmt((ME.franchise.create || 0) + (ME.franchise.reward || 0))} ⭐` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
-      <div class="row tap" data-act="case" data-id="free"><span class="pic g">${ic("gift")}</span><div class="grow"><div class="t">Бесплатный кейс</div><div class="s">${ME.freeIn ? "через " + clock(ME.freeIn) : "готов"}</div></div></div>
-      <div class="row"><span class="pic y">${ic("medal")}</span><div class="grow"><div class="t">Уровни</div><div class="s">За каждый новый уровень — бонус звёздами</div></div></div>
+  const days = [1, 2, 3, 4, 5, 6, 7].map(i => w0 + i).map(d => {
+    const done = d <= ME.streak && ME.dailyIn, now = d === next && !ME.dailyIn;
+    return `<div class="dl-d${done ? " done" : ""}${now ? " now" : ""}"><span>день ${d}</span><b>${short(pay(d))}</b>${dailyKey(d) ? `<i>${ic("lock")}</i>` : done ? `<i>${ic("check")}</i>` : ""}</div>`;
+  }).join("");
+  const t = tab || (ME.dailyIn ? "shop" : "daily");
+  const el = openSheet(`<div class="st-hero">
+      <div class="st-hero-ic">${STAR_SVG}<i></i></div>
+      <h2>Звёзды</h2>
+      <div class="seg st-tabs"><button data-act="st-tab" data-v="shop">${ic("tgplane")}Пополнить</button>
+        <button data-act="st-tab" data-v="daily">${ic("calendar")}Бонус дня${ME.dailyIn ? "" : `<i class="st-dot"></i>`}</button></div>
     </div>
-    <div class="disc">${esc(ME.disclaimer)}</div>`);
+    <div class="st-pane" data-p="shop"><div id="shop-box">${emptyHTML("hourglass", "Загружаем магазин…")}</div></div>
+    <div class="st-pane" data-p="daily">
+      <div class="dl-hero">
+        <div class="dl-h-t"><span>${ME.dailyIn ? "Сегодня уже забрал" : `День ${next} серии`}</span>
+          <b>${ME.dailyIn ? `Следующий через ${clock(ME.dailyIn)}` : `⭐ ${fmt(pay(next))}${dailyKey(next) ? " + ключ" : ""}`}</b>
+          <small>Заходи каждый день — награда растёт до 7 дня. На 2, 3, 5 и 7 день — ключ от кейса, дальше ключ «Роскошь» каждые 7 дней${ME.promo ? " · сегодня ×2" : ""}</small></div>
+        ${ME.streakBest > 1 ? `<div class="dl-best">${ic("flame")}Рекорд серии: ${ME.streakBest} дн.</div>` : ""}
+      </div>
+      <div class="dl-days">${days}</div>
+      <div class="btns" style="margin-top:12px">${ME.dailyIn ? `<button class="btn ghost" disabled>${ic("hourglass")}Через ${clock(ME.dailyIn)}</button>`
+        : `<button class="btn gold" data-act="claim-daily">Забрать ⭐ ${fmt(pay(next))}${dailyKey(next) ? " + ключ" : ""}</button>`}</div>
+      ${ME.streakMs ? `<div class="box dl-ms"><span class="pic y">${ic("trophy")}</span>
+        <div class="grow"><div class="t">Награда за ${ME.streakMs.day} дней подряд</div>
+        <div class="s">+${fmt(ME.streakMs.stars)} ⭐ + ключ «${ME.streakMs.key}» · осталось ${Math.max(0, ME.streakMs.day - ME.streak)} дн.</div></div></div>` : ""}
+      <div class="sec-t">Ещё звёзды</div>
+      <div class="box">
+        <div class="row tap" data-act="invite"><span class="pic b">${ic("userPlus")}</span><div class="grow"><div class="t">Пригласи друга</div><div class="s">${ME.ref && ME.ref.on ? `до +${fmt((ME.ref.join || 0) + ME.ref.l1[1] + ME.ref.l2[1])} ⭐ за друга + топ недели` : "играйте вместе"}</div></div><span class="pill">${ME.refs}</span></div>
+        ${ME.franchise ? `<div class="row tap" data-act="franchise-info"><span class="pic b">${ic("rocket")}</span><div class="grow"><div class="t">Свой бот с этой игрой</div><div class="s">${ME.franchise.cutTotal ? `Пассивный доход: получено ${fmt(ME.franchise.cutTotal)} ⭐` : ME.franchise.create || ME.franchise.reward ? `Создай за 1 тап · до +${fmt((ME.franchise.create || 0) + (ME.franchise.reward || 0))} ⭐` : "Создай за 1 тап — без @BotFather"}</div></div></div>` : ""}
+        <div class="row tap" data-act="case" data-id="free"><span class="pic g">${ic("gift")}</span><div class="grow"><div class="t">Бесплатный кейс</div><div class="s">${ME.freeIn ? "через " + clock(ME.freeIn) : "готов"}</div></div></div>
+        <div class="row"><span class="pic y">${ic("medal")}</span><div class="grow"><div class="t">Уровни</div><div class="s">За каждый новый уровень — бонус звёздами</div></div></div>
+      </div>
+    </div>
+    <div class="disc">${esc(ME.disclaimer)}</div>`, "st-s");
+  stTab(el, t);
+}
+// переключение «Пополнить / Бонус дня»; без магазина (продажа выключена) — только бонус
+function stTab(el, t) {
+  if (!el) return;
+  if (el.classList.contains("no-shop")) t = "daily";
+  el.dataset.tab = t;
+  el.querySelectorAll(".st-tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === t));
 }
 
 // краш — в games.js
@@ -830,7 +850,8 @@ const ACT = {
   close: () => closeSheet(),
   me: () => openProfile(ME.id),
   profile: el => openProfile(+el.dataset.id),
-  daily: () => openDaily(),
+  daily: (el, e) => openDaily(e && e.target && e.target.closest && e.target.closest(".plus") ? "shop" : undefined),   // «+» на балансе — сразу пополнение
+  "st-tab": el => { H.sel(); stTab(el.closest(".sheet"), el.dataset.v); },
   "claim-daily": async () => {
     const r = await post("daily"); H.ok();
     if (r.milestone) { toast(`🏆 Веха ${r.milestone.day} дней подряд! +⭐ ${fmt(r.milestone.stars)} + ключ «${r.milestone.key}»`, "ok"); burst(innerWidth / 2, innerHeight / 3, ["#ffd76a", "#ff6fb5", "#7cc2ff", "#fff"], 160); }
