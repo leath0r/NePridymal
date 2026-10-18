@@ -216,10 +216,15 @@ BROADCAST = {"running": False, "sent": 0, "failed": 0, "total": 0}
 
 async def _broadcast(ids, text):
     kb = {"inline_keyboard": [[{"text": "Открыть", "web_app": {"url": APP_URL}}]]}
+    from app import notif_card, tg_photo
+    img = await asyncio.get_running_loop().run_in_executor(None, notif_card, text)   # праздник/начисление → рассылка карточкой
     try:
         for uid in ids:
             try:
-                r = await tg_call("sendMessage", _token=__import__("franchise").token_for(uid), chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
+                tok = __import__("franchise").token_for(uid)
+                r = await tg_photo(tok, uid, img, text, kb) if img else {}
+                if not r.get("ok"):
+                    r = await tg_call("sendMessage", _token=tok, chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
                 BROADCAST["sent" if r.get("ok") else "failed"] += 1
             except Exception:
                 BROADCAST["failed"] += 1

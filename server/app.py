@@ -420,6 +420,26 @@ def bot_name():
     return franchise.username(b) if b else franchise.face_name()   # «лицо» игры назначается в админке
 
 
+def notif_card(text):
+    """JPEG-карточка к уведомлению или None. Выключается в kv: notif_cards = off. Подпись к фото — до 1024 символов."""
+    if kv_get("notif_cards", "on") == "off" or len(text) > 1000:
+        return None
+    import notifimg
+    return notifimg.card(text)
+
+
+async def tg_photo(tok, chat_id, img, caption, kb):
+    """sendPhoto с картинкой из памяти (multipart)."""
+    try:
+        r = await http.post(f"https://api.telegram.org/bot{tok or TOKEN}/sendPhoto", timeout=70,
+                            data={"chat_id": str(chat_id), "caption": caption, "parse_mode": "HTML", "reply_markup": json.dumps(kb)},
+                            files={"photo": ("card.jpg", img, "image/jpeg")})
+        return r.json()
+    except Exception as e:
+        print("photo error", chat_id, e, flush=True)
+        return {}
+
+
 def notify(uid, text, url=None):
     """Сообщение игроку от бота (из любого потока, без ожидания) + копия во «входящие» (колокольчик в игре)."""
     try:
@@ -434,7 +454,13 @@ def notify(uid, text, url=None):
     async def send():
         try:
             tok = franchise.token_for(uid)
-            r = await tg_call("sendMessage", _token=tok, chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
+            # красивая карточка к сообщению (notifimg.py); не распознали тип / выключено / длинный текст — обычное сообщение
+            img = await asyncio.get_running_loop().run_in_executor(None, notif_card, text)
+            r = await tg_photo(tok, uid, img, text, kb) if img else {}
+            if img and not r.get("ok") and tok != TOKEN:
+                r = await tg_photo(TOKEN, uid, img, text, kb)
+            if not r.get("ok"):
+                r = await tg_call("sendMessage", _token=tok, chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
             if not r.get("ok") and tok != TOKEN:   # бот-франшиза не смог (игрок его заблокировал и т. п.) — пробуем главным
                 r = await tg_call("sendMessage", _token=TOKEN, chat_id=uid, text=text, parse_mode="HTML", reply_markup=kb)
             if not r.get("ok"):
