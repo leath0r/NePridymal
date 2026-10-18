@@ -278,12 +278,12 @@ except sqlite3.OperationalError:
     pass
 CLAN_TAX = {}   # uid → (id клана, ставка налога) — заполняет clans.py
 TAXABLE = {"crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
-           "chicken", "avia", "scratch"}   # игры на звёзды; кейсы, апгрейды, битвы и т. п. дают подарки — их не облагаем
+           "chicken", "avia", "scratch", "claw"}   # игры на звёзды; кейсы, апгрейды, битвы и т. п. дают подарки — их не облагаем
 
 
 BIGWIN_MIN = conf("economy.bigwin_min", 3000)   # выигрыш от этой суммы попадает в живую ленту крупных выигрышей (live.py)
 BIG_KINDS = {"crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
-             "chicken", "avia", "scratch", "battle", "starfall", "upgrade", "jroul", "cards", "craft"}
+             "chicken", "avia", "scratch", "battle", "starfall", "upgrade", "jroul", "cards", "craft", "claw"}
 db.executescript("""
 CREATE TABLE IF NOT EXISTS bigwins(id INTEGER PRIMARY KEY, user INTEGER, kind TEXT, amount INTEGER, ts INTEGER);
 """)
@@ -2123,7 +2123,7 @@ def week_start():
     return t - t % 86400 - time.gmtime(t).tm_wday * 86400
 
 
-GAME_KINDS = "('case','crash','upgrade','mines','wheel','duel','dice','limbo','plinko','tower','slots','blackjack','cards','dogs','roulette','jroul','hilo','craft','chicken','starfall','avia','battle','scratch')"
+GAME_KINDS = "('case','crash','upgrade','mines','wheel','duel','dice','limbo','plinko','tower','slots','blackjack','cards','dogs','roulette','jroul','hilo','craft','chicken','starfall','avia','battle','scratch','claw')"
 
 
 def pnl(uids, since=0):
@@ -2350,6 +2350,7 @@ import gates  # noqa: E402,F401 — админ закрывает/скрывае
 import actlog  # noqa: E402,F401 — подробный журнал действий игроков (logs.db)
 import retain  # noqa: E402,F401 — кэшбэк недели и «возвращайся»
 import odds  # noqa: E402,F401 — админка «Шансы»: возврат по играм на лету
+import claw  # noqa: E402,F401 — «Кран»: автомат с клешнёй (после admin — у него вкладка в админке)
 import pay  # noqa: E402,F401 — переводы звёзд между игроками по QR («Кошелёк»)
 import dbtools  # noqa: E402,F401 — админка: экспорт/импорт базы (только владелец)
 import eggs  # noqa: E402,F401 — пасхалки (без звёзд, только достижение)

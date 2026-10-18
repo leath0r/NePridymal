@@ -77,7 +77,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["wipe", "Вайп"], ["polls", "Опросы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["claw", "Кран"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["wipe", "Вайп"], ["polls", "Опросы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
