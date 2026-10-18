@@ -304,7 +304,11 @@ Object.assign(ACT, {
 
 // кнопка в шапке и переход из бота (?pay=<id>&amt=<сумма>)
 (() => {
-  const b = $("#pay-btn"); if (b) b.innerHTML = ic("xfer");
+  const b = $("#pay-btn"); if (b) { b.innerHTML = `${ic("wallet")}<span>Кошелёк</span>`; b.classList.add("pay-pill"); }
+  // надпись «Кошелёк» прячется, если шапка не влезает (узкий экран, кнопка админа)
+  const fit = () => { const h = $("header"); if (!b || !h) return; b.classList.remove("tight"); if (h.scrollWidth > h.clientWidth + 1) b.classList.add("tight"); };
+  addEventListener("resize", fit); setTimeout(fit, 0); setTimeout(fit, 1500); setTimeout(fit, 4000);
+  const _ssPay = setStars; setStars = v => { _ssPay(v); requestAnimationFrame(fit); };   // баланс стал длиннее — перепроверить
   const p = new URLSearchParams(location.search);
   if (p.get("pay")) {
     const go = () => ME ? openPaySend(+p.get("pay"), +(p.get("amt") || 0)) : setTimeout(go, 300);

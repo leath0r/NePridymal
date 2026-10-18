@@ -261,3 +261,11 @@ html.lite .incbar::after{display:none}
 /* плашка банка в «Играх»: на узком экране «сегодня» прячется, сумма банка помещается целиком */
 .bankbar em i{font-style:normal}
 @media (max-width:400px){.bankbar em i{display:none}.bankbar{gap:10px;padding:12px}}
+
+/* шапка: заголовок вкладки убран (вкладка подсвечена в меню снизу) — h1 остаётся пустой распоркой между кнопками */
+header h1{font-size:0!important;flex:1 1 0;min-width:0;padding:0;margin:0}
+header{gap:6px}
+header .fr-btn:not(.pay-pill),header .bell-btn{width:34px;height:34px}
+header .fr-btn .ic{width:19px;height:19px}
+header .me-btn .ava{width:36px!important;height:36px!important;--s:36px}
+@media (max-width:350px){header{gap:4px;padding-left:10px;padding-right:12px}header .fr-btn:not(.pay-pill),header .bell-btn{width:31px;height:31px}}
