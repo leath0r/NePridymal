@@ -61,7 +61,7 @@ async function ccPull(el, first) {
     const box = el.querySelector("#cc-list"); if (!box) return;
     if (first || r.msgs.length) {
       const near = first || box.scrollHeight - box.scrollTop - box.clientHeight < 90;
-      if (first) box.innerHTML = r.msgs.length ? "" : `<div class="cc-empty">${ic("chat")}<b>Тут пока тихо</b><span>Напиши первым — увидит весь клан</span></div>`;
+      if (first) box.innerHTML = r.msgs.length ? "" : `<div class="empty" data-i="users"><span class="eic">${ic("chat")}</span><span class="etx"><b>Тут пока тихо</b>Напиши первым — увидит весь клан</span></div>`;
       else if (r.msgs.length) box.querySelector(".cc-empty")?.remove();
       box.insertAdjacentHTML("beforeend", r.msgs.map(m => ccMsg(m, st)).join(""));
       if (r.msgs.length) st.last = r.msgs[r.msgs.length - 1].id;

@@ -96,6 +96,7 @@ function fillBK(el) {
         <div><span>14 дней</span><b class="${d14 >= 0 ? "up" : "dn"}">${sgn(d14)}</b></div>
         <div><span>С открытия</span><b class="${since >= 0 ? "up" : "dn"}">${sgn(since)}</b></div>
       </div>
+      <button class="bkh-vrow" data-act="bk-vault"><span class="bkh-vi">${ic("lock")}</span><span class="bkh-vt"><b>Хранилище банка</b><small>${(BK.vault || {}).count ? `${fmt(BK.vault.count)} ${plural(BK.vault.count, ["подарок", "подарка", "подарков"])} на ⭐ ${short(BK.vault.value)}` : "проигранные в апгрейде подарки"}</small></span>${ic("chev")}</button>
       <button class="bkh-addr" data-act="bk-addr"><span>Адрес банка</span><b>${payAddrFmt(BK.addr)}</b>${ic("copy")}</button>
       <button class="bkh-gift" data-act="bk-gift">${ic("heart")}Перевести в банк${BK.gifted ? `<em>ты уже подарил ⭐ ${short(BK.gifted)}</em>` : ""}</button>
     </div>
@@ -154,6 +155,33 @@ function bankTicker(d) {
 }
 setInterval(() => { if (typeof TAB !== "undefined" && TAB === "games" && !bgOff() && document.querySelector("#v-games .bankbar")) loadBank(); }, 5000);
 
+// хранилище банка: подарки, проигранные в апгрейде; через 48 ч перерабатываются (ценность банк уже получил)
+const vlLeft = s => s >= 3600 ? `${Math.floor(s / 3600)} ч ${Math.floor(s % 3600 / 60)} мин` : `${Math.max(1, Math.floor(s / 60))} мин`;
+async function openVault() {
+  H.imp("light");
+  const el = openSheet(`<div id="vl-body">${emptyHTML("hourglass", "Открываем хранилище…")}</div>`, "vl-s");
+  let d; try { d = await api("bank/vault"); } catch (e) { return; }
+  if (!el.isConnected) return;
+  const cells = d.items.map(x => {
+    const k = reg({ g: x.gift, mine: false });
+    const p = Math.max(0, Math.min(100, x.left / d.ttl * 100));
+    return `<div class="vl-it${x.mine ? " mine" : ""}" data-act="gift" data-k="${k}">
+      <div class="vl-g">${giftHTML(x.gift, { lite: true })}${x.mine ? `<span class="vl-mine">твой</span>` : ""}</div>
+      <b>⭐ ${short(x.value)}</b><span class="vl-from">${esc(x.from.name)}</span>
+      <div class="vl-bar"><i style="width:${p}%"></i></div><span class="vl-left">${ic("refresh")}${vlLeft(x.left)}</span></div>`;
+  }).join("");
+  el.querySelector("#vl-body").innerHTML = `
+    <div class="vlh">
+      <div class="vlh-door"><i></i><i></i><i></i>${ic("lock")}</div>
+      <div class="vlh-t"><span>Хранилище банка</span><b>${fmt(d.count)} ${plural(d.count, ["подарок", "подарка", "подарков"])}</b><em>⭐ ${fmt(d.value)}</em></div>
+    </div>
+    <p class="vl-how">Сюда попадают подарки, проигранные в апгрейде. Через ${Math.round(d.ttl / 3600)} часов банк перерабатывает их в звёзды.
+      ${d.recycled.n ? `За неделю переработано ${fmt(d.recycled.n)} ${plural(d.recycled.n, ["подарок", "подарка", "подарков"])} на ⭐ ${short(d.recycled.value)}.` : ""}</p>
+    ${d.items.length ? `<div class="vl-grid">${cells}</div>` : emptyHTML("lock", "Хранилище пустое — апгрейды пока все удачные")}
+    <div class="disc">${esc(ME.disclaimer)}</div>`;
+  starify(el);
+}
+
 // подарок банку: просто так, без комиссии и без награды — банк растёт, акции дорожают
 function openBankGift() {
   H.imp("light");
@@ -171,6 +199,7 @@ function openBankGift() {
 Object.assign(ACT, {
   bank: () => openBank(),
   "bk-addr": () => payCopy(BK.addr, "Адрес банка скопирован"),
+  "bk-vault": () => openVault(),
   "bk-gift": () => openBankGift(),
   "bk-gift-go": async el => {
     const amount = betVal("bkg-amt");

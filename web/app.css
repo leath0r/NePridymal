@@ -499,7 +499,7 @@ html{background:var(--bg)}body{background:transparent}
 .pr-done{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:14px;border-radius:16px;background:color-mix(in srgb,var(--green) 12%,var(--card));margin-bottom:12px}
 .pr-done>.ic{width:30px;height:30px;color:var(--green)}.pr-done span{font-size:12px;color:var(--hint);word-break:break-all}
 /* распаковка */
-.pc{text-align:center;padding-top:10px}
+.pcw{text-align:center;padding-top:10px}
 .pc-from{display:inline-flex;align-items:center;gap:10px;text-align:left}.pc-from span{display:block;font-size:12px;color:var(--hint)}.pc-from b{font-size:18px}
 .pc-text{margin:12px auto 0;max-width:320px;padding:12px 14px;border-radius:16px;background:linear-gradient(160deg,color-mix(in srgb,var(--pink) 16%,var(--card)),var(--card));font-style:italic}
 .pc-stage{margin-top:24px;min-height:300px;display:grid;place-items:center}

@@ -1257,6 +1257,7 @@ MAX_BET = conf("games.max_bet", 1_000_000)
 
 
 BET_CAP = None   # bank.py: в кризис банка — потолок ставки
+VAULT_PUT = None  # bank.py: проигранные в апгрейде подарки → хранилище банка
 
 
 def check_bet(uid, amount, lo=10, hi=None):
@@ -1332,6 +1333,8 @@ async def upgrade(req: Request, uid=Depends(auth)):
             err("цель должна быть дороже ставки хотя бы в 1.2 раза")
         chance = min(UPG_MAX, sv / tv * edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93))
         win = random.random() < chance
+        if not win and VAULT_PUT:   # проигранные подарки — в хранилище банка (bank.py), через 48 ч перерабатываются
+            VAULT_PUT(uid, gifts)
         for g in gids:
             db.execute("DELETE FROM gifts WHERE id=?", (g,))
             unpin(uid, g)

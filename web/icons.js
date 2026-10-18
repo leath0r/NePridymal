@@ -60,5 +60,5 @@ const ic = (name, cls = "") => `<svg class="ic${cls ? " " + cls : ""}" viewBox="
 // «загрузка» — мерцающие заготовки карточек (скелетон), остальные пустые состояния — иконка с текстом
 const emptyHTML = (icon, text) => icon === "hourglass"
   ? `<div class="skel" aria-label="${text}"><i class="sk-h"></i><i></i><i></i><i class="sk-s"></i></div>`
-  : `<div class="empty"><span class="eic">${ic(icon)}</span>${text}</div>`;
+  : `<div class="empty" data-i="${icon}"><span class="eic">${ic(icon)}</span><span class="etx">${text}</span></div>`;
 function paintIcons(root = document) { root.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = ic(el.dataset.ic); el.removeAttribute("data-ic"); }); }

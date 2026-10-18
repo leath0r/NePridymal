@@ -57,10 +57,10 @@
 .ptitle .ic{width:14px;height:14px}
 .ptitle.add{color:var(--hint);background:transparent;border-style:dashed;border-color:color-mix(in srgb,var(--hint) 40%,transparent);font:inherit;font-size:12px}
 .tt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.tt{position:relative;display:flex;flex-direction:column;gap:3px;padding:12px;border-radius:14px;border:1px solid transparent;background:var(--card);color:inherit;font:inherit;text-align:left;min-height:68px}
-.tt b{font-size:13px}.tt span{font-size:11px;color:var(--hint)}
-.tt:not(.got){opacity:.55}
-.tt>i{position:absolute;top:10px;right:10px}.tt>i .ic{width:14px;height:14px}
-.tt.got{border-color:color-mix(in srgb,var(--gold) 25%,transparent)}
-.tt.on{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 14%,var(--card))}
-.tt.on span{color:var(--gold)}
+.tt-grid .tt{position:relative;display:flex;flex-direction:column;gap:3px;padding:12px;border-radius:14px;border:1px solid transparent;background:var(--card);color:inherit;font:inherit;text-align:left;min-height:68px}
+.tt-grid .tt b{font-size:13px}.tt-grid .tt span{font-size:11px;color:var(--hint)}
+.tt-grid .tt:not(.got){opacity:.55}
+.tt-grid .tt>i{position:absolute;top:10px;right:10px}.tt-grid .tt>i .ic{width:14px;height:14px}
+.tt-grid .tt.got{border-color:color-mix(in srgb,var(--gold) 25%,transparent)}
+.tt-grid .tt.on{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 14%,var(--card))}
+.tt-grid .tt.on span{color:var(--gold)}

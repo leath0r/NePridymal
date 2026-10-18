@@ -84,8 +84,8 @@ function ckUI() {
   $("#ck-bet").style.display = on ? "none" : "";
   $("#ck-mode").querySelectorAll("button").forEach(x => x.disabled = on);
   if (on) {
-    b.innerHTML = `<button class="btn cta gold" data-act="ck-step" ${ckBusy ? "disabled" : ""}>Вперёд · x${CK.next ? CK.next.toFixed(2).replace(".", ",") : "—"}</button>
-      <button class="btn cta green" data-act="ck-cash" ${!CK.step || ckBusy ? "disabled" : ""}>Забрать ⭐ ${fmt(CK.bet * CK.mult)}</button>`;
+    b.innerHTML = `<button class="btn cta gold ar-two" data-act="ck-step" ${ckBusy ? "disabled" : ""}><b>Вперёд</b><small>до x${CK.next ? CK.next.toFixed(2).replace(".", ",") : "—"}</small></button>
+      <button class="btn cta green ar-two" data-act="ck-cash" ${!CK.step || ckBusy ? "disabled" : ""}><b>Забрать</b><small>⭐ ${fmt(CK.bet * CK.mult)}</small></button>`;
     $("#ck-res").className = "wres"; $("#ck-res").textContent = CK.step ? `x${CK.mult.toFixed(2).replace(".", ",")} · ставка ⭐ ${fmt(CK.bet)}` : "Курица на старте — вперёд!";
   } else b.innerHTML = `<button class="btn cta gold" data-act="ck-start">Начать</button>`;
 }

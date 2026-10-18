@@ -104,8 +104,8 @@ function pmUI() {
   $("#pm-bet").style.display = on ? "none" : "";
   $("#pm-mode").querySelectorAll("button").forEach(x => x.disabled = on);
   b.innerHTML = on
-    ? `<button class="btn cta gold" data-act="pm-step" ${pmBusy ? "disabled" : ""}>${ic("wind")} Качнуть · ${PMP.next ? arX(PMP.next) : "—"}</button>
-       <button class="btn cta green" data-act="pm-cash" ${!PMP.step || pmBusy ? "disabled" : ""}>Забрать ⭐ ${short(PMP.bet * PMP.mult)}</button>`
+    ? `<button class="btn cta gold ar-two" data-act="pm-step" ${pmBusy ? "disabled" : ""}><b>${ic("wind")}Качнуть</b><small>до ${PMP.next ? arX(PMP.next) : "—"}</small></button>
+       <button class="btn cta green ar-two" data-act="pm-cash" ${!PMP.step || pmBusy ? "disabled" : ""}><b>Забрать</b><small>⭐ ${short(PMP.bet * PMP.mult)}</small></button>`
     : `<button class="btn cta gold" data-act="pm-start" ${pmBusy ? "disabled" : ""}>Начать</button>`;
   starify(b);
 }

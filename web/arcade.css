@@ -68,3 +68,8 @@
 .ar-legend span b{margin-left:auto;color:var(--text);font-weight:900;font-variant-numeric:tabular-nums}
 .ar-legend span.hit{background:color-mix(in srgb,var(--c) 22%,var(--card));color:var(--text);box-shadow:inset 0 0 0 1.5px var(--c)}
 @media (prefers-reduced-motion:reduce){.ar-stage.shake,.ar-x.bump{animation:none}}
+/* двухстрочная кнопка: действие сверху, сумма/множитель снизу — влезает в любую ширину */
+.btn.cta.ar-two{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:10px 6px;line-height:1.1;min-width:0}
+.btn.cta.ar-two b{display:inline-flex;align-items:center;gap:5px;font-size:16px;white-space:nowrap}
+.btn.cta.ar-two b .ic{width:17px;height:17px}
+.btn.cta.ar-two small{font-size:12.5px;font-weight:800;opacity:.8;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}

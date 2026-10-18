@@ -1,5 +1,6 @@
 """Банк казино: история прибыли по дням, акции казино с дивидендами, рекордсмены против банка."""
 import asyncio
+import json
 import time
 
 from fastapi import Depends, Request
@@ -14,6 +15,8 @@ CREATE TABLE IF NOT EXISTS div_days(day INTEGER PRIMARY KEY, profit INTEGER, per
 CREATE TABLE IF NOT EXISTS clan_shares(clan INTEGER PRIMARY KEY, n INTEGER DEFAULT 0, cost INTEGER DEFAULT 0, ts INTEGER DEFAULT 0, div INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS bank_saviors(user INTEGER PRIMARY KEY, amount INTEGER DEFAULT 0, ts INTEGER);
 CREATE TABLE IF NOT EXISTS crisis_log(id INTEGER PRIMARY KEY, start INTEGER, end INTEGER DEFAULT 0, low INTEGER);
+CREATE TABLE IF NOT EXISTS bank_vault(id INTEGER PRIMARY KEY, user INTEGER, gift TEXT, value INTEGER, ts INTEGER);
+CREATE TABLE IF NOT EXISTS bank_recycled(day INTEGER PRIMARY KEY, n INTEGER DEFAULT 0, value INTEGER DEFAULT 0);
 """)
 SUPPLY = 100_000        # всего акций: цена = банк / SUPPLY
 MAX_PER_USER = 2_000    # не больше 2% казино в одни руки
@@ -69,6 +72,48 @@ def _crisis_watch():
             db.execute("UPDATE crisis_log SET end=? WHERE end=0", (now(),))
         for o in _owners():
             notify(o, f"✅ Банк снова выше ⭐ {CRISIS_AT:,} — кризис закончился.".replace(",", " "))
+
+
+# ---------------- хранилище банка: подарки, проигранные в апгрейде. Через VAULT_TTL перерабатываются ----------------
+# Ценность подарка банк получил ещё в момент проигрыша (событие upgrade с минусом) — переработка только убирает подарок из витрины.
+VAULT_TTL = 48 * 3600
+
+
+def vault_put(uid, gifts):
+    """Внутри tx апгрейда: копия подарка (как его видел игрок) — в хранилище."""
+    for g in gifts:
+        db.execute("INSERT INTO bank_vault(user,gift,value,ts) VALUES(?,?,?,?)", (uid, json.dumps(A.gift_out(g)), g["value"], now()))
+
+
+A.VAULT_PUT = vault_put
+
+
+def _vault_recycle():
+    """Раз в минуту: подарки старше 48 ч перерабатываются (статистика по дням — bank_recycled)."""
+    old = q1("SELECT COUNT(*) n, COALESCE(SUM(value),0) v FROM bank_vault WHERE ts<=?", now() - VAULT_TTL)
+    if not old["n"]:
+        return
+    with tx():
+        db.execute("INSERT INTO bank_recycled(day,n,value) VALUES(?,?,?) ON CONFLICT(day) DO UPDATE SET n=n+excluded.n, value=value+excluded.value",
+                   (day_start(), old["n"], old["v"]))
+        db.execute("DELETE FROM bank_vault WHERE ts<=?", (now() - VAULT_TTL,))
+
+
+@app.get(R + "/bank/vault")
+def bank_vault(uid=Depends(auth)):
+    t = now()
+    rows = q("SELECT * FROM bank_vault ORDER BY value DESC LIMIT 200")
+    names = {}
+    out = []
+    for r in rows:
+        if r["user"] not in names:
+            u = q1("SELECT * FROM users WHERE id=?", r["user"])
+            names[r["user"]] = user_brief(u) if u else {"id": r["user"], "name": "Игрок"}
+        g = json.loads(r["gift"])
+        out.append({"id": r["id"], "gift": g, "value": r["value"], "from": names[r["user"]], "left": max(0, r["ts"] + VAULT_TTL - t), "mine": r["user"] == uid})
+    tot = q1("SELECT COUNT(*) n, COALESCE(SUM(value),0) v FROM bank_vault")
+    rec = q1("SELECT COALESCE(SUM(n),0) n, COALESCE(SUM(value),0) v FROM bank_recycled WHERE day>=?", day_start() - 6 * 86400)
+    return {"items": out, "count": tot["n"], "value": tot["v"], "ttl": VAULT_TTL, "recycled": {"n": rec["n"], "value": rec["v"]}}
 
 
 def held_total():
@@ -161,6 +206,10 @@ async def div_loop():
         except Exception as e:
             print("div:", e, flush=True)
         try:
+            await asyncio.get_running_loop().run_in_executor(None, _vault_recycle)
+        except Exception as e:
+            print("vault:", e, flush=True)
+        try:
             await asyncio.get_running_loop().run_in_executor(None, _crisis_watch)
         except Exception as e:
             print("crisis:", e, flush=True)
@@ -222,6 +271,7 @@ def bank_info(uid=Depends(auth)):
                  "est": int(DIV_SHARE * max(0, today) / max(held, DIV_FLOOR) * n) if n else 0},
         "lastDiv": {"perShare": round(last["per_share"], 2), "total": last["total"], "profit": last["profit"]} if last else None,
         "endsIn": d + 86400 - now(), "robbers": top("DESC"), "sponsors": top("ASC"), "holders": holders,
+        "vault": {"count": q1("SELECT COUNT(*) n FROM bank_vault")["n"], "value": q1("SELECT COALESCE(SUM(value),0) v FROM bank_vault")["v"]},
         "addr": bank_addr(), "donors": donors, "gifted": gifted, "clanHolders": clan_holders, "clanMax": CLAN_MAX,
         "crisis": {"on": crisis(), "at": CRISIS_AT, "maxBet": CRISIS_MAX_BET, "since": crisis_since(), "saviorMin": SAVIOR_MIN,
                    "saviors": saviors, "mine": sv["amount"] if sv else 0, "need": max(0, CRISIS_AT - bank_value())},

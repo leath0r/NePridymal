@@ -35,7 +35,7 @@ async function prBody() {
 // распаковка подарка по ссылке
 async function openPresentClaim(code) {
   let info; try { info = await api("giftlink/" + code); } catch (e) { return; }
-  const el = openSheet(`<div class="pc">
+  const el = openSheet(`<div class="pcw">
       <div class="pc-from">${info.sender ? avaHTML(info.sender, 44) : ""}<div><span>Подарок от</span><b>${esc(info.sender ? info.sender.name : "друга")}</b></div></div>
       ${info.text ? `<div class="pc-text">«${esc(info.text)}»</div>` : ""}
       <div class="pc-stage" id="pc-st">${info.status === "open" && !info.mine

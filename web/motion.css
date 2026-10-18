@@ -1,0 +1,54 @@
+/* ================= движение и детали: переход вкладок, пустые экраны, шрифт цифр (подключается последним) ================= */
+
+/* --- переход между вкладками: новая вкладка въезжает со стороны нажатой кнопки, старая уходит в другую --- */
+header{view-transition-name:np-header}
+nav.tabs{view-transition-name:np-tabbar}
+/* шапка и меню стоят на месте: показываем «живой» новый кадр без перекрёстного затухания (полоска под вкладкой едет сама) */
+::view-transition-old(np-header),::view-transition-old(np-tabbar){display:none}
+::view-transition-new(np-header),::view-transition-new(np-tabbar){animation:none}
+::view-transition-group(np-header),::view-transition-group(np-tabbar){animation:none}
+html.vt-tab::view-transition-old(root){animation:np-vout .2s cubic-bezier(.4,0,1,1) both}
+html.vt-tab::view-transition-new(root){animation:np-vin .34s cubic-bezier(.2,.8,.2,1) both}
+@keyframes np-vout{to{opacity:0;transform:translateX(calc(var(--vdir,1) * -28px)) scale(.985)}}
+@keyframes np-vin{from{opacity:0;transform:translateX(calc(var(--vdir,1) * 40px)) scale(.985)}}
+/* размытие под шапкой и меню не переживает снимок перехода (мелькает цветной прямоугольник) — на время перехода фон сплошной */
+html.vt-tab nav.tabs{backdrop-filter:none;-webkit-backdrop-filter:none;background:color-mix(in srgb,var(--card) 96%,var(--bg))}
+html.vt-tab header{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--bg)}
+/* без View Transitions (старые WebView): та же анимация на самой вкладке */
+.view.v-in{animation:np-vin .34s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion:reduce){html.vt-tab::view-transition-old(root),html.vt-tab::view-transition-new(root),.view.v-in{animation:none}}
+
+/* --- пустые экраны: иконка в светящемся «камне» с орбитой и искрами, цвет по смыслу --- */
+.empty{padding:34px 20px 30px}
+.empty .eic{position:relative;width:92px;height:92px;margin:0 auto 14px;border-radius:30px;color:#fff;isolation:isolate;
+  background:radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--ec1) 70%,#fff),var(--ec1) 45%,var(--ec2));
+  box-shadow:0 18px 34px -14px var(--ec2),inset 0 2px 0 rgba(255,255,255,.45),inset 0 -6px 12px rgba(0,0,0,.18);
+  animation:np-efloat 3.2s ease-in-out infinite}
+.empty .eic::before{content:"";position:absolute;inset:-12px;z-index:-1;border-radius:38px;border:1.5px dashed color-mix(in srgb,var(--ec1) 55%,transparent);
+  animation:np-espin 14s linear infinite}
+.empty .eic::after{content:"";position:absolute;inset:-22px;z-index:-2;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,color-mix(in srgb,var(--ec1) 35%,transparent),transparent 65%),
+    radial-gradient(circle at 12% 22%,#fff 0 1.5px,transparent 2.5px),radial-gradient(circle at 88% 30%,#fff 0 1.2px,transparent 2.2px),
+    radial-gradient(circle at 80% 86%,#fff 0 1.5px,transparent 2.5px);animation:np-etw 2.4s ease-in-out infinite alternate}
+.empty .eic .ic{width:40px;height:40px;stroke-width:1.8;filter:drop-shadow(0 2px 4px rgba(0,0,0,.25))}
+.empty .etx b{display:block;margin-bottom:3px;font-size:16px;font-weight:800;color:var(--text)}
+.empty .etx{display:block;max-width:280px;margin:0 auto;font-size:14.5px;line-height:1.45;font-weight:600;color:color-mix(in srgb,var(--hint) 80%,var(--text))}
+.empty{--ec1:#7b6cff;--ec2:#4b2fd0}
+.empty[data-i=gift],.empty[data-i=bag]{--ec1:#ff6fb5;--ec2:#c2185b}
+.empty[data-i=users],.empty[data-i=userPlus],.empty[data-i=userCheck]{--ec1:#4aa8ff;--ec2:#1f5fd6}
+.empty[data-i=lock],.empty[data-i=trophy],.empty[data-i=crown],.empty[data-i=award]{--ec1:#ffc53d;--ec2:#d98200}
+.empty[data-i=coins],.empty[data-i=wallet],.empty[data-i=coin],.empty[data-i=trend]{--ec1:#35d07f;--ec2:#0f8a55}
+.empty[data-i=games],.empty[data-i=rocket],.empty[data-i=target],.empty[data-i=flame]{--ec1:#a77bff;--ec2:#6a2fd6}
+.empty[data-i=swap],.empty[data-i=store],.empty[data-i=tag]{--ec1:#ff9f4a;--ec2:#d1561a}
+.empty[data-i=search],.empty[data-i=send],.empty[data-i=megaphone]{--ec1:#5ad1e6;--ec2:#1b8aa8}
+@keyframes np-efloat{50%{transform:translateY(-6px) rotate(-2deg)}}
+@keyframes np-espin{to{transform:rotate(360deg)}}
+@keyframes np-etw{to{opacity:.55}}
+html.lite .empty .eic,html.lite .empty .eic::before,html.lite .empty .eic::after{animation:none}
+
+/* --- шрифт крупных цифр: Manrope ExtraBold, только цифры и знаки (2 КБ); буквы остаются системными --- */
+@font-face{font-family:"NP Num";src:url("fonts/num.woff2") format("woff2");font-weight:100 900;font-display:swap;
+  unicode-range:U+0020,U+0025,U+002B-002F,U+0030-003A,U+004B,U+004D,U+0078,U+00A0,U+00D7,U+2009,U+2212}
+.bal .num,.ar-x,.dicebig b,.limbo b,.inchero>b,.pf-stats>span b,.vlh-t b,.vlh-t em,.bksh-top b,
+.bks-top b,.bkh-stats b,.dr-ln em,.ar-step b,.ar-banner b,.pmenu em,.cl-prize em,.mk2-hero b,.pr-o-body b,.qb-p>b{
+  font-family:"NP Num",-apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,"Segoe UI",sans-serif;font-feature-settings:"tnum" 1,"lnum" 1}

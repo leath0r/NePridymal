@@ -35,7 +35,7 @@ async function btLoad() {
   };
   box.innerHTML = `
     ${BT.open.length ? `<div class="sec-t">${ic("flame")}Открытые битвы · ${BT.open.length}</div><div class="bt-list">${BT.open.map(card).join("")}</div>`
-      : `<div class="bt-empty">${ic("swap")}<b>Открытых битв нет</b><span>Создай свою — соперник придёт, или позови бота</span></div>`}
+      : `<div class="empty" data-i="swap"><span class="eic">${ic("swap")}</span><span class="etx"><b>Открытых битв нет</b>Создай свою — соперник придёт, или позови бота</span></div>`}
     ${BT.mine.length ? `<div class="sec-t">${ic("clock")}Мои последние</div><div class="box">${BT.mine.map(b => {
       const won = b.result && b.result.winner === ME.id;
       return `<div class="row tap" data-act="bt-open" data-id="${b.id}"><img class="spi" style="width:36px;height:36px;margin:0" src="${A.orig(b.case.cover, 64)}" alt="">
