@@ -20,7 +20,7 @@ function payCopy(a, msg) {
 }
 async function payByAddr(a) {
   const n = String(a).replace(/[\s-]/g, "");
-  try { const u = await api("pay/addr/" + enc(n)); openPaySend(u.id, 0, n); return true; }
+  try { const u = await api("pay/addr/" + enc(n)); if (u.bank) openBankGift(); else openPaySend(u.id, 0, n); return true; }
   catch (e) { return false; }
 }
 const payTime = ts => new Date(ts * 1000).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });

@@ -22,12 +22,17 @@ GAMES = [
     ("games.wheel_rtp", "Колесо", ("wheel",), lambda: settings.conf("games.wheel_rtp", 0.935)),
     ("games.scratch_rtp", "Скретч-карты", ("scratch",), lambda: settings.conf("games.scratch_rtp", 0.94)),
     ("games.claw_rtp", "Кран", ("claw",), lambda: settings.conf("games.claw_rtp", 0.95)),
+    ("games.pump_rtp", "Насос", ("pump",), lambda: settings.conf("games.pump_rtp", 0.96)),
+    ("games.drill_rtp", "Бур", ("drill",), lambda: settings.conf("games.drill_rtp", 0.96)),
+    ("games.darts_rtp", "Дартс", ("darts",), lambda: settings.conf("games.darts_rtp", 0.96)),
+    ("games.fish_rtp", "Рыбалка", ("fish",), lambda: settings.conf("games.fish_rtp", 0.96)),
     ("games.upgrade_edge", "Апгрейд", ("upgrade",), lambda: settings.conf("games.upgrade_edge", 0.92)),
 ]
 KEYS = {g[0]: g for g in GAMES}
 # в акцию «Щедрые выходные» эти игры отдают не меньше указанного (см. edge() в коде игр)
 PROMO_FLOOR = {"games.edge": 0.98, "games.crash_edge": 0.98, "games.mines_edge": 0.98, "games.chicken_edge": 0.98,
-               "games.hilo_edge": 0.98, "games.avia_rtp": 0.98, "games.upgrade_edge": 0.93, "games.scratch_rtp": 0.96, "games.claw_rtp": 0.98}
+               "games.hilo_edge": 0.98, "games.avia_rtp": 0.98, "games.upgrade_edge": 0.93, "games.scratch_rtp": 0.96, "games.claw_rtp": 0.98,
+               "games.pump_rtp": 0.98, "games.drill_rtp": 0.98, "games.darts_rtp": 0.98, "games.fish_rtp": 0.98}
 LO, HI = 0.50, 1.50   # больше 100% — игроки в плюсе на дистанции (владелец решает сам, в админке предупреждение)
 HI_KEY = {"games.scratch_rtp": 3.00}   # скретч-картам шире потолок — эффект настройки виден сильнее (до 300%)
 

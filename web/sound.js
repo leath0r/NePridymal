@@ -24,7 +24,31 @@ const SND = (() => {
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
     o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + .02);
   }
+  // шум (взрывы, всплески, шипение): буфер белого шума через фильтр
+  let nbuf = null;
+  function noise(dur, { gain = .1, at = 0, type = "lowpass", freq = 1200, q = .7, sweep = 0, attack = .003 } = {}) {
+    if (!on() || !init() || ctx.state !== "running") return;
+    if (!nbuf) { nbuf = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate); const d = nbuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    const t = ctx.currentTime + at, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = nbuf; s.loop = true; f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+    if (sweep) f.frequency.exponentialRampToValueAtTime(Math.max(40, freq * sweep), t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + dur + .02);
+  }
   return {
+    // новые игры: шар, бур, дартс, рыбалка
+    pump(k = 0) { noise(.22, { gain: .05, type: "bandpass", freq: 900 + k * 60, q: 1.2, sweep: 1.6, attack: .05 }); tone(140 + k * 9, .12, { gain: .05, slide: 1.3 }); },
+    pop() { noise(.35, { gain: .32, freq: 3200, sweep: .2 }); tone(120, .25, { gain: .2, slide: .4 }); noise(.08, { gain: .2, type: "highpass", freq: 4000 }); },
+    float() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, .35, { type: "triangle", gain: .04, at: i * .06, slide: 1.02 })); },
+    drill(dur = 1) { noise(dur, { gain: .06, type: "bandpass", freq: 260, q: 3, attack: .08 }); tone(55, dur, { type: "sawtooth", gain: .025, attack: .08 }); },
+    crack() { noise(.18, { gain: .2, type: "highpass", freq: 1800, sweep: .5 }); tone(90, .3, { gain: .12, slide: .5 }); },
+    whiz() { noise(.32, { gain: .06, type: "bandpass", freq: 900, q: 2, sweep: 4, attack: .06 }); },
+    thunk() { tone(160, .16, { gain: .22, slide: .45 }); noise(.06, { gain: .14, freq: 2500 }); tone(1300, .05, { type: "triangle", gain: .03, at: .01 }); },
+    cast() { noise(.5, { gain: .05, type: "bandpass", freq: 500, q: 1.5, sweep: 6, attack: .1 }); },
+    splash(big) { noise(big ? .7 : .4, { gain: big ? .22 : .12, freq: 2200, sweep: .25, attack: .01 }); noise(.25, { gain: .06, type: "highpass", freq: 3500, at: .05 }); },
+    bite() { tone(660, .08, { type: "square", gain: .04 }); tone(990, .1, { type: "square", gain: .04, at: .09 }); },
+    reel() { const n = performance.now(); if (n - lastTick < 55) return; lastTick = n; tone(2600 + Math.random() * 300, .02, { type: "square", gain: .012 }); },
+    snap() { noise(.12, { gain: .25, type: "highpass", freq: 2500 }); tone(1800, .18, { type: "triangle", gain: .06, slide: .3 }); },
     tick() { const n = performance.now(); if (n - lastTick < 40) return; lastTick = n; tone(1900, .03, { type: "triangle", gain: .035 }); },
     click(s) { const f = { light: 1100, medium: 700, heavy: 180, rigid: 900, soft: 600 }[s] || 800; tone(f, s === "heavy" ? .14 : .05, { type: s === "heavy" ? "sine" : "triangle", gain: s === "heavy" ? .16 : .05, slide: s === "heavy" ? .5 : 1 }); },
     win() { [1047, 1319, 1568].forEach((f, i) => tone(f, .22, { type: "triangle", gain: .07, at: i * .07 })); tone(2093, .35, { gain: .04, at: .21 }); },

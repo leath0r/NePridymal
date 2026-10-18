@@ -202,6 +202,10 @@ html.lite .pr-c-ic img{animation:none}
 .gcard.g-closed{filter:grayscale(.85) brightness(.7)}
 .g-lock{position:absolute;inset:auto 8px 8px auto;z-index:3;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9px;font-size:11px;font-weight:800;color:#fff;background:rgba(0,0,0,.6)}
 .g-lock .ic{width:12px;height:12px}
+.gcard.g-adm{box-shadow:0 0 0 1.5px rgba(167,123,255,.85),0 0 22px -6px rgba(167,123,255,.8)}
+.g-admb{position:absolute;inset:auto 8px 8px auto;z-index:3;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9px;font-size:11px;font-weight:800;color:#fff;
+  background:linear-gradient(180deg,#8d5bff,#5a2fd0);box-shadow:0 4px 10px rgba(90,47,208,.5)}
+.g-admb .ic{width:12px;height:12px}
 .adm-g{flex-wrap:wrap;gap:6px}.adm-g .grow{min-width:90px}
 .adm-tabs{flex-wrap:wrap}.adm-tabs button{flex:1 0 22%;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .adm-odd{padding:12px 14px;display:flex;flex-direction:column;gap:3px}.adm-odd+.adm-odd{border-top:1px solid var(--sep)}

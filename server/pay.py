@@ -213,8 +213,15 @@ def addr_owner(a):
     return r["user"], True
 
 
+BANK_BRIEF = {"id": 0, "bank": True, "name": "Банк игры", "username": None, "photo": None, "level": 0,
+              "clan": None, "crown": None, "title": None, "frame": None, "vip": False}
+
+
 @app.get(R + "/pay/addr/{a}")
 def pay_addr(a: str, uid=Depends(auth)):
+    import bank
+    if addr_norm(a) == bank.bank_addr():   # адрес банка: перевод = подарок банку (клиент открывает окно банка)
+        return BANK_BRIEF
     owner, anon = addr_owner(a)
     if owner == uid:
         err("это твой адрес — дай его другу")
@@ -237,6 +244,9 @@ async def pay_send(req: Request, uid=Depends(auth)):
     except (TypeError, ValueError):
         err("введи сумму")
     fee_k, anon = "fee", False
+    import bank
+    if b.get("addr") and addr_norm(b["addr"]) == bank.bank_addr():   # перевод на адрес банка — без комиссии и пароля
+        return bank.donate(uid, amount)
     if b.get("addr"):   # перевод по адресу — своя комиссия (админка → «Переводы»)
         (to, anon), fee_k = addr_owner(b["addr"]), "fee_addr"
     note = " ".join(str(b.get("note", "")).split())[:NOTE_MAX]

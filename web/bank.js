@@ -71,6 +71,7 @@ function bkPeople(list, f, empty) {
 function bkTopHTML() {
   if (bkTop === "robbers") return bkPeople(BK.robbers, u => `<b class="tw">+⭐ ${short(u.sum)}</b>`, "Банк пока никто не обыграл");
   if (bkTop === "sponsors") return bkPeople(BK.sponsors, u => `<b class="tl">−⭐ ${short(-u.sum)}</b>`, "Пока никто не проиграл");
+  if (bkTop === "donors") return bkPeople(BK.donors, u => `<b class="tw">⭐ ${short(u.sum)}</b>`, "Банку пока никто ничего не дарил — стань первым меценатом");
   return bkPeople(BK.holders, u => `<b>${fmt(u.n)} акц.</b>`, "Акции пока никто не купил — будь первым");
 }
 function fillBK(el) {
@@ -88,6 +89,8 @@ function fillBK(el) {
         <div><span>14 дней</span><b class="${d14 >= 0 ? "up" : "dn"}">${sgn(d14)}</b></div>
         <div><span>С открытия</span><b class="${since >= 0 ? "up" : "dn"}">${sgn(since)}</b></div>
       </div>
+      <button class="bkh-addr" data-act="bk-addr"><span>Адрес банка</span><b>${payAddrFmt(BK.addr)}</b>${ic("copy")}</button>
+      <button class="bkh-gift" data-act="bk-gift">${ic("heart")}Перевести в банк${BK.gifted ? `<em>ты уже подарил ⭐ ${short(BK.gifted)}</em>` : ""}</button>
     </div>
 
     <div class="bkme2"><span class="pic ${BK.me > 0 ? "g" : BK.me < 0 ? "r" : "b"}">${ic(BK.me > 0 ? "trophy" : "wallet")}</span>
@@ -115,14 +118,42 @@ function fillBK(el) {
       <p>Каждый день в 00:00 UTC (11:00 по Сахалину) ${Math.round(BK.divShare * 100)}% вчерашней прибыли банка делится на акции у игроков (если акций у игроков меньше ${short(BK.divFloor || 10000)} — делится как на ${short(BK.divFloor || 10000)}, остаток остаётся в банке). В убыточный для банка день дивидендов нет.</p>
       <p>Не больше ${fmt(BK.maxPer)} акций в одни руки. Продать можно через сутки после покупки, комиссия ${pctF(BK.sellFee)}.</p></details>
 
-    <div class="seg bk-tabs">${[["holders", "Акционеры"], ["robbers", "Обыграли банк"], ["sponsors", "Спонсоры"]].map(([k, t]) => `<button data-act="bk-top" data-v="${k}" class="${k === bkTop ? "on" : ""}">${t}</button>`).join("")}</div>
+    <div class="seg bk-tabs">${[["holders", "Акционеры"], ["robbers", "Обыграли"], ["sponsors", "Спонсоры"], ["donors", "Меценаты"]].map(([k, t]) => `<button data-act="bk-top" data-v="${k}" class="${k === bkTop ? "on" : ""}">${t}</button>`).join("")}</div>
     <div class="box" id="bk-top">${bkTopHTML()}</div>
     <div class="disc">Банк = 50 млн стартового резерва + всё, что игроки проиграли, − всё, что выиграли, − розыгрыши и дивиденды. ${esc(ME.disclaimer)}</div>`;
   bkBindChart(el);
 }
 
+// подарок банку: просто так, без комиссии и без награды — банк растёт, акции дорожают
+function openBankGift() {
+  H.imp("light");
+  const el = openSheet(`<div class="bkg">
+      <div class="bkg-i">${ic("bank")}</div>
+      <h2>Перевод в банк</h2>
+      <p>Звёзды уйдут в банк игры. Взамен ничего не будет — это подарок: банк станет больше, а акции банка подорожают.</p>
+      ${BK && BK.addr ? `<div class="bkg-addr">${payAddrFmt(BK.addr)}</div>` : ""}
+    </div>
+    <div class="betp">${betHTML("bkg-amt", 1000)}
+      <button class="btn cta gold" data-act="bk-gift-go">${ic("heart")}Перевести в банк</button></div>
+    <div class="disc">Перевод не отменить. ${esc(ME.disclaimer)}</div>`, "bkg-s");
+  starify(el);
+}
 Object.assign(ACT, {
   bank: () => openBank(),
+  "bk-addr": () => payCopy(BK.addr, "Адрес банка скопирован"),
+  "bk-gift": () => openBankGift(),
+  "bk-gift-go": async el => {
+    const amount = betVal("bkg-amt");
+    if (!amount || amount < 1) return toast("Введи сумму");
+    if (amount > ME.stars) return toast("Не хватает звёзд ⭐");
+    if (!await confirmM(`Подарить банку ⭐ ${fmt(amount)}?`, "Звёзды уйдут в банк насовсем — взамен ничего не будет.", "Подарить")) return;
+    el.disabled = true;
+    try {
+      const r = await post("bank/donate", { amount }); setStars(r.stars); H.ok();
+      closeSheet(); toast(`Банк благодарит! −⭐ ${fmt(amount)}`, "ok");
+      await loadBK(); loadBank();
+    } catch (e) { el.disabled = false; }
+  },
   "bk-top": el => { bkTop = el.dataset.v; H.sel(); const s = topSheet(); s.querySelectorAll(".bk-tabs button").forEach(b => b.classList.toggle("on", b === el)); s.querySelector("#bk-top").innerHTML = bkTopHTML(); },
   "bk-buy": async el => {
     const n = +el.dataset.v;

@@ -16,10 +16,31 @@ DIV_SHARE = 0.20        # доля дневной прибыли казино, �
 DIV_FLOOR = 10_000      # делим минимум на столько акций: пара акций у единственного держателя не должна забирать всю долю
 SELL_FEE = 0.03
 LOCK = 86400            # продать можно через сутки после последней покупки
-BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback','frcut','flash','thanks')"
+BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback','frcut','flash','thanks','bankgift')"
 
 
 _BV = {"ts": 0, "v": 0}
+DONATE_MIN = 1
+
+
+def bank_addr():
+    """Адрес банка в формате кошелька (NP + 16 + контрольная сумма): на него можно перевести звёзды просто так."""
+    from pay import _addr_sum
+    body = "BANKGC0000000000"
+    return "NP" + body + _addr_sum(body)
+
+
+def donate(uid, amount):
+    """Подарок банку: звёзды игрока уходят в банк, взамен ничего. Банк = старт − сумма событий, поэтому событие с минусом растит банк."""
+    if amount < DONATE_MIN:
+        err(f"минимум {DONATE_MIN} ⭐")
+    with tx():
+        if bal(uid) < amount:
+            err("Не хватает звёзд")
+        db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount, uid))
+        event(uid, "bankgift", -amount)
+    _BV["ts"] = 0
+    return {"ok": True, "stars": bal(uid), "bank": bank_value()}
 
 
 def bank_from():
@@ -98,6 +119,12 @@ def bank_info(uid=Depends(auth)):
             if u and (r["s"] > 0 if order == "DESC" else r["s"] < 0):
                 out.append({**user_brief(u), "sum": r["s"]})
         return out
+    donors = []
+    for r in q("SELECT user, -SUM(delta) s FROM events WHERE kind='bankgift' AND ts>=? GROUP BY user ORDER BY s DESC LIMIT 5", bank_from()):
+        u = q1("SELECT * FROM users WHERE id=?", r["user"])
+        if u:
+            donors.append({**user_brief(u), "sum": r["s"]})
+    gifted = q1("SELECT COALESCE(-SUM(delta),0) s FROM events WHERE user=? AND kind='bankgift'", uid)["s"]
     holders = []
     for r in q("SELECT * FROM shares WHERE n>0 ORDER BY n DESC LIMIT 5"):
         u = q1("SELECT * FROM users WHERE id=?", r["user"])
@@ -114,7 +141,18 @@ def bank_info(uid=Depends(auth)):
                  "est": int(DIV_SHARE * max(0, today) / max(held, DIV_FLOOR) * n) if n else 0},
         "lastDiv": {"perShare": round(last["per_share"], 2), "total": last["total"], "profit": last["profit"]} if last else None,
         "endsIn": d + 86400 - now(), "robbers": top("DESC"), "sponsors": top("ASC"), "holders": holders,
+        "addr": bank_addr(), "donors": donors, "gifted": gifted,
     }
+
+
+@app.post(R + "/bank/donate")
+async def bank_donate(req: Request, uid=Depends(auth)):
+    b = await req.json()
+    try:
+        amount = int(b.get("amount", 0))
+    except (TypeError, ValueError):
+        err("введи сумму")
+    return donate(uid, amount)
 
 
 @app.post(R + "/bank/shares")

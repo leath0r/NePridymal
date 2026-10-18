@@ -107,3 +107,20 @@
 .bankbar em{flex:none;font-size:11.5px;padding:3px 7px}
 .loan-bar{height:4px;margin-top:5px;border-radius:4px;background:color-mix(in srgb,var(--hint) 25%,transparent);overflow:hidden}
 .loan-bar i{display:block;height:100%;border-radius:4px;background:#2fd47a}
+/* адрес банка и перевод в банк */
+.bkh-addr{position:relative;z-index:1;display:flex;align-items:center;gap:8px;width:100%;margin-top:10px;padding:9px 12px;border-radius:13px;text-align:left;color:#fff;
+  background:rgba(0,0,0,.28);box-shadow:inset 0 0 0 1px rgba(255,214,120,.14)}
+.bkh-addr span{flex:none;font-size:11px;font-weight:700;opacity:.65}
+.bkh-addr b{flex:1;min-width:0;font:700 12.5px/1.2 ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.02em;color:#ffe7a3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bkh-addr .ic{flex:none;width:16px;height:16px;opacity:.75}
+.bkh-gift{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;width:100%;margin-top:8px;padding:11px 12px;border-radius:13px;
+  font-weight:800;font-size:14.5px;color:#3a2300;background:linear-gradient(135deg,#ffe58a,#ffb52e 55%,#f08c00);box-shadow:0 8px 20px -10px #ffb52e,inset 0 1px 0 rgba(255,255,255,.6)}
+.bkh-gift .ic{width:17px;height:17px}
+.bkh-gift em{flex-basis:100%;font-style:normal;font-size:11.5px;font-weight:700;opacity:.7;text-align:center;margin-top:-2px}
+.bkg{text-align:center;padding:18px 8px 4px}
+.bkg-i{width:68px;height:68px;margin:0 auto 12px;border-radius:22px;display:grid;place-items:center;color:#3a2300;
+  background:linear-gradient(135deg,#ffe58a,#ffb52e 55%,#f08c00);box-shadow:0 14px 30px -10px #ffb52e,inset 0 1px 0 rgba(255,255,255,.6)}
+.bkg-i .ic{width:34px;height:34px}
+.bkg h2{margin:0 0 8px;font-size:22px}
+.bkg p{margin:0 auto;max-width:320px;color:var(--hint);font-size:14px}
+.bkg-addr{display:inline-block;margin-top:12px;padding:7px 12px;border-radius:10px;background:var(--card);font:700 12px ui-monospace,Menlo,Consolas,monospace;color:var(--gold)}
