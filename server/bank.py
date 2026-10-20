@@ -24,7 +24,7 @@ DIV_SHARE = 0.20        # доля дневной прибыли казино, �
 DIV_FLOOR = 10_000      # делим минимум на столько акций: пара акций у единственного держателя не должна забирать всю долю
 SELL_FEE = 0.03
 LOCK = 86400            # продать можно через сутки после последней покупки
-BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback','frcut','flash','thanks','bankgift','clanshare','clandiv')"
+BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','clanspend','lucky','season','cashback','frcut','flash','thanks','bankgift','clanshare','clandiv','league')"
 
 
 _BV = {"ts": 0, "v": 0}

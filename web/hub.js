@@ -245,9 +245,9 @@ const _obHub = loadOB;
 loadOB = async function () { await _obHub(); if (TAB === "cases") casesTidy(); };
 
 // ---------------- 12. топ: «Соревнования» и «Рейтинги» ----------------
-const TOP_COMP = ["clans", "season"];
-const TOP_LAST = { comp: "clans", rate: "rich" };
-topKind = "clans";   // топ открывается на кланах — их ищут чаще всего
+const TOP_COMP = ["league", "clans", "season"];
+const TOP_LAST = { comp: "league", rate: "rich" };
+topKind = "league";   // топ открывается на лиге недели — она про самого игрока
 function topNavHTML() {
   const g = TOP_COMP.includes(topKind) ? "comp" : "rate";
   TOP_LAST[g] = topKind;
