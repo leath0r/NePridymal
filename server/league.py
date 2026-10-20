@@ -34,7 +34,8 @@ def zones(n, tier):
 
 
 def prizes(tier):
-    return [int(PRIZES[tier] * s) for s in SHARE]
+    import app as A
+    return [A.prize_k(PRIZES[tier] * s) for s in SHARE]
 
 
 def tier_of(uid):

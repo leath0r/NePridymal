@@ -13,7 +13,16 @@ from fastapi import Depends, Request
 from app import (GAME_KINDS, R, RICH_RANK, app, auth, db, err, esc, event, notify, now, q, q1, tx, user_brief)
 
 CAP = 10_000
-PRIZES = conf("season.prizes", [200_000, 100_000, 60_000, 30_000, 30_000, 20_000, 20_000, 10_000, 10_000, 10_000])
+BASE_PRIZES = conf("season.prizes", [200_000, 100_000, 60_000, 30_000, 30_000, 20_000, 20_000, 10_000, 10_000, 10_000])
+
+
+
+def prizes():
+    """Призы сезона × курс банка (банк богаче — призы больше)."""
+    import app as A
+    return [A.prize_k(p) for p in BASE_PRIZES]
+
+
 FRAMES = ["gold", "silver", "silver"] + ["bronze"] * 7
 MONTHS = ["", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 
@@ -111,13 +120,13 @@ def season(uid=Depends(auth)):
     for i, r in enumerate(rows[:20]):
         u = q1("SELECT * FROM users WHERE id=?", r["user"])
         if u:
-            top.append({**user_brief(u), "pts": r["pts"], "prize": PRIZES[i] if i < len(PRIZES) else 0, "medal": FRAMES[i] if i < len(FRAMES) else None})
+            top.append({**user_brief(u), "pts": r["pts"], "prize": prizes()[i] if i < len(BASE_PRIZES) else 0, "medal": FRAMES[i] if i < len(FRAMES) else None})
     me = q1(f"SELECT COALESCE(SUM(MIN(ABS(delta), {CAP})),0) / 100 pts FROM events WHERE user=? AND kind IN {GAME_KINDS} AND ts>=?", uid, start)["pts"]
     place = next((i + 1 for i, r in enumerate(standings(start, end, 1000)) if r["user"] == uid), None)
     last = q1("SELECT * FROM season_results ORDER BY season DESC LIMIT 1")
     return {"id": sid, "title": title, "ends": end, "top": top, "me": {"pts": me, "place": place,
             "excluded": bool(q1("SELECT 1 FROM season_excl WHERE season=? AND user=?", sid, uid))},
-            "prizes": PRIZES, "frames": FRAMES, "last": {"season": last["season"], "result": json.loads(last["result"])} if last else None}
+            "prizes": prizes(), "frames": FRAMES, "last": {"season": last["season"], "result": json.loads(last["result"])} if last else None}
 
 
 @app.get(R + "/titles")
@@ -148,11 +157,12 @@ def _settle():
         if q1("SELECT 1 FROM season_results WHERE season=?", psid):
             return
         res = []
-        for i, r in enumerate(standings(pstart, pend, len(PRIZES))):
-            db.execute("UPDATE users SET stars=stars+?, frame=?, frame_until=? WHERE id=?", (PRIZES[i], FRAMES[i], end, r["user"]))
-            event(r["user"], "season", PRIZES[i])
-            res.append({"place": i + 1, "user": r["user"], "pts": r["pts"], "prize": PRIZES[i]})
-            msgs.append((r["user"], f"🏆 Сезон «{esc(ptitle)}» окончен: ты на {i + 1} месте! Приз ⭐ {PRIZES[i]:,} и рамка аватарки на весь следующий сезон."
+        pz = prizes()
+        for i, r in enumerate(standings(pstart, pend, len(pz))):
+            db.execute("UPDATE users SET stars=stars+?, frame=?, frame_until=? WHERE id=?", (pz[i], FRAMES[i], end, r["user"]))
+            event(r["user"], "season", pz[i])
+            res.append({"place": i + 1, "user": r["user"], "pts": r["pts"], "prize": pz[i]})
+            msgs.append((r["user"], f"🏆 Сезон «{esc(ptitle)}» окончен: ты на {i + 1} месте! Приз ⭐ {pz[i]:,} и рамка аватарки на весь следующий сезон."
                          .replace(",", " ")))
         db.execute("INSERT INTO season_results(season,result,ts) VALUES(?,?,?)", (psid, json.dumps(res), now()))
     for u, t in msgs:
@@ -184,4 +194,4 @@ def season_brief(uid=Depends(auth)):
     if now() - _BRIEF["t"] > 120 or _BRIEF.get("sid") != sid:
         rows = standings(start, end, 100000)
         _BRIEF.update(t=now(), sid=sid, rank={r["user"]: i + 1 for i, r in enumerate(rows)}, pts={r["user"]: r["pts"] for r in rows})
-    return {"title": title, "ends": end, "place": _BRIEF["rank"].get(uid), "pts": _BRIEF["pts"].get(uid, 0), "players": len(_BRIEF["rank"]), "prize": PRIZES[0]}
+    return {"title": title, "ends": end, "place": _BRIEF["rank"].get(uid), "pts": _BRIEF["pts"].get(uid, 0), "players": len(_BRIEF["rank"]), "prize": prizes()[0]}

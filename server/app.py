@@ -186,12 +186,31 @@ def event_public():
     return {"id": e["id"], "title": e["title"], "case": e["case"], "sale": e["sale"], "perks": e["perks"], "until": until}
 
 
+# курс банка (bank.py): множители призов, цены кейсов и скупки — банк богатый → щедрее, бедный → скупее
+BANK_K = None
+
+
+def bank_k():
+    return BANK_K() if BANK_K else {"r": 1.0, "prize": 1.0, "case": 1.0, "sell": 0.0}
+
+
+def prize_k(v):
+    """Приз с учётом курса банка, круглыми суммами."""
+    v = v * bank_k()["prize"]
+    return int(round(v / 100) * 100) if v >= 1000 else int(round(v / 10) * 10)
+
+
+def sell_rate():
+    """Мгновенная продажа банку: базовая ставка (админка → «Комиссии») ± поправка курса банка, не выше 95%."""
+    return round(min(0.95, max(0.05, SELL_RATE + bank_k()["sell"])), 4)
+
+
 def case_price(c):
     if not c["price"]:
         return 0
-    price = c["price"]
-    if promo():
-        price = int(round(c["price"] * 0.9 / 5) * 5)
+    # скидка/наценка от банка; вместе с акцией выходных — не дешевле −10%, чтобы кейсы не ушли в плюс игроку
+    f = max(0.9, (0.9 if promo() else 1.0) * bank_k()["case"])
+    price = int(round(c["price"] * f / 5) * 5)
     e = event_active()
     if e and e["case"] == c["id"]:
         price = min(price, int(round(c["price"] * (1 - e["sale"]) / 5) * 5))
@@ -953,7 +972,7 @@ async def sell_many(req: Request, uid=Depends(auth)):
             g = own_gift(gid, uid)
             if g["price"] is not None:
                 err("сначала сними выбранные подарки с маркета")
-            total += int(g["value"] * SELL_RATE)
+            total += int(g["value"] * sell_rate())
             db.execute("DELETE FROM gifts WHERE id=?", (gid,))
             unpin(uid, gid)
             cancel_trades_with(gid)
@@ -1092,7 +1111,7 @@ def cancel_trades_with(gid):
 def sell(gid: int, uid=Depends(auth)):
     with tx():
         g = own_gift(gid, uid)
-        pay = int(g["value"] * SELL_RATE)
+        pay = int(g["value"] * sell_rate())
         db.execute("DELETE FROM gifts WHERE id=?", (gid,))
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, uid))
         unpin(uid, gid)
@@ -1756,7 +1775,7 @@ def quests_state(uid):
         rs = [st[k] for k in kinds if k in st]
         have = (len(rs) if mode == "g" else sum(r["n"] for r in rs) if mode == "n" else sum(r["w"] or 0 for r in rs) if mode == "w"
                 else int(any((r["mx"] or 0) >= arg for r in rs)))
-        items.append({"id": i, "icon": ic, "t": t, "need": n, "have": min(n, have), "reward": rw, "claimed": i in got,
+        items.append({"id": i, "icon": ic, "t": t, "need": n, "have": min(n, have), "reward": prize_k(rw), "claimed": i in got,
                       "tier": "new" if not tier else tier})
     e = event_active()
     for i, ic, t, k, n, rw in (e["quests"] if e else []):
@@ -1764,7 +1783,7 @@ def quests_state(uid):
                       "claimed": i in got, "tier": "event"})
     done = sum(1 for x in items if x["claimed"])
     items.append({"id": "chest", "icon": "trophy", "t": "Сундук: выполни все задания", "need": len(items),
-                  "have": done, "reward": QCHEST, "claimed": "chest" in got, "tier": "chest"})
+                  "have": done, "reward": prize_k(QCHEST), "claimed": "chest" in got, "tier": "chest"})
     return items
 
 

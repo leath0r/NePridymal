@@ -101,6 +101,8 @@ function fillBK(el) {
       <button class="bkh-gift" data-act="bk-gift">${ic("heart")}Перевести в банк${BK.gifted ? `<em>ты уже подарил ⭐ ${short(BK.gifted)}</em>` : ""}</button>
     </div>
 
+    ${BK.k ? bkKHTML(BK.k) : ""}
+
     <div class="bkme2"><span class="pic ${BK.me > 0 ? "g" : BK.me < 0 ? "r" : "b"}">${ic(BK.me > 0 ? "trophy" : "wallet")}</span>
       <div class="grow"><div class="t">${BK.me > 0 ? "Ты обыграл банк" : BK.me < 0 ? "Ты занёс банку" : "Ты с банком в расчёте"}</div><div class="s">итог всех твоих игр</div></div>
       <b class="${BK.me > 0 ? "tw" : BK.me < 0 ? "tl" : ""}">${BK.me > 0 ? "+" : BK.me < 0 ? "−" : ""}⭐ ${fmt(Math.abs(BK.me))}</b></div>
@@ -228,3 +230,17 @@ Object.assign(ACT, {
     await loadBK(); loadBank();
   },
 });
+
+// курс банка: от него призы, цены кейсов и скупка — банк растёт, всем лучше
+function bkKHTML(k) {
+  const x = v => "×" + v.toFixed(2).replace(".", ","), pc = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v * 100)) + "%";
+  const pos = Math.max(0, Math.min(100, (k.r - .5) / 1.5 * 100)), mood = k.r >= 1.3 ? "Банк жирует" : k.r >= 1 ? "Банк в форме" : k.r >= .8 ? "Банк худеет" : "Банк на мели";
+  const tile = (ic_, t, v, good, s) => `<div class="bkk-t ${good > 0 ? "up" : good < 0 ? "dn" : ""}">${ic(ic_)}<span>${t}</span><b>${v}</b><small>${s}</small></div>`;
+  return `<div class="bkk">
+    <div class="bkk-h"><div><span>Курс банка</span><b>${x(k.r)}</b></div><em class="${k.r >= 1 ? "up" : "dn"}">${mood}</em></div>
+    <div class="bkk-bar"><i style="left:${pos}%"></i><span style="left:${(1 - .5) / 1.5 * 100}%"></span></div>
+    <div class="bkk-g">${tile("trophy", "Призы", x(k.prize), Math.sign(k.prize - 1), "лиги, сезон, кланы, задания")}
+      ${tile("box", "Кейсы", k.case === 1 ? "0%" : pc(k.case - 1), Math.sign(1 - k.case), "к цене кейсов")}
+      ${tile("coins", "Скупка", String(Math.round(k.sellRate * 1000) / 10).replace(".", ",") + "%", Math.sign(k.sell), "мгновенная продажа")}</div>
+    <div class="bkk-n">Курс = банк / ⭐ ${short(k.ref)}. Банк растёт — призы больше, кейсы дешевле, скупка дороже. Худеет — наоборот.</div></div>`;
+}

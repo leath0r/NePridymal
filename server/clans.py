@@ -41,7 +41,13 @@ PERKS = {3: "Цветной тег клана рядом с ником", 4: "У�
          6: "+5 мест в клане", 7: "−10% на оформление профиля", 8: "Сияющий тег клана", 9: "+5 мест в клане",
          10: "Золотая рамка клана и −20% на оформление"}
 LEVEL_BONUS = conf("clans.level_bonus", 0.02)                                 # +2% к доходу (подарки + бизнесы) за уровень сверх первого
-PRIZES = conf("clans.war_prizes", [50_000, 25_000, 10_000])
+BASE_PRIZES = conf("clans.war_prizes", [50_000, 25_000, 10_000])
+
+
+def prizes():
+    """Призы битвы кланов × курс банка."""
+    import app as A
+    return [A.prize_k(p) for p in BASE_PRIZES]
 # цели недели по обороту клана: каждому участнику — ключ от кейса
 GOALS = [(250_000, "luck"), (1_000_000, "lux"), (3_000_000, "cups")]
 STAFF = ("owner", "officer")
@@ -184,7 +190,7 @@ def clans(uid=Depends(auth)):
         c["place"] = i + 1
     mine = my_clan_id(uid)
     last = q1("SELECT result FROM clan_wars ORDER BY week DESC LIMIT 1")
-    return {"list": allc[:50], "mine": mine, "weekEnds": ws + 7 * 86400, "prizes": PRIZES, "createCost": CREATE_COST,
+    return {"list": allc[:50], "mine": mine, "weekEnds": ws + 7 * 86400, "prizes": prizes(), "createCost": CREATE_COST,
             "maxMembers": MAX_MEMBERS, "levels": LEVELS, "perks": PERKS, "levelBonus": LEVEL_BONUS, "colors": COLORS,
             "last": __import__("json").loads(last["result"]) if last else None}
 
@@ -373,8 +379,9 @@ def _settle():
                 res.append((c, sc))
         res.sort(key=lambda x: -sum(x[1].values()))
         out = []
-        for place, (c, sc) in enumerate(res[:len(PRIZES)]):
-            prize, tot = PRIZES[place], sum(sc.values())
+        pz = prizes()
+        for place, (c, sc) in enumerate(res[:len(pz)]):
+            prize, tot = pz[place], sum(sc.values())
             for u, s in sc.items():
                 pay = int(prize * s / tot)
                 if pay:

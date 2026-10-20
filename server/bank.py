@@ -42,6 +42,20 @@ def crisis():
 
 A.BET_CAP = lambda: CRISIS_MAX_BET if crisis() else None   # app.check_bet режет ставку в кризис
 
+# курс банка = банк / база (по умолчанию стартовые 50 млн), шагом 0,05 — чтобы цены не дёргались от каждой ставки.
+# От него: призы (лиги, сезон, кланы, турниры, задания) ×0,6…×2; цена кейсов −8%…+8%; скупка подарков ±5 п. п.
+K_REF = conf("bank.ref", BANK_START)
+
+
+def bank_k():
+    r = round(bank_value() / max(1, K_REF) * 20) / 20
+    return {"r": r, "prize": round(min(2.0, max(0.6, 0.4 + 0.6 * r)), 2),
+            "case": round(min(1.08, max(0.92, 1 - 0.1 * (r - 1))), 2),
+            "sell": round(min(0.05, max(-0.05, 0.05 * (r - 1))), 3)}
+
+
+A.BANK_K = bank_k
+
 
 def crisis_since():
     r = q1("SELECT start FROM crisis_log WHERE end=0 ORDER BY id DESC LIMIT 1")
@@ -264,7 +278,7 @@ def bank_info(uid=Depends(auth)):
     n = sh["n"] if sh else 0
     today = house_profit(d)
     return {
-        "bank": bank_value(), "start": BANK_START, "today": today, "days": days, "me": me,
+        "bank": bank_value(), "start": BANK_START, "k": {**bank_k(), "sellRate": A.sell_rate(), "ref": K_REF}, "today": today, "days": days, "me": me,
         "price": p, "supply": SUPPLY, "held": held, "maxPer": MAX_PER_USER, "sellFee": SELL_FEE, "divShare": DIV_SHARE, "divFloor": DIV_FLOOR,
         "mine": {"n": n, "cost": sh["cost"] if sh else 0, "value": n * p, "div": my_div,
                  "sellIn": max(0, sh["ts"] + LOCK - now()) if n else 0,

@@ -202,3 +202,22 @@ button.bkh-top{width:100%;text-align:left;color:inherit;position:relative;z-inde
 .bkh-vt b{display:block;font-size:14px}
 .bkh-vt small{display:block;font-size:11.5px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bkh-vrow>.ic{flex:none;width:16px;height:16px;opacity:.6}
+
+/* курс банка */
+.bkk{margin:0 0 12px;padding:14px;border-radius:20px;background:var(--card)}
+.bkk-h{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.bkk-h span{display:block;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--hint)}
+.bkk-h b{font-size:28px;font-weight:900;letter-spacing:-.02em;font-family:"NP Num",-apple-system,Roboto,sans-serif}
+.bkk-h em{font-style:normal;font-size:12.5px;font-weight:800;padding:4px 10px;border-radius:999px}
+.bkk-h em.up{color:#35d07f;background:color-mix(in srgb,#35d07f 14%,transparent)}.bkk-h em.dn{color:#ff6b78;background:color-mix(in srgb,#ff6b78 14%,transparent)}
+.bkk-bar{position:relative;height:8px;margin:12px 2px 14px;border-radius:4px;background:linear-gradient(90deg,#ff4d5e,#ffb21f 33%,#35d07f 55%,#2fd4ff)}
+.bkk-bar i{position:absolute;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px var(--card),0 2px 8px rgba(0,0,0,.5);transition:left .6s cubic-bezier(.2,.8,.3,1)}
+.bkk-bar span{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--text);opacity:.35;border-radius:1px}
+.bkk-g{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.bkk-t{display:flex;flex-direction:column;align-items:center;gap:1px;padding:9px 4px;border-radius:14px;background:var(--card2);text-align:center;min-width:0}
+.bkk-t .ic{width:16px;height:16px;color:var(--hint);margin-bottom:2px}
+.bkk-t span{font-size:11px;font-weight:800;color:var(--hint)}
+.bkk-t b{font-size:17px;font-weight:900;font-family:"NP Num",-apple-system,Roboto,sans-serif}
+.bkk-t small{font-size:10px;color:var(--hint);line-height:1.2;max-width:100%}
+.bkk-t.up b{color:#35d07f}.bkk-t.dn b{color:#ff6b78}
+.bkk-n{margin-top:10px;font-size:11.5px;color:var(--hint);text-align:center}

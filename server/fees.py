@@ -75,7 +75,9 @@ except Exception as e:
 
 def public():
     """Ставки, которые фронт показывает текстом (обмены, столы, маркет, налог дохода, продажа банку)."""
-    return {k: _get(k) for k in ("market", "sell", "trade", "income", "room", "duel", "jackpot")}
+    out = {k: _get(k) for k in ("market", "sell", "trade", "income", "room", "duel", "jackpot")}
+    out["sell"] = round(1 - A.sell_rate(), 4)   # с поправкой курса банка
+    return out
 
 
 def _pct(v):

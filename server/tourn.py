@@ -7,6 +7,7 @@ import json
 
 from fastapi import Depends
 
+import app as A
 from app import R, app, auth, db, esc, event, notify, now, q, q1, tx, user_brief
 
 ROTATION = [("dogs", "crash"), ("chicken", "avia"), ("slots", "mines"), ("dice", "tower"), ("battle", "scratch")]
@@ -48,10 +49,10 @@ def tournaments(uid=Depends(auth)):
         for i, r in enumerate(rows):
             u = q1("SELECT * FROM users WHERE id=?", r["user"])
             if u:
-                top.append({**user_brief(u), "score": r["s"], "prize": int(POOL * SHARES[i]) if i < len(SHARES) else 0})
+                top.append({**user_brief(u), "score": r["s"], "prize": A.prize_k(POOL * SHARES[i]) if i < len(SHARES) else 0})
         me = q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind=? AND user=? AND ts>=?", g, uid, ws)["s"]
         place = next((i + 1 for i, r in enumerate(standings(g, ws, 1000)) if r["user"] == uid), None)
-        items.append({"game": g, "title": NAMES[g], "pool": POOL, "top": top, "me": {"score": me, "place": place}})
+        items.append({"game": g, "title": NAMES[g], "pool": A.prize_k(POOL), "top": top, "me": {"score": me, "place": place}})
     last = [dict(r) | {"result": json.loads(r["result"])} for r in q("SELECT * FROM tourn_results ORDER BY week DESC, game LIMIT 2")]
     nxt = games_of(ws + PERIOD)
     return {"items": items, "weekEnds": ws + PERIOD, "days": PERIOD // 86400, "shares": SHARES, "last": last, "next": [NAMES[g] for g in nxt]}
@@ -68,7 +69,7 @@ def _settle():
                 continue
             res = []
             for i, r in enumerate(standings(g, prev, len(SHARES))):
-                prize = int(POOL * SHARES[i])
+                prize = A.prize_k(POOL * SHARES[i])
                 db.execute("UPDATE users SET stars=stars+? WHERE id=?", (prize, r["user"]))
                 event(r["user"], "tourn", prize)
                 u = q1("SELECT name FROM users WHERE id=?", r["user"])
