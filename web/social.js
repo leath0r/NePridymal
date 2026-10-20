@@ -5,7 +5,7 @@
 
 // ------------------------------------------------------------ шапка
 function renderHeader() {
-  const prev = +($("#bal-n").textContent.replace(/\D/g, "") || 0);
+  const prev = +($("#bal-n").textContent.replace(/[^\d-−]/g, "").replace("−", "-") || 0);
   $("#bal-n").textContent = fmt(ME.stars);
   paintBalance(prev && ME.stars > prev ? "up" : prev && ME.stars < prev ? "down" : "");
   const p = Math.round((ME.lv.xp - ME.lv.from) / (ME.lv.to - ME.lv.from) * 100);

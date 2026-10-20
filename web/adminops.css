@@ -49,3 +49,23 @@
 /* кошелёк игрока в карточке админа */
 .adm-wal .row{padding-bottom:6px}
 .adm-addr{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:14px;letter-spacing:.04em;word-break:break-all;white-space:normal;user-select:all}
+/* заморозка кошелька */
+.adm-frz{display:flex;align-items:center;gap:10px;margin:-4px 0 12px;padding:10px 12px;border-radius:14px;color:#bfe6ff;
+  background:linear-gradient(100deg,rgba(80,170,255,.18),rgba(80,170,255,.06));box-shadow:inset 0 0 0 1px rgba(110,190,255,.35)}
+.adm-frz .ic{width:20px;height:20px;flex:none}
+.adm-frz b{display:block;font-size:14px}.adm-frz span{font-size:12px;opacity:.85}
+.btn.adm-frzb{background:linear-gradient(180deg,#5cb8ff,#2a7fd6);color:#fff}
+/* компенсации */
+.cp-f input,.cp-f select{width:100%}
+.cp-two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cp-two .adm-f{min-width:0}
+.cp-f .seg{margin:6px 0 8px}
+.cp-big{display:flex;gap:8px}
+.cp-big>div{flex:1;min-width:0;padding:10px;border-radius:12px;background:var(--card2);text-align:center}
+.cp-big b{display:block;font-size:18px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-big span{font-size:11.5px;color:var(--hint)}
+.cp-top{margin-top:8px}
+.cp-top .row b{color:var(--green,#35d07f);white-space:nowrap}
+.cp-f .adm-f{flex-direction:column;align-items:stretch;gap:4px}.cp-f .adm-f>span{width:auto;font-size:12px}
+.cp-f [hidden]{display:none!important}
+#cp-res .box{margin-top:10px}

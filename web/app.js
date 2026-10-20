@@ -309,6 +309,7 @@ function setStars(s) {
 // живой баланс в шапке и во всех открытых шторках
 function paintBalance(dir) {
   document.querySelectorAll(".bal-live").forEach(e => e.textContent = fmt(ME.stars));
+  document.querySelectorAll(".sbal, #bal").forEach(e => e.classList.toggle("neg", ME.stars < 0));   // долг — админ списал в минус
   if (!dir) return;
   document.querySelectorAll(".sbal, #bal").forEach(e => { e.classList.remove("up", "down"); void e.offsetWidth; e.classList.add(dir); });
 }

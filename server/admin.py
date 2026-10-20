@@ -195,11 +195,11 @@ async def adjust(tid: int, req: Request, aid=Depends(admin)):
         err("неверная сумма")
     with tx():
         u = q1("SELECT stars FROM users WHERE id=?", tid) or err("нет такого игрока", 404)
-        if u["stars"] + delta < 0:
+        if u["stars"] + delta < 0 and not b.get("neg"):   # в минус — только явно (neg): долг гасится доходом, ставить и переводить нельзя
             err(f"у игрока только ⭐ {u['stars']}")
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (delta, tid))
         event(tid, "admin", delta)
-        log(aid, "stars", tid, f"{delta:+d} {reason}".strip(), undo={"t": "stars", "delta": -delta})
+        log(aid, "stars", tid, (f"{delta:+d} {reason}" + (" (в минус)" if u["stars"] + delta < 0 else "")).strip(), undo={"t": "stars", "delta": -delta})
     return {"ok": True, "stars": bal(tid)}
 
 

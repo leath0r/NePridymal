@@ -77,7 +77,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["games", "Игры"], ["odds", "Шансы"], ["claw", "Кран"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["wipe", "Вайп"], ["polls", "Опросы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["comp", "Компенсации"], ["games", "Игры"], ["odds", "Шансы"], ["claw", "Кран"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["wipe", "Вайп"], ["polls", "Опросы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -134,14 +134,18 @@ async function admRender(el = topSheet()) {
       <div class="disc">Telegram Stars копятся на балансе бота — смотреть и выводить в @BotFather → бот → Payments / Stars.</div>`;
     starify(body);
   } else if (ADM.tab === "users") {
-    const r = await api(`admin/users?sort=${ADM.sort}&qs=${encodeURIComponent(ADM.qs)}`);
+    const [r, fz] = await Promise.all([api(`admin/users?sort=${ADM.sort}&qs=${encodeURIComponent(ADM.qs)}`), api("admin/frozen").catch(() => ({ list: [] }))]);
     body.innerHTML = `<input id="adm-q" placeholder="Имя, @ник или id" value="${esc(ADM.qs)}" style="margin-bottom:10px">
+      ${fz.list.length && !ADM.qs ? `<div class="sec-t">${ic("lock")}Заморожены · ${fz.list.length}</div><div class="box">${fz.list.map(u => `<div class="row tap" data-act="adm-user" data-id="${u.id}">${avaHTML(u, 32)}
+        <div class="grow"><div class="t">${esc(u.name)}</div><div class="s">с ${admDate(u.ts)}${u.reason ? " · " + esc(u.reason) : ""}</div></div>${ic("chev")}</div>`).join("")}</div>` : ""}
       <div class="seg">${[["seen", "Недавние"], ["rich", "Богатые"], ["new", "Новые"]].map(([k, t]) => `<button data-act="adm-sort" data-v="${k}" class="${ADM.sort === k ? "on" : ""}">${t}</button>`).join("")}</div>
       <div class="box">${r.users.map(u => `<div class="row tap" data-act="adm-user" data-id="${u.id}">${avaHTML(u, 36)}
         <div class="grow"><div class="t">${esc(u.name)}${u.banned ? ` <span class="tl">· бан</span>` : ""}</div><div class="s">${u.username ? "@" + esc(u.username) + " · " : ""}${u.id} · ${admDate(u.seen)}</div></div>
         <b>⭐ ${short(u.stars)}</b></div>`).join("") || `<div class="hint" style="padding:14px">Никого не нашли</div>`}</div>`;
     const i = body.querySelector("#adm-q"); let t;
     i.oninput = () => { clearTimeout(t); t = setTimeout(() => { ADM.qs = i.value; admRender(el).then(() => { const n = el.querySelector("#adm-q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); }, 400); };
+  } else if (ADM.tab === "comp") {   // массовые компенсации (sanctions.py)
+    await admComp(body);
   } else if (ADM.tab === "odds") {
     const d = await api("admin/odds"), pc = v => +(v * 100).toFixed(2);
     body.innerHTML = `<p class="hint" style="margin:0 0 10px;font-size:12.5px">Возврат игроку на дистанции: 96% — из каждых ⭐ 100 ставок игрокам возвращается ⭐ 96, банк оставляет 4%. Меньше 100% — банк в плюсе, больше 100% — игроки в плюсе. Действует сразу. Можно ${pc(d.lo)}–${pc(d.hi)}%.</p>
@@ -398,10 +402,11 @@ async function openAdmUser(id) {
   const draw = async () => {
     const [u, cs, fr, tr, ins] = await Promise.all([api("admin/user/" + id), api(`admin/user/${id}/cosm`), api(`admin/user/${id}/friends`),
       api(`admin/user/${id}/transfers`).catch(() => ({ sent: 0, got: 0, list: [] })), api(`admin/user/${id}/insight`).catch(() => null)]);
-    const wa = await api(`admin/user/${id}/addr`).catch(() => null);
+    const [wa, fzz] = await Promise.all([api(`admin/user/${id}/addr`).catch(() => null), api(`admin/user/${id}/freeze`).catch(() => null)]);
     const frRow = (f, s) => `<div class="row tap" data-act="adm-user" data-id="${f.id}">${avaHTML(f, 32)}<div class="grow"><div class="t">${esc(f.name)}</div><div class="s">${s} · был ${admDate(f.seen)}</div></div>${ic("chev")}</div>`;
     replaceSheet(el, `<div style="display:flex;align-items:center;gap:12px;margin:4px 0 12px">${avaHTML(u, 48)}<div class="grow"><b style="font-size:19px">${esc(u.name)}</b>
         <div class="hint" style="font-size:13px">${u.username ? "@" + esc(u.username) + " · " : ""}id ${u.id}${u.banned ? ` · <span class="tl">заблокирован</span>` : ""}</div></div></div>
+      ${fzz && fzz.frozen ? `<div class="adm-frz">${ic("lock")}<div><b>Кошелёк заморожен</b><span>с ${admDate(fzz.ts)}${fzz.by ? " · " + esc(fzz.by.name) : ""}${fzz.reason ? " · " + esc(fzz.reason) : ""}</span></div></div>` : ""}
       <div class="box">${admKv("Баланс", `<b>⭐ ${fmt(u.stars)}</b>`)}${admKv("Подарков", `<b>${fmt(u.gifts)} · ⭐ ${fmt(u.giftsValue)}</b>`)}
         ${admKv("Итог в играх 24 ч / всего", `<span>${admSgn(u.pnl24)} / ${admSgn(u.pnlAll)}</span>`)}${admKv("Кейсов открыто", `<b>${fmt(u.opened)}</b>`)}
         ${admKv("Рефералов", `<b>${fmt(u.refs)}</b>`)}${admKv("Регистрация / был", `<b>${admDate(u.created)} / ${admDate(u.seen)}</b>`)}</div>
@@ -411,13 +416,14 @@ async function openAdmUser(id) {
         <div class="s">${u.refSrc === "gift" ? "через подарок по ссылке" : "по реферальной ссылке"} · ${u.inviter.username ? "@" + esc(u.inviter.username) + " · " : ""}id ${u.inviter.id}</div></div>${ic("chev")}</div>`
         : `<div class="hint" style="padding:14px">Без приглашения — вход напрямую</div>`}</div>
       <div class="btns"><button class="btn green sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="1">+ Звёзды</button>
-        <button class="btn ghost sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="-1">− Звёзды</button>
+        <button class="btn ghost sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="-1" data-b="${u.stars}">− Звёзды</button>
         <button class="btn ${u.banned ? "ghost" : "red"} sm" style="flex:1" data-act="adm-ban" data-id="${u.id}" data-v="${u.banned ? 0 : 1}">${u.banned ? "Разбанить" : "Забанить"}</button></div>
       ${wa ? `<div class="sec-t">${ic("wallet")}Кошелёк</div><div class="box adm-wal">
         ${[["main", "Адрес", wa.addr, "по нему игроку переводят звёзды"], ["anon", "Анонимный", wa.anon, "секретный: отправитель не видит, кому ушло"]].map(([k, t, a, s]) => `<div class="row"><div class="grow">
           <div class="s">${t} · ${s}</div><div class="t adm-addr">${esc(a)}</div></div></div>
           <div class="btns" style="margin:0 12px 10px"><button class="btn ghost sm" style="flex:1" data-act="adm-addr" data-id="${u.id}" data-k="${k}" data-m="rnd">${ic("refresh")}Новый</button>
             <button class="btn ghost sm" style="flex:1" data-act="adm-addr" data-id="${u.id}" data-k="${k}" data-m="own">${ic("edit")}Свой</button></div>`).join("")}</div>` : ""}
+      ${fzz && !u.isAdmin ? `<button class="btn ${fzz.frozen ? "ghost" : "adm-frzb"} sm" style="width:100%;margin-top:8px" data-act="adm-freeze" data-id="${u.id}" data-v="${fzz.frozen ? 0 : 1}">${ic("lock")}${fzz.frozen ? "Разморозить кошелёк" : "Заморозить кошелёк"}</button>` : ""}
       <div class="btns"><button class="btn gold sm" style="flex:1" data-act="adm-gift" data-id="${u.id}">${ic("gift")}Подарок</button>
         <button class="btn gold sm" style="flex:1" data-act="adm-keys" data-id="${u.id}">${ic("lock")}Кейсы</button></div>
       ${u.canGrant && !u.isOwner ? `<button class="btn ${u.isAdmin ? "red" : "ghost"} sm" style="width:100%;margin-top:8px" data-act="adm-grant" data-id="${u.id}" data-v="${u.isAdmin ? 0 : 1}" data-n="${esc(u.name)}">${ic("crown")}${u.isAdmin ? "Снять админку" : "Сделать админом"}</button>`
@@ -645,7 +651,10 @@ Object.assign(ACT, {
     const sign = +el.dataset.v;
     const v = await promptM(sign > 0 ? "Начислить звёзды" : "Списать звёзды", "Сумма в звёздах. Действие попадёт в журнал.", "1000", sign > 0 ? "Начислить" : "Списать");
     if (v == null || !(Math.floor(+v) > 0)) return;
-    await post(`admin/user/${el.dataset.id}/stars`, { delta: sign * Math.floor(+v) }); H.ok(); toast("Готово", "ok");
+    const amt = Math.floor(+v), b = +(el.dataset.b || 0), neg = sign < 0 && amt > b;
+    if (neg && !await confirmM("Списать в минус?", `У игрока ⭐ ${fmt(b)}, баланс станет <b class="tl">⭐ ${fmt(b - amt)}</b>.
+      Пока долг не погашен, он не сможет ставить и переводить звёзды. Доход бизнесов, бонусы и продажа подарков пойдут в погашение.`, "Списать в минус")) return;
+    await post(`admin/user/${el.dataset.id}/stars`, { delta: sign * amt, neg }); H.ok(); toast("Готово", "ok");
     if (+el.dataset.id === ME.id) loadMe();
     topSheet()._redraw && topSheet()._redraw();
   },
@@ -664,6 +673,16 @@ Object.assign(ACT, {
       if (value == null || !value.trim()) return;
     } else if (!await confirmM("Новый адрес?", `Игроку выдадим случайный ${anon ? "анонимный " : ""}адрес. Старый перестанет принимать переводы. Отменить можно в журнале.`, "Сменить")) return;
     const r = await post(`admin/user/${el.dataset.id}/addr`, { kind: anon ? "anon" : "main", value }); H.ok(); toast("Адрес: " + r.addr, "ok");
+    topSheet()._redraw && topSheet()._redraw();
+  },
+  "adm-freeze": async el => {
+    const on = el.dataset.v === "1";
+    let reason = "";
+    if (on) {
+      reason = await promptM("Заморозить кошелёк?", "Игрок сможет играть, но не сможет переводить звёзды, отправлять подарки, торговать на маркете, меняться и играть против других игроков. Причина (видна игроку, можно пусто):", "", "Заморозить", "text");
+      if (reason == null) return;
+    }
+    await post(`admin/user/${el.dataset.id}/freeze`, { on, reason }); H.ok(); toast(on ? "Кошелёк заморожен" : "Кошелёк разморожен", "ok");
     topSheet()._redraw && topSheet()._redraw();
   },
   "adm-ban": async el => {

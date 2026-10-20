@@ -246,8 +246,6 @@ def undo(lid: int, aid=Depends(admin)):
         k = u.get("t")
         if k == "stars":
             d = int(u["delta"])
-            if d < 0 and bal(tid) + d < 0:
-                err(f"у игрока уже только ⭐ {bal(tid):,} — снять ⭐ {-d:,} нельзя".replace(",", " "))
             db.execute("UPDATE users SET stars=stars+? WHERE id=?", (d, tid))
             event(tid, "admin", d)
             what = f"звёзды {d:+d}"
@@ -290,6 +288,21 @@ def undo(lid: int, aid=Depends(admin)):
             db.execute("INSERT INTO kv(k,v) VALUES('odds',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur),))
             settings._LIVE.clear(); settings._LIVE.update(cur)
             what = f"шансы {u['key']} → {'по умолчанию' if u['prev'] is None else u['prev']}"
+        elif k == "freeze":
+            import sanctions
+            sanctions.set_frozen(tid, bool(u["on"]), aid, "отмена")
+            what = "заморозка" if u["on"] else "разморозка"
+        elif k == "comp":
+            got = 0
+            for uid, st in u["items"]:
+                take = min(int(st), max(0, bal(uid)))   # уже потраченное не уводим в минус
+                if take:
+                    db.execute("UPDATE users SET stars=stars-? WHERE id=?", (take, uid))
+                    event(uid, "comp", -take)
+                    got += take
+                if u.get("keys"):
+                    db.execute("UPDATE case_keys SET n=MAX(0, n-?) WHERE user=? AND cid=?", (int(u["keys"]), uid, u["cid"]))
+            what = f"компенсация: снято ⭐ {got:,} у {len(u['items'])} игр.".replace(",", " ")
         elif k == "addr":
             import pay
             if u["prev"]:

@@ -409,6 +409,9 @@ def reserve_cheque(uid, code):
         if loans.stars_locked(uid):
             notify(uid, "↩️ Чек не создан: пока открыт кредит, переводить звёзды нельзя")
             return
+        if __import__("sanctions").is_frozen(uid):
+            notify(uid, "↩️ Чек не создан: кошелёк заморожен на время проверки")
+            return
         u = q1("SELECT stars FROM users WHERE id=?", uid)
         if not u or u["stars"] < amount + fee:
             notify(uid, f"↩️ Чек на {amount} ⭐ не создан: не хватило звёзд с комиссией")

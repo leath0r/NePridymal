@@ -4,7 +4,8 @@
 // ============================================================
 const ADM_ACT = { stars: "Звёзды", ban: "Бан", unban: "Разбан", gift: "Выдал подарок", keys: "Выдал ключи", game: "Состояние игры", odds: "Шансы",
   undo: "Отмена", admin_on: "Выдал админку", admin_off: "Снял админку", alerts: "Тревоги", claw: "Кран", broadcast: "Рассылка", promo: "Акция",
-  event: "Ивент", gift_rm: "Забрал подарок", cosm_rm: "Забрал оформление", wipe: "Вайп", fees: "Комиссии", shop: "Продажи" };
+  event: "Ивент", gift_rm: "Забрал подарок", cosm_rm: "Забрал оформление", wipe: "Вайп", fees: "Комиссии", shop: "Продажи",
+  freeze: "Заморозил кошелёк", unfreeze: "Разморозил кошелёк", comp: "Компенсация", addr: "Адрес кошелька" };
 const ALERT_IC = { bigwin: "trophy", hour: "flame", bank: "bank", game: "games", adminstars: "users", server: "activity" };
 
 // ---------------- пульт ----------------
@@ -87,4 +88,58 @@ Object.assign(ACT, {
     const s = topSheet(); if (s) admRender(s);
   },
   "adm-goto": el => { const s = topSheet(); const b = s && s.querySelector(`#adm-seg [data-v="${el.dataset.v}"]`); if (b) { b.click(); b.scrollIntoView({ inline: "center", block: "nearest" }); } },
+});
+
+// ---------------- компенсации: кому (игра, период, раундов) → что (звёзды фикс / % проигрыша, ключи) → предпросмотр → выдать ----------------
+let COMP = null;
+const compDt = t => { const d = new Date(t * 1000 - new Date().getTimezoneOffset() * 60000); return d.toISOString().slice(0, 16); };
+async function admComp(body) {
+  COMP = await api("admin/comp/meta");
+  const t = COMP.now;
+  body.innerHTML = `<div class="box adm-odd cp-f">
+      <div class="adm-oh"><b>${ic("users")}Кому</b></div>
+      <div class="adm-f"><span>Игра</span>${admSel("cp-game", COMP.games, "Любая игра")}</div>
+      <div class="adm-f"><span>С</span><input id="cp-from" type="datetime-local" value="${compDt(t - 86400)}"></div>
+      <div class="adm-f"><span>По</span><input id="cp-to" type="datetime-local" value="${compDt(t)}"></div>
+      <div class="adm-f"><span>Сыграл раундов, не меньше</span><input id="cp-min" inputmode="numeric" value="1"></div>
+      <div class="adm-oh" style="margin-top:6px"><b>${ic("gift")}Что выдать</b></div>
+      <div class="seg" id="cp-mode"><button class="on" data-act="cp-mode" data-v="fixed">Всем поровну</button><button data-act="cp-mode" data-v="loss">% от проигрыша</button></div>
+      <div class="adm-f cp-fixed"><span>Звёзд каждому</span><input id="cp-amt" inputmode="numeric" placeholder="0"></div>
+      <div class="cp-two cp-loss" hidden><div class="adm-f"><span>Вернуть %</span><input id="cp-pct" inputmode="decimal" placeholder="50"></div>
+        <div class="adm-f"><span>Не больше ⭐ одному</span><input id="cp-cap" inputmode="numeric" placeholder="без предела"></div></div>
+      <div class="cp-two"><div class="adm-f"><span>Ключи</span>${admSel("cp-cid", COMP.cases, "Без ключей")}</div>
+        <div class="adm-f"><span>Сколько</span><input id="cp-keys" inputmode="numeric" value="1"></div></div>
+      <div class="adm-f"><span>Сообщение игрокам</span><input id="cp-note" placeholder="Компенсация за лаги в краше"></div>
+      <button class="btn ghost" data-act="cp-prev" style="margin-top:10px">${ic("search")}Посчитать</button>
+    </div>
+    <div id="cp-res"></div>
+    <div class="hint" style="font-size:12px;text-align:center;margin-top:10px">Звёзды начисляются сверх банка, как выдача админом. Отменить можно в «Журнале» — снимет начисленное (кто уже потратил, у того сколько осталось).${COMP.owner ? "" : ` Больше ⭐ ${fmt(COMP.max)} за раз — только владелец.`}</div>`;
+}
+function compBody() {
+  const v = id => $("#" + id).value.trim(), ts = id => Math.floor(new Date(v(id)).getTime() / 1000);
+  return { game: v("cp-game") || "any", from: ts("cp-from"), to: ts("cp-to"), minRounds: +v("cp-min") || 1,
+    mode: $("#cp-mode .on").dataset.v, amount: +v("cp-amt") || 0, pct: +v("cp-pct").replace(",", ".") || 0, cap: +v("cp-cap") || 0,
+    cid: v("cp-cid"), keys: v("cp-cid") ? +v("cp-keys") || 1 : 0, note: v("cp-note") };
+}
+Object.assign(ACT, {
+  "cp-mode": el => {
+    H.sel(); el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === el));
+    const loss = el.dataset.v === "loss"; $(".cp-fixed").hidden = loss; $(".cp-loss").hidden = !loss;
+  },
+  "cp-prev": async () => {
+    const b = compBody(), r = await post("admin/comp/preview", b), res = $("#cp-res"); if (!res) return;
+    H.sel();
+    res.innerHTML = `<div class="box adm-odd cp-sum"><div class="cp-big"><div><b>${fmt(r.players)}</b><span>игроков</span></div><div><b>⭐ ${short(r.stars)}</b><span>всего звёзд</span></div>${r.keys ? `<div><b>${fmt(r.keys)}</b><span>ключей</span></div>` : ""}</div>
+      ${r.top.length ? `<div class="cp-top">${r.top.map(u => `<div class="row">${avaHTML(u, 28)}<div class="grow"><div class="t">${esc(u.name)}</div><div class="s">${fmt(u.rounds)} раундов · проиграл ⭐ ${fmt(u.loss)}</div></div><b>${u.stars ? "+" + fmt(u.stars) : "—"}</b></div>`).join("")}
+        ${r.players > r.top.length ? `<div class="hint" style="font-size:12px;padding:6px 12px">…и ещё ${fmt(r.players - r.top.length)}</div>` : ""}</div>` : ""}
+      ${r.players ? `<button class="btn gold" data-act="cp-send" style="margin-top:10px" ${r.stars > r.max && !r.owner ? "disabled" : ""}>${ic("gift")}Выдать ${fmt(r.players)} игрокам</button>` : `<div class="hint" style="padding:12px;text-align:center">Под условия никто не попал</div>`}</div>`;
+    starify(res); res.scrollIntoView({ behavior: "smooth", block: "start" });
+  },
+  "cp-send": async el => {
+    const b = compBody(), r = await post("admin/comp/preview", b);
+    if (!await confirmM("Выдать компенсацию?", `${fmt(r.players)} игрокам: ⭐ ${fmt(r.stars)}${r.keys ? ` и ${fmt(r.keys)} ключей` : ""}. Каждому придёт сообщение от бота.`, "Выдать")) return;
+    el.disabled = true;
+    try { const s = await post("admin/comp/send", b); H.ok(); toast(`Выдано ${fmt(s.players)} игрокам · ⭐ ${fmt(s.stars)}`, "ok"); $("#cp-res").innerHTML = ""; }
+    catch (e) { el.disabled = false; }
+  },
 });
