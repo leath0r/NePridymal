@@ -11,7 +11,7 @@ NAMES = {"crash": "Краш", "mines": "Мины", "wheel": "Колесо", "due
          "tower": "Башня", "slots": "Слоты", "blackjack": "Блэкджек", "dogs": "Пёсики", "roulette": "Рулетка", "hilo": "Больше/меньше",
          "chicken": "Курица", "avia": "Самолётик", "scratch": "Скретч-карты", "battle": "Битва кейсов", "starfall": "Звездопад",
          "upgrade": "Апгрейд", "jroul": "Джекпот", "cards": "Столы", "craft": "Крафт",
-         "claw": "Кран", "pump": "Насос", "drill": "Бур", "darts": "Дартс", "fish": "Рыбалка"}
+         "claw": "Кран", "pump": "Насос", "drill": "Бур", "darts": "Дартс", "fish": "Рыбалка", "keno": "Кено", "penalty": "Пенальти"}
 
 db.executescript("""
 CREATE TABLE IF NOT EXISTS bigwin_reacts(win INTEGER, user INTEGER, emoji TEXT, ts INTEGER, PRIMARY KEY(win, user));

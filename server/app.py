@@ -278,12 +278,12 @@ except sqlite3.OperationalError:
     pass
 CLAN_TAX = {}   # uid → (id клана, ставка налога) — заполняет clans.py
 TAXABLE = {"crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
-           "chicken", "avia", "scratch", "claw", "pump", "drill", "darts", "fish"}   # игры на звёзды; кейсы, апгрейды, битвы и т. п. дают подарки — их не облагаем
+           "chicken", "avia", "scratch", "claw", "pump", "drill", "darts", "fish", "keno", "penalty"}   # игры на звёзды; кейсы, апгрейды, битвы и т. п. дают подарки — их не облагаем
 
 
 BIGWIN_MIN = conf("economy.bigwin_min", 3000)   # выигрыш от этой суммы попадает в живую ленту крупных выигрышей (live.py)
 BIG_KINDS = {"crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
-             "chicken", "avia", "scratch", "battle", "starfall", "upgrade", "jroul", "cards", "craft", "claw", "pump", "drill", "darts", "fish"}
+             "chicken", "avia", "scratch", "battle", "starfall", "upgrade", "jroul", "cards", "craft", "claw", "pump", "drill", "darts", "fish", "keno", "penalty"}
 db.executescript("""
 CREATE TABLE IF NOT EXISTS bigwins(id INTEGER PRIMARY KEY, user INTEGER, kind TEXT, amount INTEGER, ts INTEGER);
 """)
@@ -1655,7 +1655,7 @@ db.executescript("CREATE TABLE IF NOT EXISTS quest_claims(user INTEGER, qid TEXT
 # w — выиграй N раз (итог раунда в плюс), x — один выигрыш не меньше arg ⭐, g — сыграй в N разных игр.
 # (id, иконка, текст, игра в gates или None, виды событий, режим, сколько, arg, награда, уровень)
 _ALLG = ("crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
-         "chicken", "starfall", "avia", "battle", "scratch", "claw", "pump", "drill", "darts", "fish", "jroul", "upgrade")
+         "chicken", "starfall", "avia", "battle", "scratch", "claw", "pump", "drill", "darts", "fish", "jroul", "upgrade", "keno", "penalty")
 QPOOL = [
     ("cases", "box", "Открой 3 кейса", None, ("case",), "n", 3, 0, 250, 1),
     ("crash", "rocket", "Сыграй 5 раундов в краш", "crash", ("crash",), "n", 5, 0, 250, 1),
@@ -1703,6 +1703,10 @@ QNEW = [   # «новинка дня» — из свежих игр
     ("n_fishw", "fish", "Вытащи 3 рыбы на «Рыбалке»", "fish", ("fish",), "w", 3, 0, 600, 0),
     ("n_plinko", "target", "Брось 20 шариков в «Плинко»", "plinko", ("plinko",), "n", 20, 0, 500, 0),
     ("n_plinkow", "target", "Поймай 5 выигрышей в «Плинко»", "plinko", ("plinko",), "w", 5, 0, 600, 0),
+    ("n_keno", "grid", "Сыграй 10 тиражей в «Кено»", "keno", ("keno",), "n", 10, 0, 500, 0),
+    ("n_kenow", "grid", "Выиграй в «Кено» 3 раза", "keno", ("keno",), "w", 3, 0, 600, 0),
+    ("n_pen", "target", "Пробей 5 серий пенальти", "penalty", ("penalty",), "n", 5, 0, 500, 0),
+    ("n_penw", "trophy", "Забери выигрыш в «Пенальти» 3 раза", "penalty", ("penalty",), "w", 3, 0, 600, 0),
 ]
 QCHEST = 1000   # сундук: забрал все задания дня
 
@@ -2261,7 +2265,7 @@ def week_start():
     return t - t % 86400 - time.gmtime(t).tm_wday * 86400
 
 
-GAME_KINDS = "('case','crash','upgrade','mines','wheel','duel','dice','limbo','plinko','tower','slots','blackjack','cards','dogs','roulette','jroul','hilo','craft','chicken','starfall','avia','battle','scratch','claw','pump','drill','darts','fish')"
+GAME_KINDS = "('case','crash','upgrade','mines','wheel','duel','dice','limbo','plinko','tower','slots','blackjack','cards','dogs','roulette','jroul','hilo','craft','chicken','starfall','avia','battle','scratch','claw','pump','drill','darts','fish','keno','penalty')"
 
 
 def pnl(uids, since=0):
@@ -2489,7 +2493,7 @@ import actlog  # noqa: E402,F401 — подробный журнал дейст�
 import retain  # noqa: E402,F401 — кэшбэк недели и «возвращайся»
 import odds  # noqa: E402,F401 — админка «Шансы»: возврат по играм на лету
 import claw  # noqa: E402,F401 — «Кран»: автомат с клешнёй (после admin — у него вкладка в админке)
-import pump, drill, darts, fish  # noqa: E402,F401 — «Насос», «Бур», «Дартс», «Рыбалка»
+import pump, drill, darts, fish, keno, penalty  # noqa: E402,F401 — «Насос», «Бур», «Дартс», «Рыбалка», «Кено», «Пенальти»
 import ops  # noqa: E402,F401 — пульт, тревоги, разбор игрока, отмена действий админа
 import pay  # noqa: E402,F401 — переводы звёзд между игроками по QR («Кошелёк»)
 import dbtools  # noqa: E402,F401 — админка: экспорт/импорт базы (только владелец)

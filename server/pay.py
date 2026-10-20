@@ -557,3 +557,63 @@ def _admin_routes():
 
 
 _admin_routes()
+
+
+# ---------------- админ: смена адреса кошелька игрока (новый случайный или «красивый» свой) ----------------
+from admin import admin as _admin, log as _alog   # noqa: E402
+
+
+def addr_make(raw):
+    """Ввод админа → готовый адрес. Полный адрес с верной суммой берём как есть; иначе это начало (до 16 символов) —
+    дополняем случайными символами и считаем контрольную сумму. Пусто — полностью случайный."""
+    s = "".join(str(raw or "").upper().split()).replace("-", "").translate(str.maketrans("OIL", "011"))
+    if len(s) == 22 and s.startswith("NP") and all(c in ADDR_ABC for c in s[2:]) and _addr_sum(s[2:18]) == s[18:]:
+        return s
+    if s.startswith("NP"):
+        s = s[2:]
+    bad = sorted({c for c in s if c not in ADDR_ABC})
+    if bad:
+        err(f"нельзя символы: {' '.join(bad)} — только цифры и латиница без U (O→0, I и L→1)")
+    if len(s) > 16:
+        err("своя часть — не длиннее 16 символов (после NP)")
+    body = s + "".join(secrets.choice(ADDR_ABC) for _ in range(16 - len(s)))
+    return "NP" + body + _addr_sum(body)
+
+
+@app.get(R + "/admin/user/{tid}/addr")
+def adm_addr(tid: int, aid=Depends(_admin)):
+    q1("SELECT 1 FROM users WHERE id=?", tid) or err("нет такого игрока", 404)
+    return {"addr": addr_of(tid), "anon": addr_of(tid, "pay_anon")}
+
+
+def addr_set(tid, kind, a):
+    """Поставить адрес (kind: main | anon). Возвращает прежний. Вызывать внутри tx()."""
+    table = "pay_anon" if kind == "anon" else "pay_addr"
+    import bank
+    if a == bank.bank_addr():
+        err("это адрес банка")
+    taken = q1("SELECT user FROM pay_addr WHERE addr=? UNION SELECT user FROM pay_anon WHERE addr=?", a, a)
+    if taken and taken["user"] != tid:
+        err("такой адрес уже занят другим игроком")
+    other = q1(f"SELECT 1 FROM {'pay_addr' if table == 'pay_anon' else 'pay_anon'} WHERE user=? AND addr=?", tid, a)
+    if other:
+        err("это второй адрес этого же игрока")
+    old = q1(f"SELECT addr FROM {table} WHERE user=?", tid)
+    db.execute(f"INSERT INTO {table}(user,addr,ts) VALUES(?,?,?) ON CONFLICT(user) DO UPDATE SET addr=excluded.addr, ts=excluded.ts", (tid, a, now()))
+    return old["addr"] if old else None
+
+
+@app.post(R + "/admin/user/{tid}/addr")
+async def adm_addr_set(tid: int, req: Request, aid=Depends(_admin)):
+    b = await req.json()
+    kind = "anon" if b.get("kind") == "anon" else "main"
+    a = addr_make(b.get("value", ""))
+    with tx():
+        q1("SELECT 1 FROM users WHERE id=?", tid) or err("нет такого игрока", 404)
+        old = addr_set(tid, kind, a)
+        if old == a:
+            err("у игрока уже этот адрес")
+        _alog(aid, "addr", tid, f"{'анонимный' if kind == 'anon' else 'адрес'}: {old or '—'} → {a}", undo={"t": "addr", "kind": kind, "prev": old})
+    if kind == "main" and b.get("notify", True):
+        notify(tid, f"🔑 Адрес твоего кошелька изменён администрацией.\nНовый адрес: <code>{a}</code>\nСтарый больше не принимает переводы.")
+    return {"ok": True, "addr": a, "prev": old}

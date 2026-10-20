@@ -45,3 +45,7 @@
 .ap-log .btn.sm{flex:none;align-self:center}
 .ap-lnk{color:var(--link);cursor:pointer}
 .ap-top>.ap-c:nth-child(even):last-child{grid-column:1/-1}
+
+/* кошелёк игрока в карточке админа */
+.adm-wal .row{padding-bottom:6px}
+.adm-addr{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:14px;letter-spacing:.04em;word-break:break-all;white-space:normal;user-select:all}

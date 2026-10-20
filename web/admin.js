@@ -398,6 +398,7 @@ async function openAdmUser(id) {
   const draw = async () => {
     const [u, cs, fr, tr, ins] = await Promise.all([api("admin/user/" + id), api(`admin/user/${id}/cosm`), api(`admin/user/${id}/friends`),
       api(`admin/user/${id}/transfers`).catch(() => ({ sent: 0, got: 0, list: [] })), api(`admin/user/${id}/insight`).catch(() => null)]);
+    const wa = await api(`admin/user/${id}/addr`).catch(() => null);
     const frRow = (f, s) => `<div class="row tap" data-act="adm-user" data-id="${f.id}">${avaHTML(f, 32)}<div class="grow"><div class="t">${esc(f.name)}</div><div class="s">${s} · был ${admDate(f.seen)}</div></div>${ic("chev")}</div>`;
     replaceSheet(el, `<div style="display:flex;align-items:center;gap:12px;margin:4px 0 12px">${avaHTML(u, 48)}<div class="grow"><b style="font-size:19px">${esc(u.name)}</b>
         <div class="hint" style="font-size:13px">${u.username ? "@" + esc(u.username) + " · " : ""}id ${u.id}${u.banned ? ` · <span class="tl">заблокирован</span>` : ""}</div></div></div>
@@ -412,6 +413,11 @@ async function openAdmUser(id) {
       <div class="btns"><button class="btn green sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="1">+ Звёзды</button>
         <button class="btn ghost sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="-1">− Звёзды</button>
         <button class="btn ${u.banned ? "ghost" : "red"} sm" style="flex:1" data-act="adm-ban" data-id="${u.id}" data-v="${u.banned ? 0 : 1}">${u.banned ? "Разбанить" : "Забанить"}</button></div>
+      ${wa ? `<div class="sec-t">${ic("wallet")}Кошелёк</div><div class="box adm-wal">
+        ${[["main", "Адрес", wa.addr, "по нему игроку переводят звёзды"], ["anon", "Анонимный", wa.anon, "секретный: отправитель не видит, кому ушло"]].map(([k, t, a, s]) => `<div class="row"><div class="grow">
+          <div class="s">${t} · ${s}</div><div class="t adm-addr">${esc(a)}</div></div></div>
+          <div class="btns" style="margin:0 12px 10px"><button class="btn ghost sm" style="flex:1" data-act="adm-addr" data-id="${u.id}" data-k="${k}" data-m="rnd">${ic("refresh")}Новый</button>
+            <button class="btn ghost sm" style="flex:1" data-act="adm-addr" data-id="${u.id}" data-k="${k}" data-m="own">${ic("edit")}Свой</button></div>`).join("")}</div>` : ""}
       <div class="btns"><button class="btn gold sm" style="flex:1" data-act="adm-gift" data-id="${u.id}">${ic("gift")}Подарок</button>
         <button class="btn gold sm" style="flex:1" data-act="adm-keys" data-id="${u.id}">${ic("lock")}Кейсы</button></div>
       ${u.canGrant && !u.isOwner ? `<button class="btn ${u.isAdmin ? "red" : "ghost"} sm" style="width:100%;margin-top:8px" data-act="adm-grant" data-id="${u.id}" data-v="${u.isAdmin ? 0 : 1}" data-n="${esc(u.name)}">${ic("crown")}${u.isAdmin ? "Снять админку" : "Сделать админом"}</button>`
@@ -647,6 +653,17 @@ Object.assign(ACT, {
     const on = el.dataset.v === "1";
     if (!await confirmM(on ? "Сделать админом?" : "Снять админку?", on ? `${esc(el.dataset.n)} получит админ-панель: начислять и списывать звёзды, банить, выдавать подарки и кейсы, делать рассылки. Все действия пишутся в журнал. Выдавать админку дальше сможешь только ты.` : `${esc(el.dataset.n)} потеряет доступ к админ-панели.`, on ? "Выдать" : "Снять")) return;
     await post(`admin/user/${el.dataset.id}/admin`, { on }); H.ok(); toast(on ? "Админка выдана" : "Админка снята", "ok");
+    topSheet()._redraw && topSheet()._redraw();
+  },
+  "adm-addr": async el => {
+    const anon = el.dataset.k === "anon";
+    let value = "";
+    if (el.dataset.m === "own") {
+      value = await promptM(anon ? "Свой анонимный адрес" : "Свой адрес кошелька",
+        "Начало адреса после NP — до 16 символов: цифры и латиница без U (O станет 0, I и L — 1). Остальное добьётся случайно, контрольная сумма посчитается сама. Можно вставить и полный адрес.", "", "Поставить", "text");
+      if (value == null || !value.trim()) return;
+    } else if (!await confirmM("Новый адрес?", `Игроку выдадим случайный ${anon ? "анонимный " : ""}адрес. Старый перестанет принимать переводы. Отменить можно в журнале.`, "Сменить")) return;
+    const r = await post(`admin/user/${el.dataset.id}/addr`, { kind: anon ? "anon" : "main", value }); H.ok(); toast("Адрес: " + r.addr, "ok");
     topSheet()._redraw && topSheet()._redraw();
   },
   "adm-ban": async el => {

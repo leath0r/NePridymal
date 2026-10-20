@@ -212,8 +212,8 @@ function modal(html) {
 }
 const confirmM = (title, text, ok = "Да") => modal(`<h3>${title}</h3><p class="hint" style="margin:0 0 16px">${text}</p>
   <div class="btns"><button class="btn ghost" data-m="no">Отмена</button><button class="btn" data-m="ok">${ok}</button></div>`);
-const promptM = (title, text, val = "", ok = "Готово") => modal(`<h3>${title}</h3><p class="hint" style="margin:0 0 12px">${text}</p>
-  <input inputmode="numeric" value="${esc(val)}"><div class="btns"><button class="btn ghost" data-m="no">Отмена</button><button class="btn" data-m="ok">${ok}</button></div>`);
+const promptM = (title, text, val = "", ok = "Готово", im = "numeric") => modal(`<h3>${title}</h3><p class="hint" style="margin:0 0 12px">${text}</p>
+  <input inputmode="${im}"${im === "text" ? ' autocapitalize="characters" autocomplete="off" spellcheck="false"' : ""} value="${esc(val)}"><div class="btns"><button class="btn ghost" data-m="no">Отмена</button><button class="btn" data-m="ok">${ok}</button></div>`);
 
 const fx = $("#fx"), fc = fx.getContext("2d"); let P = [], fxOn = false;
 function fxSize() { const d = Math.min(devicePixelRatio || 1, 2); fx.width = innerWidth * d; fx.height = innerHeight * d; fc.setTransform(d, 0, 0, d, 0, 0); }

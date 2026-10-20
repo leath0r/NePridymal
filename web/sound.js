@@ -41,6 +41,13 @@ const SND = (() => {
     pop() { noise(.35, { gain: .32, freq: 3200, sweep: .2 }); tone(120, .25, { gain: .2, slide: .4 }); noise(.08, { gain: .2, type: "highpass", freq: 4000 }); },
     float() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, .35, { type: "triangle", gain: .04, at: i * .06, slide: 1.02 })); },
     drill(dur = 1) { noise(dur, { gain: .06, type: "bandpass", freq: 260, q: 3, attack: .08 }); tone(55, dur, { type: "sawtooth", gain: .025, attack: .08 }); },
+    // кено и пенальти
+    ball(k = 0) { tone(520 + k * 40, .09, { type: "triangle", gain: .05 }); noise(.05, { gain: .05, type: "bandpass", freq: 1800, q: 3 }); },
+    gem(k = 0) { [1, 1.5, 2].forEach((m, i) => tone((880 + k * 70) * m, .22, { type: "triangle", gain: .04, at: i * .05 })); },
+    kick() { tone(110, .14, { gain: .3, slide: .5 }); noise(.08, { gain: .2, freq: 900, sweep: .4 }); noise(.35, { gain: .04, type: "bandpass", freq: 1200, q: 1.5, sweep: 3, at: .04, attack: .05 }); },
+    net() { noise(.4, { gain: .1, type: "bandpass", freq: 700, q: .8, sweep: .5, attack: .01 }); },
+    crowd(big) { noise(big ? 2.2 : 1.4, { gain: big ? .14 : .09, type: "bandpass", freq: 900, q: .5, attack: .25 }); noise(big ? 1.8 : 1.1, { gain: .05, type: "bandpass", freq: 2400, q: .7, attack: .3, at: .1 }); },
+    save() { tone(180, .2, { gain: .18, slide: .6 }); noise(.15, { gain: .12, freq: 600, sweep: .4 }); noise(.9, { gain: .06, type: "bandpass", freq: 500, q: .6, attack: .2, at: .1 }); },
     crack() { noise(.18, { gain: .2, type: "highpass", freq: 1800, sweep: .5 }); tone(90, .3, { gain: .12, slide: .5 }); },
     whiz() { noise(.32, { gain: .06, type: "bandpass", freq: 900, q: 2, sweep: 4, attack: .06 }); },
     thunk() { tone(160, .16, { gain: .22, slide: .45 }); noise(.06, { gain: .14, freq: 2500 }); tone(1300, .05, { type: "triangle", gain: .03, at: .01 }); },

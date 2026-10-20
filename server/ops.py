@@ -290,6 +290,13 @@ def undo(lid: int, aid=Depends(admin)):
             db.execute("INSERT INTO kv(k,v) VALUES('odds',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur),))
             settings._LIVE.clear(); settings._LIVE.update(cur)
             what = f"шансы {u['key']} → {'по умолчанию' if u['prev'] is None else u['prev']}"
+        elif k == "addr":
+            import pay
+            if u["prev"]:
+                pay.addr_set(tid, u["kind"], u["prev"])
+            else:
+                db.execute(f"DELETE FROM {'pay_anon' if u['kind'] == 'anon' else 'pay_addr'} WHERE user=?", (tid,))
+            what = f"адрес кошелька → {u['prev'] or 'новый при первом входе'}"
         else:
             err("неизвестное действие")
         db.execute("UPDATE admin_log SET undone=? WHERE id=?", (now(), lid))
