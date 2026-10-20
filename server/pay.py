@@ -197,11 +197,29 @@ def pay_peer(tid: int, uid=Depends(auth)):
     return user_brief(u)
 
 
+def addr_key(a):
+    """Ввод → как хранится: заглавные, без пробелов и дефисов (свои адреса от админа — любые латинские буквы и цифры)."""
+    return "".join(str(a or "").upper().split()).replace("-", "")
+
+
+def addr_find(a):
+    """(id владельца, анонимный ли) или None — без ошибок. Сначала точное совпадение (свой адрес), потом стандартный NP…"""
+    for k in {addr_key(a), addr_norm(a)} - {None, ""}:
+        for t, anon in (("pay_addr", False), ("pay_anon", True)):
+            r = q1(f"SELECT user FROM {t} WHERE addr=?", k)
+            if r:
+                return r["user"], anon
+    return None
+
+
 def addr_owner(a):
     """Адрес → (id владельца, анонимный ли адрес) или err с понятной причиной."""
+    f = addr_find(a)
+    if f:
+        return f
     n = addr_norm(a)
     if not n:
-        err("это не адрес кошелька: он начинается с NP и состоит из 22 символов")
+        err("кошелёк с таким адресом не найден")
     if _addr_sum(n[2:18]) != n[18:]:
         err("в адресе опечатка — проверь символы")
     r = q1("SELECT user FROM pay_addr WHERE addr=?", n)
@@ -215,6 +233,18 @@ def addr_owner(a):
 
 BANK_BRIEF = {"id": 0, "bank": True, "name": "Банк игры", "username": None, "photo": None, "level": 0,
               "clan": None, "crown": None, "title": None, "frame": None, "vip": False}
+
+
+@app.get(R + "/pay/addrfind/{a}")
+def pay_addrfind(a: str, uid=Depends(auth)):
+    """Тихий поиск по адресу для поля «кому» (там же ищут по нику): не нашли — {"user": None}, без ошибки."""
+    f = addr_find(a) if 3 <= len(addr_key(a)) <= 32 else None
+    if not f or f[0] == uid:
+        return {"user": None}
+    u = q1("SELECT * FROM users WHERE id=?", f[0])
+    if not u or u["banned"]:
+        return {"user": None}
+    return {"user": ANON if f[1] else user_brief(u), "addr": addr_key(a)}
 
 
 @app.get(R + "/pay/addr/{a}")
@@ -566,21 +596,20 @@ _admin_routes()
 from admin import admin as _admin, log as _alog   # noqa: E402
 
 
+ADDR_FREE = re.compile(r"[0-9A-Z]{3,32}")
+
+
 def addr_make(raw):
-    """Ввод админа → готовый адрес. Полный адрес с верной суммой берём как есть; иначе это начало (до 16 символов) —
-    дополняем случайными символами и считаем контрольную сумму. Пусто — полностью случайный."""
-    s = "".join(str(raw or "").upper().split()).replace("-", "").translate(str.maketrans("OIL", "011"))
-    if len(s) == 22 and s.startswith("NP") and all(c in ADDR_ABC for c in s[2:]) and _addr_sum(s[2:18]) == s[18:]:
-        return s
-    if s.startswith("NP"):
-        s = s[2:]
-    bad = sorted({c for c in s if c not in ADDR_ABC})
-    if bad:
-        err(f"нельзя символы: {' '.join(bad)} — только цифры и латиница без U (O→0, I и L→1)")
-    if len(s) > 16:
-        err("своя часть — не длиннее 16 символов (после NP)")
-    body = s + "".join(secrets.choice(ADDR_ABC) for _ in range(16 - len(s)))
-    return "NP" + body + _addr_sum(body)
+    """Ввод админа → адрес. Пусто — новый случайный NP…; иначе ставим ровно как ввели: латинские буквы и цифры, 3–32 знака
+    (кириллицу не берём — «А» и «A» не отличить, легко подсунуть чужой адрес)."""
+    s = addr_key(raw)
+    if not s:
+        body = "".join(secrets.choice(ADDR_ABC) for _ in range(16))
+        return "NP" + body + _addr_sum(body)
+    if not ADDR_FREE.fullmatch(s):
+        bad = sorted({c for c in s if not ("0" <= c <= "9" or "A" <= c <= "Z")})
+        err(f"нельзя символы: {' '.join(bad)} — только латинские буквы и цифры" if bad else "адрес — от 3 до 32 символов")
+    return s
 
 
 @app.get(R + "/admin/user/{tid}/addr")
@@ -593,9 +622,11 @@ def addr_set(tid, kind, a):
     """Поставить адрес (kind: main | anon). Возвращает прежний. Вызывать внутри tx()."""
     table = "pay_anon" if kind == "anon" else "pay_addr"
     import bank
-    if a == bank.bank_addr():
+    if a == bank.bank_addr() or addr_norm(a) == bank.bank_addr():
         err("это адрес банка")
     taken = q1("SELECT user FROM pay_addr WHERE addr=? UNION SELECT user FROM pay_anon WHERE addr=?", a, a)
+    if not taken and addr_norm(a):   # «NPK0…» и «NPKO…» для стандартных адресов одно и то же — не даём завести двойника
+        taken = q1("SELECT user FROM pay_addr WHERE addr=? UNION SELECT user FROM pay_anon WHERE addr=?", addr_norm(a), addr_norm(a))
     if taken and taken["user"] != tid:
         err("такой адрес уже занят другим игроком")
     other = q1(f"SELECT 1 FROM {'pay_addr' if table == 'pay_anon' else 'pay_anon'} WHERE user=? AND addr=?", tid, a)

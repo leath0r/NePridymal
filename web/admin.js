@@ -410,6 +410,11 @@ async function openAdmUser(id) {
       <div class="box">${admKv("Баланс", `<b>⭐ ${fmt(u.stars)}</b>`)}${admKv("Подарков", `<b>${fmt(u.gifts)} · ⭐ ${fmt(u.giftsValue)}</b>`)}
         ${admKv("Итог в играх 24 ч / всего", `<span>${admSgn(u.pnl24)} / ${admSgn(u.pnlAll)}</span>`)}${admKv("Кейсов открыто", `<b>${fmt(u.opened)}</b>`)}
         ${admKv("Рефералов", `<b>${fmt(u.refs)}</b>`)}${admKv("Регистрация / был", `<b>${admDate(u.created)} / ${admDate(u.seen)}</b>`)}</div>
+      ${wa ? `<div class="sec-t">${ic("wallet")}Кошелёк</div><div class="box adm-wal">
+        ${[["main", "Адрес", wa.addr, "по нему игроку переводят звёзды"], ["anon", "Анонимный", wa.anon, "секретный: отправитель не видит, кому ушло"]].map(([k, t, a, s]) => `<div class="row"><div class="grow">
+          <div class="s">${t} · ${s}</div><div class="t adm-addr">${esc(a)}</div></div></div>
+          <div class="btns" style="margin:0 12px 10px"><button class="btn ghost sm" style="flex:1" data-act="adm-addr" data-id="${u.id}" data-k="${k}" data-m="rnd">${ic("refresh")}Новый</button>
+            <button class="btn ghost sm" style="flex:1" data-act="adm-addr" data-id="${u.id}" data-k="${k}" data-m="own">${ic("edit")}Свой</button></div>`).join("")}</div>` : ""}
       ${ins ? admInsightHTML(ins) : ""}
       <div class="sec-t">Кто пригласил</div>
       <div class="box">${u.inviter ? `<div class="row tap" data-act="adm-user" data-id="${u.inviter.id}">${avaHTML(u.inviter, 36)}<div class="grow"><div class="t">${esc(u.inviter.name)}</div>
@@ -418,11 +423,6 @@ async function openAdmUser(id) {
       <div class="btns"><button class="btn green sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="1">+ Звёзды</button>
         <button class="btn ghost sm" style="flex:1" data-act="adm-stars" data-id="${u.id}" data-v="-1" data-b="${u.stars}">− Звёзды</button>
         <button class="btn ${u.banned ? "ghost" : "red"} sm" style="flex:1" data-act="adm-ban" data-id="${u.id}" data-v="${u.banned ? 0 : 1}">${u.banned ? "Разбанить" : "Забанить"}</button></div>
-      ${wa ? `<div class="sec-t">${ic("wallet")}Кошелёк</div><div class="box adm-wal">
-        ${[["main", "Адрес", wa.addr, "по нему игроку переводят звёзды"], ["anon", "Анонимный", wa.anon, "секретный: отправитель не видит, кому ушло"]].map(([k, t, a, s]) => `<div class="row"><div class="grow">
-          <div class="s">${t} · ${s}</div><div class="t adm-addr">${esc(a)}</div></div></div>
-          <div class="btns" style="margin:0 12px 10px"><button class="btn ghost sm" style="flex:1" data-act="adm-addr" data-id="${u.id}" data-k="${k}" data-m="rnd">${ic("refresh")}Новый</button>
-            <button class="btn ghost sm" style="flex:1" data-act="adm-addr" data-id="${u.id}" data-k="${k}" data-m="own">${ic("edit")}Свой</button></div>`).join("")}</div>` : ""}
       ${fzz && !u.isAdmin ? `<button class="btn ${fzz.frozen ? "ghost" : "adm-frzb"} sm" style="width:100%;margin-top:8px" data-act="adm-freeze" data-id="${u.id}" data-v="${fzz.frozen ? 0 : 1}">${ic("lock")}${fzz.frozen ? "Разморозить кошелёк" : "Заморозить кошелёк"}</button>` : ""}
       <div class="btns"><button class="btn gold sm" style="flex:1" data-act="adm-gift" data-id="${u.id}">${ic("gift")}Подарок</button>
         <button class="btn gold sm" style="flex:1" data-act="adm-keys" data-id="${u.id}">${ic("lock")}Кейсы</button></div>
@@ -669,7 +669,7 @@ Object.assign(ACT, {
     let value = "";
     if (el.dataset.m === "own") {
       value = await promptM(anon ? "Свой анонимный адрес" : "Свой адрес кошелька",
-        "Начало адреса после NP — до 16 символов: цифры и латиница без U (O станет 0, I и L — 1). Остальное добьётся случайно, контрольная сумма посчитается сама. Можно вставить и полный адрес.", "", "Поставить", "text");
+        "Любой адрес из латинских букв и цифр, от 3 до 32 знаков — встанет ровно так, как напишешь (например DUROV777 или NPKING). Регистр не важен, пробелы и дефисы уберутся.", "", "Поставить", "text");
       if (value == null || !value.trim()) return;
     } else if (!await confirmM("Новый адрес?", `Игроку выдадим случайный ${anon ? "анонимный " : ""}адрес. Старый перестанет принимать переводы. Отменить можно в журнале.`, "Сменить")) return;
     const r = await post(`admin/user/${el.dataset.id}/addr`, { kind: anon ? "anon" : "main", value }); H.ok(); toast("Адрес: " + r.addr, "ok");

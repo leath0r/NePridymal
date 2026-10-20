@@ -12,7 +12,9 @@ Object.assign(ICONS, {
 
 const PAY = { info: null, friends: null, busy: false, seq: 0 };
 // адрес кошелька NP + 20 символов: показываем группами по 4, копируем слитно
-const payAddrFmt = a => a ? "NP " + a.slice(2).match(/.{1,4}/g).join(" ") : "";
+// свой адрес от админа (любой, 3–32 знака) показываем как есть
+const payAddrFmt = a => !a ? "" : /^NP[0-9A-Z]{20}$/.test(a) ? "NP " + a.slice(2).match(/.{1,4}/g).join(" ") : a;
+const payAddrMaybe = v => /^[0-9A-Z]{3,32}$/.test(String(v || "").toUpperCase().replace(/[\s-]/g, ""));
 const payAddrLike = v => /^NP[0-9A-Z]{20}$/.test(String(v || "").toUpperCase().replace(/[\s-]/g, ""));
 function payCopy(a, msg) {
   const ok = () => { H.ok(); toast(msg, "ok"); };
@@ -110,9 +112,12 @@ async function openPay(el) {
         box.innerHTML = u ? payPeer(u, "по адресу", v.replace(/[\s-]/g, "")) : `<div class="hint pay-empty">Кошелёк с таким адресом не найден</div>`;
         return;
       }
-      const list = await api("users/search?qs=" + enc(v)).catch(() => []);
+      // заодно ищем по адресу: у кого-то он свой, словом (например DUROV777)
+      const [list, fa] = await Promise.all([api("users/search?qs=" + enc(v)).catch(() => []),
+        payAddrMaybe(v) ? api("pay/addrfind/" + enc(v.replace(/[\s-]/g, ""))).catch(() => null) : null]);
       if (my !== PAY.seq || !el.isConnected) return;   // пока ждали ответ, запрос уже поменялся
-      box.innerHTML = list.map(u => payPeer(u)).join("") || `<div class="hint pay-empty">Никого не нашли</div>`;
+      box.innerHTML = (fa && fa.user ? payPeer(fa.user, "по адресу", fa.addr) : "") + list.filter(u => !(fa && fa.user && fa.user.id === u.id)).map(u => payPeer(u)).join("")
+        || `<div class="hint pay-empty">Никого не нашли</div>`;
     }, 300);
   };
 }
@@ -161,7 +166,8 @@ function payScan() {
   }
   promptM("Перевод по адресу", "Сканер QR работает в Telegram на телефоне. Здесь можно ввести адрес кошелька (NP…) или id игрока:", "", "Дальше").then(v => {
     if (payAddrLike(v)) { payByAddr(v); return; }
-    const id = parseInt(v, 10); if (id > 0) openPaySend(id, 0);
+    const id = /^\d+$/.test(String(v || "").trim()) ? parseInt(v, 10) : 0; if (id > 0) { openPaySend(id, 0); return; }
+    if (payAddrMaybe(v)) payByAddr(v);
   });
 }
 
