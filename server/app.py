@@ -1649,15 +1649,62 @@ def duel_action(did: int, action: str, uid=Depends(auth)):
 
 # --- ежедневные задания ---
 db.executescript("CREATE TABLE IF NOT EXISTS quest_claims(user INTEGER, qid TEXT, day INTEGER, PRIMARY KEY(user,qid,day));")
-QUESTS = [  # id, иконка, текст, вид события, сколько надо, награда
-    ("cases", "box", "Открой 3 кейса", "case", 3, 300),
-    ("cases10", "gift", "Открой 10 кейсов", "case", 10, 1000),
-    ("crash", "rocket", "Сыграй 5 раундов в краш", "crash", 5, 300),
-    ("mines", "bomb", "Сыграй 3 раза в мины", "mines", 3, 250),
-    ("wheel", "refresh", "Крутани колесо 3 раза", "wheel", 3, 200),
-    ("upgrade", "trend", "Сделай апгрейд", "upgrade", 1, 300),
-    ("duel", "target", "Сыграй дуэль", "duel", 1, 400),
+# Пул заданий: каждый день сервер берёт из него набор (одинаковый для всех — есть что обсудить в чате):
+# 2 лёгких, 2 средних, 1 сложное и 1 «новинка» из свежих игр + сундук за выполнение всех.
+# Задания в закрытые/скрытые/админские игры не попадают (gates). Режимы: n — сыграй N раз,
+# w — выиграй N раз (итог раунда в плюс), x — один выигрыш не меньше arg ⭐, g — сыграй в N разных игр.
+# (id, иконка, текст, игра в gates или None, виды событий, режим, сколько, arg, награда, уровень)
+_ALLG = ("crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
+         "chicken", "starfall", "avia", "battle", "scratch", "claw", "pump", "drill", "darts", "fish", "jroul", "upgrade")
+QPOOL = [
+    ("cases", "box", "Открой 3 кейса", None, ("case",), "n", 3, 0, 250, 1),
+    ("crash", "rocket", "Сыграй 5 раундов в краш", "crash", ("crash",), "n", 5, 0, 250, 1),
+    ("mines", "bomb", "Сыграй 3 раза в мины", "mines", ("mines",), "n", 3, 0, 200, 1),
+    ("wheel", "refresh", "Крутани колесо 3 раза", "wheel", ("wheel",), "n", 3, 0, 200, 1),
+    ("upgrade", "trend", "Сделай апгрейд", "upgrade", ("upgrade",), "n", 1, 0, 250, 1),
+    ("dice", "target", "Брось кубик 10 раз", "dice", ("dice",), "n", 10, 0, 200, 1),
+    ("slots", "grid", "Крутани слоты 10 раз", "slots", ("slots",), "n", 10, 0, 200, 1),
+    ("scratch", "sparkles", "Сотри 3 скретч-карты", "scratch", ("scratch",), "n", 3, 0, 250, 1),
+    ("tower", "layers", "Залезь на башню 3 раза", "tower", ("tower",), "n", 3, 0, 200, 1),
+    ("chicken", "flame", "Проведи курицу 3 раза", "chicken", ("chicken",), "n", 3, 0, 200, 1),
+    ("claw", "gift", "Сыграй в «Кран» 3 раза", "claw", ("claw",), "n", 3, 0, 250, 1),
+    ("hilo", "chev", "Угадай карту в «Больше/меньше» 3 раза", "hilo", ("hilo",), "n", 3, 0, 200, 1),
+    ("games3", "games", "Сыграй в 3 разные игры", None, _ALLG, "g", 3, 0, 300, 1),
+    ("cases10", "gift", "Открой 10 кейсов", None, ("case",), "n", 10, 0, 700, 2),
+    ("crashw", "rocket", "Выиграй 3 раунда в краш", "crash", ("crash",), "w", 3, 0, 500, 2),
+    ("minesw", "bomb", "Забери выигрыш в минах 3 раза", "mines", ("mines",), "w", 3, 0, 500, 2),
+    ("dogs", "activity", "Крутани «Пёсиков» 10 раз", "dogs", ("dogs",), "n", 10, 0, 450, 2),
+    ("bj", "award", "Сыграй 5 раздач в блэкджек", "blackjack", ("blackjack",), "n", 5, 0, 450, 2),
+    ("towerw", "layers", "Забери выигрыш в башне 3 раза", "tower", ("tower",), "w", 3, 0, 500, 2),
+    ("chickenw", "flame", "Выиграй с курицей 3 раза", "chicken", ("chicken",), "w", 3, 0, 500, 2),
+    ("upg3", "trend", "Сделай 3 апгрейда", "upgrade", ("upgrade",), "n", 3, 0, 600, 2),
+    ("duel", "target", "Сыграй дуэль", "duels", ("duel",), "n", 1, 0, 500, 2),
+    ("avia", "send", "Запусти самолётик 3 раза", "avia", ("avia",), "n", 3, 0, 450, 2),
+    ("rlt", "refresh", "Сыграй 3 раунда рулетки", "rlt", ("roulette",), "n", 3, 0, 450, 2),
+    ("games5", "games", "Сыграй в 5 разных игр", None, _ALLG, "g", 5, 0, 600, 2),
+    ("win1k", "coins", "Выиграй разом от ⭐ 1 000", None, _ALLG, "x", 1, 1000, 600, 2),
+    ("cases25", "box", "Открой 25 кейсов", None, ("case",), "n", 25, 0, 1500, 3),
+    ("casew", "crown", "Окупи 3 кейса", None, ("case",), "w", 3, 0, 1200, 3),
+    ("upgw", "trend", "Сделай удачный апгрейд", "upgrade", ("upgrade",), "w", 1, 0, 1200, 3),
+    ("crash15", "rocket", "Сыграй 15 раундов в краш", "crash", ("crash",), "n", 15, 0, 1000, 3),
+    ("games8", "games", "Сыграй в 8 разных игр", None, _ALLG, "g", 8, 0, 1300, 3),
+    ("win10k", "crown", "Выиграй разом от ⭐ 10 000", None, _ALLG, "x", 1, 10000, 1500, 3),
+    ("battle", "users", "Сыграй в «Битву кейсов»", "battle", ("battle",), "n", 1, 0, 1000, 3),
+    ("slotsw", "grid", "Выиграй в слотах 5 раз", "slots", ("slots",), "w", 5, 0, 1000, 3),
 ]
+QNEW = [   # «новинка дня» — из свежих игр
+    ("n_pump", "wind", "Надуй шар в «Насосе» 5 раз", "pump", ("pump",), "n", 5, 0, 500, 0),
+    ("n_pumpw", "wind", "Забери выигрыш в «Насосе» 3 раза", "pump", ("pump",), "w", 3, 0, 600, 0),
+    ("n_drill", "drill", "Пробури землю в «Буре» 5 раз", "drill", ("drill",), "n", 5, 0, 500, 0),
+    ("n_drillw", "drill", "Выиграй в «Буре» 2 раза", "drill", ("drill",), "w", 2, 0, 600, 0),
+    ("n_darts", "crosshair", "Брось 10 дротиков в «Дартсе»", "darts", ("darts",), "n", 10, 0, 500, 0),
+    ("n_dartsw", "crosshair", "Выиграй в «Дартсе» 3 раза", "darts", ("darts",), "w", 3, 0, 600, 0),
+    ("n_fish", "fish", "Закинь удочку 5 раз", "fish", ("fish",), "n", 5, 0, 500, 0),
+    ("n_fishw", "fish", "Вытащи 3 рыбы на «Рыбалке»", "fish", ("fish",), "w", 3, 0, 600, 0),
+    ("n_plinko", "target", "Брось 20 шариков в «Плинко»", "plinko", ("plinko",), "n", 20, 0, 500, 0),
+    ("n_plinkow", "target", "Поймай 5 выигрышей в «Плинко»", "plinko", ("plinko",), "w", 5, 0, 600, 0),
+]
+QCHEST = 1000   # сундук: забрал все задания дня
 
 
 def day_start():
@@ -1666,13 +1713,55 @@ def day_start():
     return t - t % 86400
 
 
+def _qopen(gate):
+    if not gate:
+        return True
+    try:
+        from gates import states
+        return states().get(gate, "on") == "on"
+    except Exception:
+        return True
+
+
+def quests_today():
+    """Набор дня: детерминирован по дате (сид — номер дня), один и тот же для всех игроков."""
+    rnd = random.Random(day_start() // 86400 * 7919 + 17)
+    out = []
+    for tier, k in ((1, 2), (2, 2), (3, 1)):
+        pool = [x for x in QPOOL if x[9] == tier and _qopen(x[3])]
+        rnd.shuffle(pool)
+        seen = set()
+        for x in pool:   # не два задания на одну игру в одном уровне
+            if len([y for y in out if y[9] == tier]) >= k:
+                break
+            if x[3] in seen and x[3]:
+                continue
+            seen.add(x[3]); out.append(x)
+    nw = [x for x in QNEW if _qopen(x[3])]
+    if nw:
+        out.append(nw[rnd.randrange(len(nw))])
+    return out
+
+
 def quests_state(uid):
     d0 = day_start()
-    cnt = {r["kind"]: r["n"] for r in q("SELECT kind, COUNT(*) n FROM events WHERE user=? AND ts>=? GROUP BY kind", uid, d0)}
+    st = {r["kind"]: r for r in q("SELECT kind, COUNT(*) n, SUM(delta>0) w, MAX(delta) mx FROM events WHERE user=? AND ts>=? GROUP BY kind", uid, d0)}
     got = {r["qid"] for r in q("SELECT qid FROM quest_claims WHERE user=? AND day=?", uid, d0)}
+    items = []
+    for i, ic, t, _, kinds, mode, n, arg, rw, tier in quests_today():
+        rs = [st[k] for k in kinds if k in st]
+        have = (len(rs) if mode == "g" else sum(r["n"] for r in rs) if mode == "n" else sum(r["w"] or 0 for r in rs) if mode == "w"
+                else int(any((r["mx"] or 0) >= arg for r in rs)))
+        items.append({"id": i, "icon": ic, "t": t, "need": n, "have": min(n, have), "reward": rw, "claimed": i in got,
+                      "tier": "new" if not tier else tier})
     e = event_active()
-    return [{"id": i, "icon": ic, "t": t, "need": n, "have": min(n, cnt.get(k, 0)), "reward": rw, "claimed": i in got}
-            for i, ic, t, k, n, rw in QUESTS + (e["quests"] if e else [])]
+    for i, ic, t, k, n, rw in (e["quests"] if e else []):
+        items.append({"id": i, "icon": ic, "t": t, "need": n, "have": min(n, st[k]["n"] if k in st else 0), "reward": rw,
+                      "claimed": i in got, "tier": "event"})
+    done = sum(1 for x in items if x["claimed"])
+    items.append({"id": "chest", "icon": "trophy", "t": "Сундук: выполни все задания", "need": len(items),
+                  "have": done, "reward": QCHEST, "claimed": "chest" in got, "tier": "chest"})
+    return items
 
 
 @app.get(R + "/quests")

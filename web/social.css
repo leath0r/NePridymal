@@ -183,7 +183,13 @@ nav.tabs button .ic{stroke-width:2.1}
 .qsum{font-weight:900;color:var(--gold);font-size:16px;white-space:nowrap}
 .qrow .pic{width:38px;height:38px}
 .qrow.done .t{color:var(--hint)}
+.qrow .t{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
 .qrow .cbar div{background:linear-gradient(90deg,#35d07f,#9ef0c4)}
+.qtag{display:inline-block;margin-bottom:3px;padding:1px 7px;border-radius:6px;font-size:10.5px;font-weight:800;letter-spacing:.02em;
+  color:var(--c);background:color-mix(in srgb,var(--c) 16%,transparent)}
+.qrow.qchest{background:linear-gradient(100deg,color-mix(in srgb,var(--gold) 14%,transparent),transparent 70%)}
+.qrow.qchest .pic:not(.g){background:linear-gradient(135deg,#ffd76a,#ffa41f);color:#3a2300}
+.qrow.qchest .cbar div{background:linear-gradient(90deg,#ffb21f,#ffe066)}
 .promo .pic{color:#fff}
 
 /* ================= полировка ================= */

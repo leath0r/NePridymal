@@ -344,17 +344,19 @@ async function openQuests() {
   el._q = true;
   fillQuests(el);
 }
+const QTAG = { 1: ["лёгкое", "#35d07f"], 2: ["среднее", "#4aa8ff"], 3: ["сложное", "#ff7a45"], new: ["новинка", "#c77dff"], event: ["событие", "#ffb21f"] };
 async function fillQuests(el) {
   const d = await api("quests"); if (!el.isConnected) return;
   const total = d.items.reduce((s, x) => s + x.reward, 0), done = d.items.filter(x => x.claimed).length;
   el.querySelector("#q-body").innerHTML = `<div class="qhead"><div><b>${done}/${d.items.length} выполнено</b><span>Обновятся через ${clock(d.resetIn)}</span></div><div class="qsum">до ⭐ ${fmt(total)}</div></div>
     <div class="box">${d.items.map(x => {
       const ready = x.have >= x.need && !x.claimed;
-      return `<div class="row qrow${x.claimed ? " done" : ""}"><span class="pic ${x.claimed ? "g" : ready ? "y" : "b"}">${ic(x.claimed ? "check" : x.icon)}</span>
-        <div class="grow"><div class="t">${esc(x.t)}</div><div class="cbar"><div style="width:${x.have / x.need * 100}%"></div></div><div class="s">${x.have}/${x.need} · награда ⭐ ${fmt(x.reward)}</div></div>
+      const tag = QTAG[x.tier];
+      return `<div class="row qrow${x.claimed ? " done" : ""}${x.tier === "chest" ? " qchest" : ""}"><span class="pic ${x.claimed ? "g" : ready ? "y" : "b"}">${ic(x.claimed ? "check" : x.icon)}</span>
+        <div class="grow">${tag ? `<span class="qtag" style="--c:${tag[1]}">${tag[0]}</span>` : ""}<div class="t">${esc(x.t)}</div><div class="cbar"><div style="width:${x.have / x.need * 100}%"></div></div><div class="s">${x.have}/${x.need} · награда ⭐ ${fmt(x.reward)}</div></div>
         ${ready ? `<button class="btn sm gold" data-act="q-claim" data-id="${x.id}">Забрать</button>` : x.claimed ? `<span class="tw" style="font-weight:800;font-size:13px">Готово</span>` : ""}</div>`;
     }).join("")}</div>
-    <div class="disc">Задания засчитываются автоматически, пока ты играешь.</div>`;
+    <div class="disc">Задания засчитываются автоматически, пока ты играешь. Каждый день — новый набор.</div>`;
 }
 Object.assign(ACT, {
   quests: () => openQuests(),
