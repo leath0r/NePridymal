@@ -11,6 +11,13 @@ from app import ADMINS, R, STEALTH, app, auth, db, err, esc, notify, now, q, q1,
 from admin import admin, log
 
 TOPICS = {"pay": "Покупка звёзд", "bug": "Ошибка в игре", "gift": "Подарки и баланс", "acc": "Аккаунт и бан", "other": "Другое"}
+
+
+def _player_topics():
+    """Тему про покупки показываем, только пока хоть что-то продаётся. Старые обращения с этой темой остаются читаемыми."""
+    import shop
+    return TOPICS if any(shop.sale_on(k) for k in shop.SALE_KEYS) else {k: v for k, v in TOPICS.items() if k != "pay"}
+
 MAX_OPEN = 3            # открытых тикетов у игрока одновременно
 DAY_NEW = 6             # новых тикетов в сутки
 MSG_GAP = 5             # секунд между сообщениями игрока (антифлуд)
@@ -62,8 +69,7 @@ def _thread(tid, staff_view):
     for m in q("SELECT * FROM ticket_msg WHERE tid=? ORDER BY id", tid):
         x = {"id": m["id"], "text": m["text"], "ts": m["ts"], "staff": bool(m["staff"])}
         if staff_view and m["staff"]:
-            a = q1("SELECT name FROM users WHERE id=?", m["user"])
-            x["by"] = a["name"] if a else str(m["user"])
+            x["by"] = "Админ"   # в тикетах имя администратора не показываем
         out.append(x)
     return out
 
@@ -79,7 +85,7 @@ def _row(t):
 @app.get(R + "/tickets")
 def my_tickets(uid=Depends(auth)):
     return {"items": [_row(t) for t in q("SELECT * FROM ticket WHERE user=? ORDER BY status='closed', updated DESC LIMIT 30", uid)],
-            "topics": TOPICS, "maxOpen": MAX_OPEN}
+            "topics": _player_topics(), "maxOpen": MAX_OPEN}
 
 
 @app.post(R + "/tickets")

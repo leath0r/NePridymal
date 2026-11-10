@@ -19,7 +19,7 @@ async function shopFill() {
   const last = SHOP.packs.length - 1;
   box.innerHTML = `<div class="shop">
       <div class="shop-h"><span class="shop-rate">${ic("tgplane")}1 Telegram Star = ${fmt(SHOP.rate)} ⭐</span></div>
-      ${SHOP.first ? `<div class="shop-first"><b>×2</b><span><b>Первая покупка — звёзд вдвое больше</b>любой пакет, бонус до ${short(SHOP.firstCap)} ⭐</span></div>` : ""}
+      ${SHOP.first ? `<div class="shop-first"><b>×2</b><span><b>Первая покупка: вдвое больше звёзд</b>бонус до ${short(SHOP.firstCap)} ⭐</span></div>` : ""}
       <div class="sec-t">${ic("sparkles")}Пакеты звёзд</div>
       <div class="shop-list">${SHOP.packs.map((p, i) => `<button class="pk${i === last ? " best" : ""}${p.bonus ? " hot" : ""}" data-act="buy-pack" data-x="${p.xtr}" style="--lv:${i}">
           ${i === last ? `<i class="pk-tag best">Лучший курс</i>` : p.bonus ? `<i class="pk-tag">+${p.bonus}%</i>` : ""}

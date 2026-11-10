@@ -48,7 +48,10 @@ def _settle(r):
     """Розыгрыш: выбираем билет 0..1, отдаём победителю все подарки и звёзды банка."""
     bets = _bets(r["id"])
     total = sum(b["value"] for b in bets)
-    ticket = random.random()
+    import fair
+    rng = fair.pub("jroul", f"round:{r['id']}")
+    ticket = rng.random()
+    fair.close_pub(rng, {"ticket": round(ticket, 8), "total": total})
     acc, winner = 0.0, bets[-1]["user"]
     for b in bets:
         acc += b["value"] / total
@@ -62,7 +65,7 @@ def _settle(r):
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay_stars, winner))
     for b in bets:
         won = (total - (stars - pay_stars)) if b["user"] == winner else 0
-        event(b["user"], "jroul", won - b["value"])
+        event(b["user"], "jroul", won - b["value"], stake=b["value"])
     db.execute("UPDATE jr_rounds SET status='spinning', winner=?, ticket=?, total=?, spin_at=? WHERE id=?",
                (winner, ticket, total, now() + 0.0, r["id"]))
     return winner, total, bets

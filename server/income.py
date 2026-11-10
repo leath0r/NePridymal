@@ -1,5 +1,6 @@
 """Гарантированный доход: подарки приносят звёзды, сейф (стейкинг подарков), бизнесы."""
 from settings import conf
+import hashlib
 import json
 
 from fastapi import Depends, Request
@@ -40,10 +41,12 @@ def _rate_mult(mp):
 def _gift_accrual(uid, t, inc_ts):
     """Сколько накапали подарки с прошлого сбора (каждый — с момента, как стал твоим)."""
     from app import LOOK
+    import app as _a
+    fk = _a.FAUCET_K()
     total, per_day = 0.0, 0.0
     for g in q("SELECT col, model, value, acq FROM gifts WHERE owner=? AND price IS NULL", uid):
         mp = LOOK[g["col"]][0].get(g["model"], 99) if g["col"] in LOOK else 99
-        day = g["value"] * GIFT_RATE * _rate_mult(mp)
+        day = g["value"] * GIFT_RATE * _rate_mult(mp) * fk
         per_day += day
         since = max(inc_ts, g["acq"] or 0)
         total += day * max(0, min(t - since, t - inc_ts, GIFT_CAP)) / 86400
@@ -51,10 +54,11 @@ def _gift_accrual(uid, t, inc_ts):
 
 
 # ---------- 2. сейф ----------
-VAULT = {1: 0.02, 3: 0.07, 7: 0.18}
+VAULT = {1: conf("economy.vault_1d", 0.02), 3: conf("economy.vault_3d", 0.07), 7: conf("economy.vault_7d", 0.18)}
 VAULT_OWNER = 2 * 10 ** 9   # подарок в сейфе: owner = -(VAULT_OWNER + uid)
 
 # ---------- 3. бизнесы ----------
+BIZ_SCALE = conf("economy.biz_scale", 0.55)   # множитель дохода всех бизнесов
 BIZ = [  # id, название, картинка (коллекция), цена, доход/час на 1 уровне
     ("stall", "Ларёк с леденцами", "Lol Pop", 2_000, 17),
     ("coffee", "Кофейня", "Spiced Wine", 5_000, 42),
@@ -79,8 +83,79 @@ BIZ_MAX = 10
 BIZ_MAP = {b[0]: b for b in BIZ}
 
 
-def biz_income(bid, level):
-    return int(BIZ_MAP[bid][4] * (1 + 0.35 * (level - 1)))
+# Цепочки поставок: следующему звену нужен предыдущий бизнес. Без поставщика — 60% дохода, полная цепочка — ещё +15%.
+CHAINS = [["stall", "coffee", "bakery"], ["flowers", "jewelry"], ["club", "cinema", "durov"], ["casino", "space", "pepe"]]
+CHAIN_OF = {b: (i, c.index(b)) for i, c in enumerate(CHAINS) for b in c}
+CHAIN_NO_SUPPLY, CHAIN_FULL = 0.6, 0.15
+db.execute("CREATE TABLE IF NOT EXISTS biz_mgr(user INTEGER, bid TEXT, col TEXT, model TEXT, value INTEGER, bonus REAL, until INTEGER, PRIMARY KEY(user,bid))")
+MGR_DAYS, MGR_MAX = 7, 0.25
+
+
+def biz_mult(uid, bid):
+    """Множитель цепочки и управляющего для бизнеса игрока."""
+    own = {r["bid"]: r["level"] for r in q("SELECT bid, level FROM biz WHERE user=?", uid)}
+    ci, pos = CHAIN_OF.get(bid, (None, 0))
+    k = 1.0
+    if ci is not None:
+        ch = CHAINS[ci]
+        if pos > 0 and ch[pos - 1] not in own:
+            k = CHAIN_NO_SUPPLY
+        if all(x in own for x in ch):
+            k += CHAIN_FULL
+    m = q1("SELECT bonus FROM biz_mgr WHERE user=? AND bid=? AND until>?", uid, bid, now())
+    return k + (m["bonus"] if m else 0)
+
+
+def biz_income(bid, level, uid=None):
+    """Доход в час: база × уровень × biz_scale. С игроком ещё цепочка, управляющий и курс банка. Партии идут сверху."""
+    v = BIZ_MAP[bid][4] * (1 + 0.35 * (level - 1)) * BIZ_SCALE
+    if uid is not None:
+        v *= biz_mult(uid, bid) * biz_bank_rate()
+    return max(1, int(v))
+
+
+# Партия: игрок закупает товар за звёзды (они уходят в банк), через BATCH_TIME забирает с наценкой.
+# Наценка = база × спрос × цепочка/управляющий × курс банка и фиксируется в момент закупки.
+# Не забрал за BATCH_FRESH — товар портится: за следующие сутки теряется до половины, остаток остаётся у банка.
+BATCH_TIME, BATCH_FRESH, BATCH_ROT = 4 * 3600, 8 * 3600, 24 * 3600
+# Партия на 1 уровне — доля цены бизнеса: дешёвые окупаются быстрее дорогих, иначе они приносят копейки
+BATCH_SHARES = (conf("economy.biz_batch_small", 0.25), conf("economy.biz_batch_mid", 0.15), conf("economy.biz_batch_big", 0.10), conf("economy.biz_batch_huge", 0.07))
+DEMAND_EVERY = 6 * 3600
+MARGIN = conf("economy.biz_margin", 0.12)
+for _col in ("batch_cost", "batch_pay", "batch_ready"):
+    try:
+        db.execute(f"ALTER TABLE biz ADD COLUMN {_col} INTEGER DEFAULT 0")
+    except Exception:
+        pass
+
+
+def biz_demand(bid, t=None):
+    """Спрос меняется каждые 6 часов и считается открытой формулой от названия и времени: подкрутить под игрока нельзя. От 0,4 до 1,6."""
+    w = (t if t is not None else now()) // DEMAND_EVERY
+    x = int(hashlib.sha256(f"{bid}:{w}".encode()).hexdigest()[:8], 16) / 0xffffffff
+    return round(0.4 + 1.2 * x, 2)
+
+
+def biz_bank_rate():
+    """Курс банка: чем больше банк и лучше его неделя, тем выше наценка."""
+    import app as _a
+    return _a.FAUCET_K()
+
+
+def biz_margin(uid, bid, t=None):
+    return round(MARGIN * biz_demand(bid, t) * biz_mult(uid, bid) * biz_bank_rate(), 4)
+
+
+def biz_batch_cap(bid, level):
+    price = BIZ_MAP[bid][3]
+    share = BATCH_SHARES[0] if price < 100_000 else BATCH_SHARES[1] if price < 1_000_000 else BATCH_SHARES[2] if price < 5_000_000 else BATCH_SHARES[3]
+    return int(price * share * (1 + 0.5 * (level - 1)))
+
+
+def batch_value(r, t):
+    """Сколько можно забрать сейчас с учётом порчи."""
+    over = t - r["batch_ready"] - BATCH_FRESH
+    return int(r["batch_pay"] * (1 - min(0.5, max(0, over) / BATCH_ROT * 0.5)))
 
 
 def biz_upgrade(bid, level):
@@ -110,18 +185,37 @@ def _biz_rows(uid, t):
     for bid, name, col, price, _ in BIZ:
         r = own.get(bid)
         item = {"id": bid, "name": name, "col": col, "price": price, "level": r["level"] if r else 0}
+        ci, pos = CHAIN_OF.get(bid, (None, 0))
+        if ci is not None:
+            ch = CHAINS[ci]
+            item["supplier"] = BIZ_MAP[ch[pos - 1]][1] if pos else None
+            item["noSupply"] = bool(pos and ch[pos - 1] not in own)
+            item["chainFull"] = all(x in own for x in ch)
+        mg = q1("SELECT col, model, bonus, until FROM biz_mgr WHERE user=? AND bid=? AND until>?", uid, bid, t) if r else None
+        if mg:
+            item["mgr"] = {"col": mg["col"], "bonus": round(mg["bonus"] * 100), "left": mg["until"] - t}
+        if True:
+            item.update(demand=biz_demand(bid, t), demandIn=DEMAND_EVERY - t % DEMAND_EVERY)
+            lvl = r["level"] if r else 1
+            k = biz_margin(uid, bid, t)
+            item.update(margin=round(k * 100, 1), batchCap=biz_batch_cap(bid, lvl), batchProfit=int(biz_batch_cap(bid, lvl) * k * (1 - INCOME_TAX)))
+            if r and lvl < BIZ_MAX:
+                item.update(nextCap=biz_batch_cap(bid, lvl + 1), nextProfit=int(biz_batch_cap(bid, lvl + 1) * k * (1 - INCOME_TAX)))
         if r:
-            inc = biz_income(bid, r["level"])
+            item.update(batch={"cost": r["batch_cost"], "pay": r["batch_pay"], "readyIn": max(0, r["batch_ready"] - t), "now": batch_value(r, t),
+                               "spoilIn": max(0, r["batch_ready"] + BATCH_FRESH - t)} if r["batch_cost"] else None)
+            inc = biz_income(bid, r["level"], uid)
             acc = int(inc * min(t - r["ts"], BIZ_CAP) / 3600)
             ready += acc
+            item.update(pledged=__import__("loans").biz_pledged(uid, bid))
             item.update(income=inc, accrued=acc, cap=inc * BIZ_CAP // 3600, full=t - r["ts"] >= BIZ_CAP,
                         shiftIn=max(0, (r["shift_ts"] or 0) + SHIFT_EVERY - t),
                         upgrade=biz_upgrade(bid, r["level"]) if r["level"] < BIZ_MAX else None,
-                        next=biz_income(bid, r["level"] + 1) if r["level"] < BIZ_MAX else None,
-                        sell=biz_sell_price(bid, r["level"]), down=biz_down_price(bid, r["level"]),
-                        prev=biz_income(bid, r["level"] - 1) if r["level"] > 1 else None)
+                        next=biz_income(bid, r["level"] + 1, uid) if r["level"] < BIZ_MAX else None,
+                        sell=biz_sell_price(bid, r["level"]), sellPct=round(BIZ_SELL * 100), down=biz_down_price(bid, r["level"]),
+                        prev=biz_income(bid, r["level"] - 1, uid) if r["level"] > 1 else None)
         else:
-            item.update(income=biz_income(bid, 1))
+            item.update(income=biz_income(bid, 1, uid))
         out.append(item)
     return out, ready
 
@@ -173,7 +267,8 @@ def income_collect(uid=Depends(auth)):
         event(uid, "income", gross)
         if tax:
             event(uid, "fee", -tax)
-    return {"got": total, "gifts": gacc, "biz": bready, "tax": tax, "stars": bal(uid)}
+        loan_paid = __import__("loans").auto_pay(uid, total)
+    return {"got": total - loan_paid, "gifts": gacc, "biz": bready, "tax": tax, "loanPaid": loan_paid, "stars": bal(uid)}
 
 
 @app.post(R + "/vault/put")
@@ -226,13 +321,15 @@ def biz_buy(bid: str, uid=Depends(auth)):
     t = now()
     with tx():
         r = q1("SELECT * FROM biz WHERE user=? AND bid=?", uid, bid)
+        if r and __import__("loans").biz_pledged(uid, bid):
+            err("бизнес в залоге: сначала закрой кредит")
         if r and r["level"] >= BIZ_MAX:
             err("максимальный уровень")
         cost = biz_upgrade(bid, r["level"]) if r else BIZ_MAP[bid][3]
         if bal(uid) < cost:
             err("Не хватает звёзд")
         if r:   # перед прокачкой забираем накопленное по старой ставке
-            acc = int(biz_income(bid, r["level"]) * min(t - r["ts"], BIZ_CAP) / 3600)
+            acc = int(biz_income(bid, r["level"], uid) * min(t - r["ts"], BIZ_CAP) / 3600)
             db.execute("UPDATE biz SET level=level+1, ts=? WHERE user=? AND bid=?", (t, uid, bid))
             tax = int(acc * INCOME_TAX)
             db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (cost, acc - tax, uid))
@@ -248,9 +345,72 @@ def biz_buy(bid: str, uid=Depends(auth)):
     return {"ok": True, "stars": bal(uid), "levelup": lvl}
 
 
+@app.post(R + "/biz/{bid}/supply")
+async def biz_supply(bid: str, req: Request, uid=Depends(auth)):
+    amount = int((await req.json()).get("amount", 0))
+    if bid not in BIZ_MAP:
+        err("нет такого бизнеса")
+    t = now()
+    with tx():
+        r = q1("SELECT * FROM biz WHERE user=? AND bid=?", uid, bid) or err("сначала купи этот бизнес")
+        if r["batch_cost"]:
+            err("сначала забери текущую партию")
+        cap = biz_batch_cap(bid, r["level"])
+        if not 100 <= amount <= cap:
+            err(f"партия от ⭐ 100 до ⭐ {cap:,}".replace(",", " "))
+        if bal(uid) < amount:
+            err("Не хватает звёзд")
+        pay = amount + int(amount * biz_margin(uid, bid, t))
+        db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount, uid))
+        db.execute("UPDATE biz SET batch_cost=?, batch_pay=?, batch_ready=? WHERE user=? AND bid=?", (amount, pay, t + BATCH_TIME, uid, bid))
+        event(uid, "bizgoods", -amount)
+    return {"ok": True, "pay": pay, "readyIn": BATCH_TIME, "stars": bal(uid)}
+
+
+@app.post(R + "/biz/{bid}/deliver")
+def biz_deliver(bid: str, uid=Depends(auth)):
+    t = now()
+    with tx():
+        r = q1("SELECT * FROM biz WHERE user=? AND bid=?", uid, bid) or err("сначала купи этот бизнес")
+        if not r["batch_cost"]:
+            err("партии нет")
+        if t < r["batch_ready"]:
+            err("партия ещё не готова")
+        got = batch_value(r, t)
+        profit = max(0, got - r["batch_cost"])
+        tax = int(profit * INCOME_TAX)
+        db.execute("UPDATE biz SET batch_cost=0, batch_pay=0, batch_ready=0 WHERE user=? AND bid=?", (uid, bid))
+        db.execute("UPDATE users SET stars=stars+? WHERE id=?", (got - tax, uid))
+        event(uid, "bizgoods", got)
+        if tax:
+            event(uid, "fee", -tax)
+    return {"got": got - tax, "cost": r["batch_cost"], "tax": tax, "stars": bal(uid)}
+
+
+@app.post(R + "/biz/{bid}/manager")
+async def biz_manager(bid: str, req: Request, uid=Depends(auth)):
+    """Управляющий: подарок работает 7 дней и сгорает. Бонус = ценность подарка к цене бизнеса, не больше +25%. Ценность уходит в банк."""
+    gid = int((await req.json()).get("gid", 0))
+    if bid not in BIZ_MAP:
+        err("нет такого бизнеса")
+    t = now()
+    with tx():
+        q1("SELECT 1 FROM biz WHERE user=? AND bid=?", uid, bid) or err("сначала купи этот бизнес")
+        if q1("SELECT 1 FROM biz_mgr WHERE user=? AND bid=? AND until>?", uid, bid, t):
+            err("управляющий уже работает")
+        g = q1("SELECT * FROM gifts WHERE id=? AND owner=? AND price IS NULL", gid, uid) or err("подарок недоступен")
+        bonus = round(min(MGR_MAX, g["value"] / BIZ_MAP[bid][3]), 4)
+        unpin(uid, gid)
+        cancel_trades_with(gid)
+        db.execute("DELETE FROM gifts WHERE id=?", (gid,))
+        db.execute("INSERT OR REPLACE INTO biz_mgr(user,bid,col,model,value,bonus,until) VALUES(?,?,?,?,?,?,?)", (uid, bid, g["col"], g["model"], g["value"], bonus, t + MGR_DAYS * 86400))
+        event(uid, "bizmgr", -g["value"])
+    return {"ok": True, "bonus": round(bonus * 100, 1)}
+
+
 @app.post(R + "/biz/{bid}/sell")
 async def biz_sell(bid: str, req: Request, uid=Depends(auth)):
-    """Продажа: what=all — бизнес целиком за 50% вложенного; what=level — последнее улучшение за 50% его цены.
+    """Продажа: what=all — бизнес целиком за долю вложенного (BIZ_SELL); what=level — последнее улучшение за ту же долю его цены.
     Накопленный доход перед этим выплачивается (с налогом), как при прокачке."""
     what = (await req.json()).get("what")
     if bid not in BIZ_MAP or what not in ("all", "level"):
@@ -258,11 +418,15 @@ async def biz_sell(bid: str, req: Request, uid=Depends(auth)):
     t = now()
     with tx():
         r = q1("SELECT * FROM biz WHERE user=? AND bid=?", uid, bid) or err("этот бизнес уже не твой")
+        if r["batch_cost"]:
+            err("сначала забери партию товара")
+        if __import__("loans").biz_pledged(uid, bid):
+            err("бизнес в залоге: сначала закрой кредит")
         lv = r["level"]
         if what == "level" and lv <= 1:
             err("это первый уровень — можно продать только бизнес целиком")
         got = biz_sell_price(bid, lv) if what == "all" else biz_down_price(bid, lv)
-        acc = int(biz_income(bid, lv) * min(t - r["ts"], BIZ_CAP) / 3600)
+        acc = int(biz_income(bid, lv, uid) * min(t - r["ts"], BIZ_CAP) / 3600)
         tax = int(acc * INCOME_TAX)
         if what == "all":
             db.execute("DELETE FROM biz WHERE user=? AND bid=?", (uid, bid))
@@ -279,7 +443,8 @@ async def biz_sell(bid: str, req: Request, uid=Depends(auth)):
 
 @app.post(R + "/biz/{bid}/shift")
 async def biz_shift(bid: str, req: Request, uid=Depends(auth)):
-    """Смена в бизнесе: награда = доход за час × (тапы / 40), не чаще раза в 2 часа на бизнес."""
+    """Смены убраны из игры: кнопки нет, а с почасовым доходом запрос давал бы лишние +50%."""
+    err("смен больше нет")
     taps = max(0, min(SHIFT_TAPS, int((await req.json()).get("taps", 0))))
     if bid not in BIZ_MAP:
         err("нет такого бизнеса")
@@ -288,7 +453,7 @@ async def biz_shift(bid: str, req: Request, uid=Depends(auth)):
         r = q1("SELECT * FROM biz WHERE user=? AND bid=?", uid, bid) or err("сначала купи этот бизнес")
         if (r["shift_ts"] or 0) + SHIFT_EVERY > t:
             err("смена ещё не началась — загляни позже")
-        gross = int(biz_income(bid, r["level"]) * taps / SHIFT_TAPS)
+        gross = int(biz_income(bid, r["level"], uid) * taps / SHIFT_TAPS)
         tax = int(gross * INCOME_TAX)
         db.execute("UPDATE biz SET shift_ts=? WHERE user=? AND bid=?", (t, uid, bid))
         if gross:

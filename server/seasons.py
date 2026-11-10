@@ -10,7 +10,7 @@ import time
 
 from fastapi import Depends, Request
 
-from app import (GAME_KINDS, R, RICH_RANK, app, auth, db, err, esc, event, notify, now, q, q1, tx, user_brief)
+from app import (GAME_KINDS, R, RICH_RANK, app, auth, db, err, esc, event, notify, now, q, q1, qr, tx, user_brief)
 
 CAP = 10_000
 BASE_PRIZES = conf("season.prizes", [200_000, 100_000, 60_000, 30_000, 30_000, 20_000, 20_000, 10_000, 10_000, 10_000])
@@ -39,6 +39,7 @@ TITLES = [  # id, название, условие (текст)
     ("rich", "Богач", "быть в топ-10 богачей"),
     ("champion", "Чемпион сезона", "занять 1 место в сезоне"),
     ("savior", "Спаситель банка", "подарить банку ⭐ 10 000 во время кризиса"),
+    ("gameday", "Игрок дня", "занять 1 место в Игре дня"),
 ]
 TITLE_NAME = {t[0]: t[1] for t in TITLES}
 import app as _app   # noqa: E402
@@ -67,9 +68,9 @@ def season_bounds(t=None):
 
 def standings(start, end, limit=50):
     sid = season_bounds(start)[0]
-    return q(f"""SELECT user, SUM(MIN(ABS(delta), {CAP})) / 100 pts FROM events WHERE kind IN {GAME_KINDS} AND ts>=? AND ts<?
+    return qr(f"""SELECT user, SUM(MIN(ABS(delta), {CAP})) / 100 pts FROM events WHERE kind IN {GAME_KINDS} AND ts>=? AND ts<?
                  AND user NOT IN (SELECT user FROM season_excl WHERE season=?)
-                 GROUP BY user ORDER BY pts DESC LIMIT ?""", start, end, sid, limit)
+                 GROUP BY user ORDER BY pts DESC LIMIT ?""", max(start, __import__("app").season_from()), end, sid, limit)
 
 
 def unlocked(uid):
@@ -106,6 +107,8 @@ def unlocked(uid):
             got.add("savior")
     except Exception:
         pass
+    if q1("SELECT 1 FROM gd_win WHERE user=?", uid):
+        got.add("gameday")
     for r in q("SELECT result FROM season_results"):
         if any(x["place"] == 1 and x["user"] == uid for x in json.loads(r["result"])):
             got.add("champion")
@@ -115,14 +118,15 @@ def unlocked(uid):
 @app.get(R + "/season")
 def season(uid=Depends(auth)):
     sid, title, start, end = season_bounds()
-    rows = standings(start, end)
+    b = _board()
+    rows = b["rows"][:50]
     top = []
     for i, r in enumerate(rows[:20]):
         u = q1("SELECT * FROM users WHERE id=?", r["user"])
         if u:
             top.append({**user_brief(u), "pts": r["pts"], "prize": prizes()[i] if i < len(BASE_PRIZES) else 0, "medal": FRAMES[i] if i < len(FRAMES) else None})
-    me = q1(f"SELECT COALESCE(SUM(MIN(ABS(delta), {CAP})),0) / 100 pts FROM events WHERE user=? AND kind IN {GAME_KINDS} AND ts>=?", uid, start)["pts"]
-    place = next((i + 1 for i, r in enumerate(standings(start, end, 1000)) if r["user"] == uid), None)
+    me = q1(f"SELECT COALESCE(SUM(MIN(ABS(delta), {CAP})),0) / 100 pts FROM events WHERE user=? AND kind IN {GAME_KINDS} AND ts>=?", uid, max(start, __import__("app").season_from()))["pts"]
+    place = b["rank"].get(uid) if b["rank"].get(uid, 10**9) <= 1000 else None
     last = q1("SELECT * FROM season_results ORDER BY season DESC LIMIT 1")
     return {"id": sid, "title": title, "ends": end, "top": top, "me": {"pts": me, "place": place,
             "excluded": bool(q1("SELECT 1 FROM season_excl WHERE season=? AND user=?", sid, uid))},
@@ -184,14 +188,21 @@ async def _seasons_start():
     asyncio.create_task(seasons_loop())
 
 
-_BRIEF = {"t": 0, "rank": {}, "pts": {}}
+_BRIEF = {"t": 0, "rank": {}, "pts": {}, "rows": []}
+BOARD_TTL = 30   # таблица сезона одна на всех: пересчёт не чаще раза в 30 с, а не на каждый запрос каждого игрока
+
+
+def _board():
+    sid, _, start, end = season_bounds()
+    if now() - _BRIEF["t"] > BOARD_TTL or _BRIEF.get("sid") != sid:
+        rows = standings(start, end, 100000)
+        _BRIEF.update(t=now(), sid=sid, rows=rows, rank={r["user"]: i + 1 for i, r in enumerate(rows)}, pts={r["user"]: r["pts"] for r in rows})
+    return _BRIEF
 
 
 @app.get(R + "/season/brief")
 def season_brief(uid=Depends(auth)):
-    """Для карточки на главной: место и очки (рейтинг пересчитывается раз в 2 минуты)."""
+    """Для карточки на главной: место и очки из общей таблицы сезона."""
     sid, title, start, end = season_bounds()
-    if now() - _BRIEF["t"] > 120 or _BRIEF.get("sid") != sid:
-        rows = standings(start, end, 100000)
-        _BRIEF.update(t=now(), sid=sid, rank={r["user"]: i + 1 for i, r in enumerate(rows)}, pts={r["user"]: r["pts"] for r in rows})
+    _board()
     return {"title": title, "ends": end, "place": _BRIEF["rank"].get(uid), "pts": _BRIEF["pts"].get(uid, 0), "players": len(_BRIEF["rank"]), "prize": prizes()[0]}

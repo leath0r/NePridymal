@@ -1,5 +1,6 @@
 """Админ-панель: доступ только у Telegram id из ADMIN_IDS. Чужим отвечаем 404, будто маршрута нет."""
 import asyncio
+import base64
 import os
 import shutil
 import time
@@ -31,8 +32,16 @@ def admin(uid=Depends(auth)):
     return uid
 
 
+# Действия, влияющие на экономику и шансы: копия уходит в публичный журнал. Команд очистки у него нет.
+PUB_ACTIONS = {"stars", "gift", "gift-remove", "keys", "comp", "cosm", "undo", "promo", "event", "odds", "feecfg", "claw", "game",
+               "flash_start", "flash_stop", "flashcfg", "refcfg", "paycfg", "frcfg", "wipecfg", "db_import", "shop", "adminlog_clear", "actlog_clear"}
+db.execute("CREATE TABLE IF NOT EXISTS pub_journal(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, action TEXT, target INTEGER, detail TEXT)")
+
+
 def log(aid, action, target=None, detail="", undo=None):
     """Запись в журнал админа. undo — как отменить действие (ops.py → «Отменить» в журнале)."""
+    if action in PUB_ACTIONS:
+        db.execute("INSERT INTO pub_journal(ts,action,target,detail) VALUES(?,?,?,?)", (now(), action, target if isinstance(target, int) else None, str(detail)[:300]))
     if undo is None:
         db.execute("INSERT INTO admin_log(ts,admin,action,target,detail) VALUES(?,?,?,?,?)", (now(), aid, action, target, detail))
     else:
@@ -219,10 +228,10 @@ async def ban(tid: int, req: Request, aid=Depends(admin)):
 BROADCAST = {"running": False, "sent": 0, "failed": 0, "total": 0}
 
 
-async def _broadcast(ids, text):
+async def _broadcast(ids, text, image=None):
     kb = {"inline_keyboard": [[{"text": "Открыть", "web_app": {"url": APP_URL}}]]}
     from app import notif_card, tg_photo
-    img = await asyncio.get_running_loop().run_in_executor(None, notif_card, text)   # праздник/начисление → рассылка карточкой
+    img = image or await asyncio.get_running_loop().run_in_executor(None, notif_card, text)   # своя картинка, иначе праздник/начисление → карточка
     try:
         for uid in ids:
             try:
@@ -240,16 +249,20 @@ async def _broadcast(ids, text):
 
 @app.post(R + "/admin/broadcast")
 async def broadcast(req: Request, aid=Depends(admin)):
-    text = str((await req.json()).get("text", "")).strip()
+    body = await req.json()
+    text = str(body.get("text", "")).strip()
     if not 1 <= len(text) <= 3000:
         err("текст от 1 до 3000 символов")
+    image = base64.b64decode(body["image"]) if body.get("image") else None
+    if image and len(text) > 1024:
+        err("подпись к картинке: не больше 1024 символов")
     if BROADCAST["running"]:
         err("рассылка уже идёт")
     ids = [r["id"] for r in q("SELECT id FROM users WHERE banned=0")]
     BROADCAST.update(running=True, sent=0, failed=0, total=len(ids))
     with tx():
         log(aid, "broadcast", None, text[:200])
-    asyncio.create_task(_broadcast(ids, esc(text)))
+    asyncio.create_task(_broadcast(ids, esc(text), image))
     return {"ok": True, "total": len(ids)}
 
 
@@ -459,7 +472,7 @@ async def give_gift(tid: int, req: Request, aid=Depends(admin)):
             g = _make_gift(str(b.get("col", "")), str(b.get("model", "")), str(b.get("backdrop", "")), str(b.get("symbol", "")))
             cur = db.execute("INSERT INTO gifts(owner,col,model,backdrop,symbol,num,value,created) VALUES(?,?,?,?,?,?,?,?)",
                              (tid, g["col"], g["model"], g["backdrop"], g["symbol"], g["num"], g["value"], t))
-            event(tid, "gift", g["value"])
+            event(tid, "admgift", g["value"])   # эмиссия администрации: виден в экономике и на публике (bank.py)
             if b.get("feed"):   # по желанию админа — показать в живой ленте
                 db.execute("INSERT INTO feed(user,gift,cs,ts) VALUES(?,?,?,?)", (tid, cur.lastrowid, "admin", t))
             out.append(gift_out(q1("SELECT * FROM gifts WHERE id=?", cur.lastrowid)))
@@ -574,6 +587,17 @@ async def shop_toggle(req: Request, aid=Depends(admin)):
     with tx():
         db.execute("INSERT INTO kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (shop.SALE_KEYS[what], "1" if on else "0"))
         log(aid, "shop", None, {"shop": "игровые звёзды", "vip": "VIP", "chest": "звёздный сундук"}[what] + " за Telegram Stars: " + ("включено" if on else "выключено"))
+    if what == "shop":   # описание ботов упоминает покупку звёзд: обновляем сразу, не дожидаясь перезапуска
+        import asyncio
+        async def _refresh():
+            import app as A
+            for tok in [None] + [r["token"] for r in q("SELECT token FROM bots WHERE token IS NOT NULL")]:
+                try:
+                    await A.bot_description(tok)
+                except Exception as e:
+                    print("bot description", e, flush=True)
+                await asyncio.sleep(0.5)
+        asyncio.create_task(_refresh())
     return {"ok": True, "on": on}
 
 

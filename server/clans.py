@@ -147,7 +147,7 @@ def _rounds(uid, since):
 
 def _scores(clan, since):
     """Оборот участников в играх с начала недели (но не раньше, чем вступили)."""
-    return {m["user"]: _turnover(m["user"], max(since, m["joined"])) for m in q("SELECT user, joined FROM clan_members WHERE clan=?", clan)}
+    return {m["user"]: _turnover(m["user"], max(since, m["joined"], __import__("app").season_from())) for m in q("SELECT user, joined FROM clan_members WHERE clan=?", clan)}
 
 
 def clan_brief(c, since=None):
@@ -448,7 +448,7 @@ def clan_request(tid: int, action: str, uid=Depends(auth)):
     msg = None
     with tx():
         cid = my_clan_id(uid) or err("ты не в клане")
-        if my_role(uid, cid) not in STAFF:
+        if my_role(uid, cid) not in (*STAFF, "captain"):
             err("заявки разбирают глава и офицеры")
         q1("SELECT 1 FROM clan_requests WHERE user=? AND clan=?", tid, cid) or err("заявки уже нет")
         db.execute("DELETE FROM clan_requests WHERE user=? AND clan=?", (tid, cid))
@@ -476,7 +476,7 @@ def clan_request(tid: int, action: str, uid=Depends(auth)):
 async def clan_role(tid: int, req: Request, uid=Depends(auth)):
     """Глава: назначить офицером / разжаловать / передать главенство."""
     role = str((await req.json()).get("role", ""))
-    if role not in ("officer", "member", "owner"):
+    if role not in ("officer", "member", "owner", "treasurer", "captain"):
         err("Действие устарело — обнови экран")
     with tx():
         cid = my_clan_id(uid) or err("ты не в клане")
@@ -491,7 +491,7 @@ async def clan_role(tid: int, req: Request, uid=Depends(auth)):
             feed(cid, tid, "owner")
         else:
             db.execute("UPDATE clan_members SET role=? WHERE user=?", (role, tid))
-            feed(cid, tid, "officer" if role == "officer" else "demote")
+            feed(cid, tid, "officer" if role in ("officer", "treasurer", "captain") else "demote")
     return {"ok": True}
 
 

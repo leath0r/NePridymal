@@ -73,24 +73,26 @@ def _cash(uid, r):
     pay = int(r["bet"] * mult(r["mode"], r["step"]))
     db.execute("DELETE FROM chicken WHERE user=?", (uid,))
     db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, uid))
-    event(uid, "chicken", pay - r["bet"])
+    event(uid, "chicken", pay - r["bet"], stake=r["bet"])
     return {**state(r), "active": False, "pay": pay, "stars": bal(uid)}
 
 
 @app.post(R + "/chicken/step")
 def chicken_step(uid=Depends(auth)):
-    import random
+    import fair
     with tx():
         r = q1("SELECT * FROM chicken WHERE user=?", uid) or err("игра не начата")
-        if random.random() < risk(r["mode"], r["step"]):   # сбили
+        rr, pf = fair.rolls(uid, "chicken", ref=f"{r['mode']}:{r['step']}")
+        fair.record(uid, "chicken", 0, 0, {"p": round(risk(r["mode"], r["step"]), 6), "hit": rr[0] < risk(r["mode"], r["step"])}, pf)
+        if rr[0] < risk(r["mode"], r["step"]):   # сбили
             db.execute("DELETE FROM chicken WHERE user=?", (uid,))
-            event(uid, "chicken", -r["bet"])
-            return {**state(r), "active": False, "dead": r["step"] + 1, "stars": bal(uid)}
+            event(uid, "chicken", -r["bet"], stake=r["bet"])
+            return {**state(r), "active": False, "dead": r["step"] + 1, "stars": bal(uid), "pf": pf}
         db.execute("UPDATE chicken SET step=step+1 WHERE user=?", (uid,))
         r = q1("SELECT * FROM chicken WHERE user=?", uid)
         if r["step"] >= LANES:   # перешла всю дорогу — выплата автоматически
-            return _cash(uid, r)
-        return state(r)
+            return {**_cash(uid, r), "pf": pf}
+        return {**state(r), "pf": pf}
 
 
 @app.post(R + "/chicken/cashout")

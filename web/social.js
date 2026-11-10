@@ -233,8 +233,9 @@ function profileHTML(p, tab = "show") {
   const show = p.pinned.length ? p.pinned : byValue.slice(0, 3);
   const cell = (g, o = {}) => `<div class="gcell" data-act="gift" data-k="${reg({ g, mine: isMe, owner: p })}">${giftHTML(g, o)}${g.price != null ? `<span class="onm">${ic("tag")}${short(g.price)}</span>` : ""}<div class="cap">${giftName(g)}</div></div>`;
   let body;
-  if (tab === "gifts") body = p.gifts.length ? `<div class="ggrid">${byValue.map(g => cell(g, { lite: true })).join("")}</div>` : emptyHTML("gift", isMe ? "Открой первый кейс!" : "Подарков пока нет");
-  else if (tab === "ach") body = `<div class="achs">${p.ach.map(a => `<div class="ach${a.got ? " got" : ""}"><span class="ai">${ic(ACH_IC[a.t] || "award")}</span><b>${esc(a.t)}</b><span>${esc(a.d)}</span>${a.got ? `<i>${ic("check")}</i>` : ""}</div>`).join("")}</div>`;
+  if (tab === "legacy") body = lgBody(p);
+  else if (tab === "gifts") body = p.gifts.length ? `<div class="ggrid">${byValue.map(g => cell(g, { lite: true })).join("")}</div>` : emptyHTML("gift", isMe ? "Открой первый кейс!" : "Подарков пока нет");
+  else if (tab === "ach") body = `<div class="achs">${p.ach.map(a => `<div class="ach${a.got ? " got" : ""}"><span class="ai">${ic(ACH_IC[a.t] || "award")}</span><b>${esc(a.t)}</b><span>${esc(a.d)}</span>${achPct(a)}${a.got ? `<i>${ic("check")}</i>` : ""}</div>`).join("")}</div>`;
   else if (tab === "stats") {
     const list = Object.entries(st.games).sort((a, b) => b[1] - a[1]), max = list.length ? list[0][1] : 1, net = st.won - st.lost;
     body = `<div class="pst">
@@ -277,7 +278,7 @@ function profileHTML(p, tab = "show") {
     <div class="pacts">${isMe
       ? `<button class="btn ghost" data-act="edit-profile">${ic("edit")}Изменить</button><button class="btn ghost" data-act="friends">${ic("users")}Друзья</button><button class="btn" data-act="invite">${ic("send")}Позвать</button><button class="btn ghost pset" data-act="settings" aria-label="Настройки">${ic("gear")}</button>`
       : `<button class="btn ${REL[3]}" data-act="fr" data-id="${p.id}" data-v="${REL[2]}">${ic(REL[0])}${REL[1]}</button><button class="btn ghost" data-act="trade-new" data-id="${p.id}">${ic("swap")}Обмен</button><button class="btn ghost" data-act="duel-new" data-id="${p.id}">${ic("target")}Дуэль</button>${p.rel === "friend" && typeof SHOP !== "undefined" && SHOP && SHOP.on ? `<button class="btn ghost pset" data-act="gift-stars" data-to="${p.id}" aria-label="Подарить звёзды">${ic("giftbox")}</button>` : ""}`}</div>
-    <div class="seg ptabs">${[["show", "sparkles", "Витрина"], ["gifts", "grid", "Подарки"], ["stats", "activity", "Стата"], ["ach", "award", `${got}/${p.ach.length}`]].map(([k, i, t]) => `<button data-act="ptab" data-v="${k}" class="${tab === k ? "on" : ""}">${ic(i)}${t}</button>`).join("")}</div>
+    <div class="seg ptabs">${[["show", "sparkles", "Витрина"], ["gifts", "grid", "Подарки"], ["stats", "activity", "Стата"], ["legacy", "crown", "Наследие"], ["ach", "award", `${got}/${p.ach.length}`]].map(([k, i, t]) => `<button data-act="ptab" data-v="${k}" class="${tab === k ? "on" : ""}">${ic(i)}${t}</button>`).join("")}</div>
     ${body}
     ${isMe ? `<div class="disc">${esc(ME.disclaimer)}</div>` : ""}`;
 }
@@ -291,7 +292,7 @@ Object.assign(ACT, {
     const d = await api("rooms");
     const inv = d.invites;
     if (inv.length === 1) return openRoom(inv[0].id);
-    openSheet(`<h2 class="gtitle">Тебя зовут за стол</h2>${inv.map(x => `<div class="dcard"><div class="dleft">${avaHTML(x.host, 36)}<div class="grow"><div class="t">${esc(x.host.name)} · ${esc(x.title)}</div>
+    openSheet(`<h2 class="gtitle">Приглашение</h2>${inv.map(x => `<div class="dcard"><div class="dleft">${avaHTML(x.host, 36)}<div class="grow"><div class="t">${esc(x.host.name)} · ${esc(x.title)}</div>
       <div class="s">${x.count}/${x.maxp} игроков · ${x.kind === "gifts" ? "на подарки" : "⭐ " + fmt(x.stake)}</div></div></div><div class="dright"><button class="btn sm green" data-act="room" data-id="${x.id}">Открыть</button></div></div>`).join("") || emptyHTML("users", "Приглашений нет")}`);
   },
   friends: () => openFriends(),
@@ -322,7 +323,7 @@ Object.assign(ACT, {
     if (k === "mine") { MK.mine = +v; MK.rare = ""; } else if (k === "rare") { MK.rare = v; MK.mine = 0; } else MK[k] = v;
     H.sel(); renderMarket();
   },
-  "mk-sell": () => pickGift("Что выставить на маркет?", listGift),
+  "mk-sell": () => pickGift("На маркет", listGift),
   list: () => { const g = topSheet()._o.g; closeSheet(); listGift(g); },
   trade: async el => {
     const v = el.dataset.v;
@@ -340,11 +341,11 @@ setTab = function (t) { if (t !== "inv") { INV.sel = null; drawSelBar(); } _setT
 // ============================================================ ЕЖЕДНЕВНЫЕ ЗАДАНИЯ
 async function openQuests() {
   H.imp("light");
-  const el = openSheet(`<h2 class="gtitle">Задания на сегодня</h2><div id="q-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
+  const el = openSheet(`<h2 class="gtitle">Задания</h2><div id="q-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._q = true;
   fillQuests(el);
 }
-const QTAG = { 1: ["лёгкое", "#35d07f"], 2: ["среднее", "#4aa8ff"], 3: ["сложное", "#ff7a45"], new: ["новинка", "#c77dff"], event: ["событие", "#ffb21f"] };
+const QTAG = { 1: ["лёгкое", "#35d07f"], 2: ["среднее", "#4aa8ff"], 3: ["сложное", "#ff7a45"], new: ["новинка", "#c77dff"], event: ["событие", "#ffb21f"], week: ["неделя", "#ffc53d"] };
 async function fillQuests(el) {
   const d = await api("quests"); if (!el.isConnected) return;
   const total = d.items.reduce((s, x) => s + x.reward, 0), done = d.items.filter(x => x.claimed).length;
@@ -352,7 +353,7 @@ async function fillQuests(el) {
     <div class="box">${d.items.map(x => {
       const ready = x.have >= x.need && !x.claimed;
       const tag = QTAG[x.tier];
-      return `<div class="row qrow${x.claimed ? " done" : ""}${x.tier === "chest" ? " qchest" : ""}"><span class="pic ${x.claimed ? "g" : ready ? "y" : "b"}">${ic(x.claimed ? "check" : x.icon)}</span>
+      return `<div class="row qrow${x.claimed ? " done" : ""}${x.tier === "chest" || x.tier === "week" ? " qchest" : ""}"><span class="pic ${x.claimed ? "g" : ready ? "y" : "b"}">${ic(x.claimed ? "check" : x.icon)}</span>
         <div class="grow">${tag ? `<span class="qtag" style="--c:${tag[1]}">${tag[0]}</span>` : ""}<div class="t">${esc(x.t)}</div><div class="cbar"><div style="width:${x.have / x.need * 100}%"></div></div><div class="s">${x.have}/${x.need} · награда ⭐ ${fmt(x.reward)}</div></div>
         ${ready ? `<button class="btn sm gold" data-act="q-claim" data-id="${x.id}">Забрать</button>` : x.claimed ? `<span class="tw" style="font-weight:800;font-size:13px">Готово</span>` : ""}</div>`;
     }).join("")}</div>
@@ -373,3 +374,11 @@ Object.assign(ACT, {
     pickGifts("Подарки для витрины", { pre: ed.pinned.map(i => ({ id: i })), max: 6 }, gs => { ed.pinned = gs.map(g => g.id); s._edDraw(); });
   },
 });
+
+// редкость достижения (achrare.py): «есть у 12% игроков», меньше 5% подсвечиваем как редкое
+function achPct(a) {
+  if (a.pct == null) return "";
+  if (!a.pct) return `<em class="ach-pct rare">пока ни у кого</em>`;
+  const v = a.pct < 1 ? "<1%" : (a.pct >= 10 ? Math.round(a.pct) : String(a.pct).replace(".", LANG === "en" ? "." : ",")) + "%";
+  return `<em class="ach-pct${a.pct < 5 ? " rare" : ""}"><span>есть у</span> ${v} <span>игроков</span></em>`;
+}

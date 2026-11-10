@@ -36,7 +36,7 @@ function trPaint(el) {
       : emptyHTML("trophy", "Пока никто не в плюсе — займи первое место!")}
     <div class="tr-me"><span>Ты</span><b>${t.me.place ? t.me.place + " место" : "вне рейтинга"}</b><em class="${t.me.score >= 0 ? "tw" : "tl"}">${t.me.score >= 0 ? "+" : "−"}⭐ ${short(Math.abs(t.me.score))}</em>
       <button class="btn sm gold" data-act="tr-play" data-g="${t.game}">Играть</button></div>
-    ${TR.last.length ? `<div class="sec-t">${ic("award")}Прошлые турниры</div><div class="box">${TR.last.map(l => `<div class="row kv"><div class="grow"><div class="t">${esc((l.result[0] || {}).name || "—")}</div><div class="s">${esc(l.game)} · 1 место</div></div><b>⭐ ${short((l.result[0] || {}).prize || 0)}</b></div>`).join("")}</div>` : ""}
+    ${TR.last.length ? `<div class="sec-t">${ic("award")}Прошлые турниры</div><div class="box">${TR.last.map(l => `<div class="row kv"><div class="grow"><div class="t">${esc((GAMES.find(g => g.id === l.game) || {}).t || l.game)}</div><div class="s">${l.result[0] ? `1 место: ${esc(l.result[0].name)}` : "Победителя нет"}</div></div><b>⭐ ${short((l.result[0] || {}).prize || 0)}</b></div>`).join("")}</div>` : ""}
     <div class="disc">Следующий турнир: ${TR.next.map(esc).join(" и ")}. Новый — каждые ${TR.days || 3} ${plural(TR.days || 3, ["день", "дня", "дней"])}, счёт — чистый выигрыш в игре с начала турнира. Призы приходят автоматически.</div>`);
   starify(el);
 }

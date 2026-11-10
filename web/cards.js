@@ -28,7 +28,7 @@ const handHTML = (cards, o = {}) => `<div class="hand${o.fan ? " fan" : ""}">${c
 let BJ = { active: false }, bjBusy = false, bjTab = "dealer";
 async function openBJ() {
   bjBusy = false;
-  const el = openSheet(`${gameHead("Vintage Cigar", "Блэкджек", "Набери 21 или больше дилера, но без перебора")}
+  const el = openSheet(`${gameHead("Vintage Cigar", "Блэкджек", "Набери 21 или больше дилера, но без перебора", "cards")}
     <div class="seg" style="margin-bottom:12px">${[["dealer", "box", "С дилером"], ["friends", "users", "«21» с друзьями"]].map(([k, i, t]) => `<button data-act="bj-tab" data-v="${k}" class="${bjTab === k ? "on" : ""}">${ic(i)}${t}</button>`).join("")}</div>
     <div id="bj-body"></div>`, "bj-s");
   el._bj = true;
@@ -89,7 +89,7 @@ const RULES_101 = `<details class="rules"><summary>${ic("award")}Правила 
   <b>Король пик</b> — следующий берёт 4 и пропускает. Кто первым скинул все карты — забирает банк.</div></details>`;
 function openTables(game) {
   H.imp("light");
-  const el = openSheet(`${gameHead(game === "101" ? "Jester Hat" : "Vintage Cigar", game === "101" ? "101" : "Двадцать одно", "Играй с друзьями — победитель забирает банк")}
+  const el = openSheet(`${gameHead(game === "101" ? "Jester Hat" : "Vintage Cigar", game === "101" ? "101" : "Двадцать одно", "Играй с друзьями — победитель забирает банк", "cards")}
     ${game === "101" ? RULES_101 : ""}<div id="tb-body">${tablesHTML(game)}</div>`, "tables-s");
   el._tables = game;
   loadTables(game);
@@ -285,7 +285,7 @@ Object.assign(ACT, {
   },
   "rm-inv": async () => {
     const fr = await api("friends");
-    openSheet(`<h2 class="gtitle">Позвать за стол</h2><button class="btn" style="margin-bottom:12px" data-act="rm-link">${ic("send")}Отправить ссылку в чат</button>${fr.friends.length ? `<div class="box">${fr.friends.map(u => `<div class="row tap" data-act="rm-share" data-id="${u.id}">${avaHTML(u, 40)}<div class="grow"><div class="t">${esc(u.name)}</div></div>${ic("send", "dim")}</div>`).join("")}</div>` : emptyHTML("users", "Друзей пока нет")}`);
+    openSheet(`<h2 class="gtitle">За стол</h2><button class="btn" style="margin-bottom:12px" data-act="rm-link">${ic("send")}Отправить ссылку в чат</button>${fr.friends.length ? `<div class="box">${fr.friends.map(u => `<div class="row tap" data-act="rm-share" data-id="${u.id}">${avaHTML(u, 40)}<div class="grow"><div class="t">${esc(u.name)}</div></div>${ic("send", "dim")}</div>`).join("")}</div>` : emptyHTML("users", "Друзей пока нет")}`);
   },
   "rm-share": async el => { await post(`rooms/${ROOM.id}/invite`, { to: +el.dataset.id }).catch(() => {}); closeSheet(); toast("Приглашение отправлено", "ok"); },
   "rm-again": () => { const g = ROOM.game; closeSheet(); if (g === "101") { if (!SHEETS.some(s => s._tables)) openTables("101"); } else if (!SHEETS.some(s => s._bj || s._tables)) openTables("21"); },

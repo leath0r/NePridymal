@@ -35,18 +35,18 @@ def _weights(reel, bonus=False):
 SCALE = conf("games.dogs_scale", 0.405)   # симуляция 1,8 млн спинов: возврат ≈ SCALE × 2,43 → 0,405 ≈ 98,4% (было 0,395 ≈ 96%); покупка бонуса ≈ 98% / 96%
 
 
-def _cell(reel, bonus):
-    s = random.choices(range(12), weights=_weights(reel, bonus))[0]
+def _cell(reel, bonus, rng=random):
+    s = rng.choices(range(12), weights=_weights(reel, bonus))[0]
     return s
 
 
-def _grid(bonus=False, sticky=None):
-    g = [[_cell(r, bonus) for _ in range(ROWS)] for r in range(REELS)]
+def _grid(bonus=False, sticky=None, rng=random):
+    g = [[_cell(r, bonus, rng) for _ in range(ROWS)] for r in range(REELS)]
     wm = {}
     for r in range(REELS):
         for c in range(ROWS):
             if g[r][c] == W:
-                wm[(r, c)] = random.choice((2, 2, 3))
+                wm[(r, c)] = rng.choice((2, 2, 3))
     if sticky:   # липкие вайлды из фриспинов
         for (r, c), m in sticky.items():
             g[r][c] = W
@@ -98,11 +98,11 @@ def scale():
     return tune()[0]
 
 
-def spin(bet):
+def spin(bet, rng=random):
     """Полный раунд: базовый спин + (если 3+ лапки) фриспины. Возвращает кадры для анимации."""
     lb = bet / NL
     sc, fb, _ = tune()
-    g, wm = _grid()
+    g, wm = _grid(rng=rng)
     wins, total = _eval(g, wm, lb, sc)
     frames = [{"grid": g, "wilds": _wl(wm), "wins": _wr(wins), "pay": int(total)}]
     scat = sum(1 for r in range(REELS) for c in range(ROWS) if g[r][c] == S)
@@ -111,7 +111,7 @@ def spin(bet):
         sticky, left = {}, FREE_BY_SCAT[min(scat, 5)]
         while left > 0:
             left -= 1
-            g2, wm2 = _grid(True, sticky)
+            g2, wm2 = _grid(True, sticky, rng)
             for k, m in wm2.items():
                 sticky.setdefault(k, m)
             w2, t2 = _eval(g2, wm2, lb * fb, sc)
@@ -121,19 +121,19 @@ def spin(bet):
     return {"frames": frames, "bonus": scat >= 3, "pay": pay, "scatters": scat}
 
 
-def bonus_round(bet, scat):
+def bonus_round(bet, scat, rng=random):
     """Купленный бонус: стартовый экран с ровно scat лапками (3 или 4) → фриспины. Кадры — как у обычного спина."""
     lb = bet / NL
     sc, _, fb = tune()
-    g, wm = _grid()
+    g, wm = _grid(rng=rng)
     for r in range(REELS):   # убираем случайные лапки и раскладываем нужное количество на барабаны 1, 3, 5
         for c in range(ROWS):
             if g[r][c] == S:
-                g[r][c] = random.choice(range(5))
-    spots = [(r, random.randrange(ROWS)) for r in (0, 2, 4)]
+                g[r][c] = rng.choice(range(5))
+    spots = [(r, rng.randrange(ROWS)) for r in (0, 2, 4)]
     if scat > 3:
-        r = random.choice((0, 2, 4))
-        c = random.choice([x for x in range(ROWS) if (r, x) not in spots])
+        r = rng.choice((0, 2, 4))
+        c = rng.choice([x for x in range(ROWS) if (r, x) not in spots])
         spots.append((r, c))
     for r, c in spots:
         if (r, c) in wm:
@@ -144,7 +144,7 @@ def bonus_round(bet, scat):
     sticky, left, bonus_total = {}, FREE_BY_SCAT[scat], 0.0
     while left > 0:
         left -= 1
-        g2, wm2 = _grid(True, sticky)
+        g2, wm2 = _grid(True, sticky, rng)
         for k, m in wm2.items():
             sticky.setdefault(k, m)
         w2, t2 = _eval(g2, wm2, lb * fb, sc)

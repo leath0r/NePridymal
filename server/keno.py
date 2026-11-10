@@ -63,13 +63,15 @@ async def keno_play(req: Request, uid=Depends(auth)):
     if not 1 <= len(picks) <= PICK or len(picks) != len(b.get("picks") or []) or not all(1 <= x <= N for x in picks):
         err(f"отметь от 1 до {PICK} разных чисел от 1 до {N}")
     t = table(risk, len(picks))
+    import fair
     with tx():
         check_bet(uid, bet)
-        draw = RND.sample(range(1, N + 1), DRAW)
+        rr, pf = fair.rolls(uid, "keno", ref=",".join(map(str, picks)), n=DRAW)
+        draw = fair.sample(rr, range(1, N + 1), DRAW)
         hits = len(set(draw) & set(picks))
         m = t[hits]
         pay = int(bet * m)
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
-        event(uid, "keno", pay - bet)
+        event(uid, "keno", pay - bet, stake=bet, pf=pf, res={"draw": draw, "hits": hits, "mult": m, "N": N})
         lvl = add_xp(uid, max(1, bet // 20))
-    return {"draw": draw, "hits": hits, "mult": m, "pay": pay, "bet": bet, "stars": bal(uid), "levelup": lvl}
+    return {"draw": draw, "hits": hits, "mult": m, "pay": pay, "bet": bet, "stars": bal(uid), "levelup": lvl, "pf": pf}

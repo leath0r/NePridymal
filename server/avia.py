@@ -17,10 +17,11 @@ STEPS = (6, 12)       # сколько облаков пролетает
 LAND_BASE = 0.3226    # симуляция 300k полётов: E[min(счётчик, 250)] ≈ 3,01 → 0,97 / 3,01; медиана ×2,05
 
 
-def fly():
+def fly(rr):
+    import fair
     k, path = 1.0, []
-    for _ in range(random.randint(*STEPS)):
-        kind, v, _ = random.choices(ITEMS, weights=[x[2] for x in ITEMS])[0]
+    for i in range(STEPS[0] + fair.idx(rr[0], STEPS[1] - STEPS[0] + 1)):
+        kind, v, _ = ITEMS[fair.pick(rr[1 + i], [x[2] for x in ITEMS])]
         if kind == "add":
             k += v
         elif kind == "mul":
@@ -39,15 +40,17 @@ def land_chance():
 @app.post(R + "/avia")
 async def avia(req: Request, uid=Depends(auth)):
     bet = int((await req.json()).get("bet", 0))
-    path, k = fly()
-    landed = random.random() < land_chance()
-    pay = int(bet * k) if landed else 0
+    import fair
     with tx():
         check_bet(uid, bet)
+        rr, pf = fair.rolls(uid, "avia", n=14)   # 1 — число облаков, 12 — максимум предметов, 1 — посадка
+        path, k = fly(rr)
+        landed = rr[13] < land_chance()
+        pay = int(bet * k) if landed else 0
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
-        event(uid, "avia", pay - bet)
+        event(uid, "avia", pay - bet, stake=bet, pf=pf, res={"k": k, "landed": landed})
         lvl = add_xp(uid, max(1, bet // 20))
-    return {"path": path, "k": k, "landed": landed, "pay": pay, "stars": bal(uid), "levelup": lvl}
+    return {"path": path, "k": k, "landed": landed, "pay": pay, "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 def simulate(n=400_000):

@@ -11,6 +11,7 @@ Object.assign(ICONS, {
 });
 
 const PAY = { info: null, friends: null, busy: false, seq: 0 };
+const payAddrShort = a => a.length <= 14 ? a : a.slice(0, 6) + "…" + a.slice(-4);
 // адрес кошелька NP + 20 символов: показываем группами по 4, копируем слитно
 // свой адрес от админа (любой, 3–32 знака) показываем как есть
 const payAddrFmt = a => !a ? "" : /^NP[0-9A-Z]{20}$/.test(a) ? "NP " + a.slice(2).match(/.{1,4}/g).join(" ") : a;
@@ -80,24 +81,33 @@ async function openPay(el) {
   setStars(r.stars);
   const w = r.week || { in: 0, out: 0 };
   replaceSheet(el, `<div class="pay-hero">
-      <div class="pay-hl">${ic("xfer")}<span>Кошелёк</span><em>id ${ME.id}</em></div>
-      <div class="pay-bal"><span class="pay-st">⭐</span><span class="pay-num">0</span></div>
-      <div class="pay-sub">звёзд на балансе</div>
-      ${r.addr ? `<button class="pay-addr" data-act="pay-addr-copy" data-a="${esc(r.addr)}"><span>${payAddrFmt(r.addr)}</span>${ic("copy")}</button>` : ""}
-      <div class="pay-wk"><span class="in">+${short(w.in)} ⭐<small>получено за 7 дн</small></span><span>−${short(w.out)} ⭐<small>отправлено за 7 дн</small></span></div>
-      <div class="pay-acts">
-        <button data-act="pay-scan"><span class="pay-ic">${ic("scan")}</span><b>Сканировать</b><small>QR друга</small></button>
-        <button data-act="pay-recv"><span class="pay-ic">${ic("qr")}</span><b>Получить</b><small>мой QR</small></button>
-      </div></div>
+      <div class="pay-card" id="pay-card"><span class="pay-gloss"></span><span class="pay-spark"></span>
+        <div class="pay-bal"><span class="pay-st">⭐</span><span class="pay-num">0</span></div>
+        <button class="pay-chg" data-act="pay-hist"><span class="in">+${short(w.in)}</span><i></i><span>−${short(w.out)}</span><small>за 7 дней</small>${ic("chev")}</button>
+        <button class="pay-who" data-act="pay-recv">${esc(ME.username || ME.name)}${ic("qr")}</button>
+      </div>
+    </div>
+    <div class="pay-acts">
+      <button data-act="daily"><span class="pay-ic">${ic("plus")}</span><b>Пополнить</b></button>
+      <button data-act="pay-send"><span class="pay-ic">${ic("xfer")}</span><b>Отправить</b></button>
+      <button data-act="pay-recv"><span class="pay-ic">${ic("qr")}</span><b>Получить</b></button>
+      <button data-act="pay-scan"><span class="pay-ic">${ic("scan")}</span><b>Сканер</b></button>
+    </div>
+    ${r.addr ? `<button class="pay-addrrow" data-act="pay-addr-copy" data-a="${esc(r.addr)}"><span>Адрес кошелька</span><code>${payAddrShort(r.addr)}</code>${ic("copy")}</button>` : ""}
+    <div class="pay-gifts" id="pay-gifts"></div>
     ${r.on === false ? `<div class="adm-warn">Переводы временно отключены администрацией</div>` : ""}
     <div class="pay-find">${ic("search")}<input class="pay-q" placeholder="Имя, @username или адрес NP…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
     <div class="pay-peers">${payPeers()}</div>
-    <div class="sec-t">История переводов</div>
+    <div class="sec-t" id="pay-hist-t">История переводов</div>
     ${payHistory(r.history)}
-    <p class="hint pay-note">Комиссия ${+(r.fee * 100).toFixed(2)}%${r.feeAddr != null && r.feeAddr !== r.fee ? `, по адресу — ${+(r.feeAddr * 100).toFixed(2)}%` : ""}. Платит отправитель — получатель получает ровно указанную сумму</p>
-    <div class="pay-rbtns"><button class="pay-link" data-act="pay-pin-change">${ic("lock")}Сменить пароль кошелька</button></div>`);
+    <p class="hint pay-note">Комиссия ${+(r.fee * 100).toFixed(2)}%</p>
+    <div class="pay-rbtns"><button class="pay-link" data-act="pay-pin-change">${ic("lock")}Сменить пароль</button><button class="pay-link" data-act="pay-pin-forgot">Забыл пароль</button></div>`);
   starify(el);
   payCount(el.querySelector(".pay-num"), r.stars);
+  api("user/" + ME.id).then(u => {
+    const box = $("#pay-gifts"), g = (u.gifts || []).slice().sort((a, b) => b.value - a.value).slice(0, 6);
+    if (box && g.length) box.innerHTML = `<div class="sec-t">Подарки</div><div class="pay-ggrid">${g.map(x => `<button data-act="gift" data-k="${reg({ g: x, mine: true })}">${giftHTML(x, { lite: true, plain: true })}</button>`).join("")}</div>`;
+  }).catch(() => {});
   if (!r.pin && !(await payPinSetup())) { if (el.isConnected) closeSheet(); return; }   // без пароля кошелёк не открываем
   let t;
   el.querySelector(".pay-q").oninput = e => {
@@ -128,19 +138,17 @@ function openPayRecv(amt = 0) {
   const link = ME.refLink.replace(/start=.*$/, `start=pay_${ME.id}${amt ? "_" + amt : ""}`);
   let qr = ""; try { qr = qrSVG(link).svg; } catch (e) {}
   const html = `<div class="pay-rc">
-      <div class="pay-rtop">${ic("qr")}<span>Получить звёзды</span></div>
-      <div class="pay-rbody">
-        <div class="pay-rh">${avaHTML(ME, 42)}<div class="grow"><b>${esc(ME.name)}</b><span>${ME.username ? "@" + esc(ME.username) : "id " + ME.id}</span></div></div>
-        <div class="pay-rt">${amt ? "Отсканируй, чтобы перевести мне" : "Отсканируй, чтобы перевести мне звёзды"}</div>
-        ${amt ? `<div class="pay-ramt"><span class="pay-st">⭐</span>${fmt(amt)}</div>` : ""}
-        <div class="inv-code pay-code">${qr}<span class="inv-logo">${avaHTML(ME, 48)}</span></div>
-        ${PAY.info && PAY.info.addr ? `<button class="pay-raddr" data-act="pay-addr-copy" data-a="${esc(PAY.info.addr)}"><small>Адрес кошелька</small><span>${payAddrFmt(PAY.info.addr)}</span>${ic("copy")}</button>` : ""}
-        <div class="pay-rbtns"><button class="pay-link" data-act="pay-amt" data-v="${amt}">${amt ? "Изменить сумму" : "Указать сумму"}</button>
-          ${amt ? `<button class="pay-link" data-act="pay-amt-clear">Без суммы</button>` : ""}</div>
-      </div></div>
-    <button class="btn gold pay-share" data-act="pay-share" data-l="${esc(link)}" data-v="${amt}">${ic("send")}Отправить ссылку в Telegram</button>
-    <button class="btn ghost pay-share" data-act="pay-print">${ic("download")}QR для печати — прислать в Telegram</button>
-    <p class="hint pay-note">QR без суммы — постоянный: распечатай и принимай по нему звёзды. Камерой телефона он тоже открывается — бот покажет кнопку перевода</p>`;
+      <div class="pay-qrwrap"><div class="inv-code pay-code">${qr}<span class="inv-logo">${avaHTML(ME, 48)}</span></div></div>
+      <b class="pay-rname">${esc(ME.name)}</b>
+      ${amt ? `<div class="pay-ramt"><span class="pay-st">⭐</span>${fmt(amt)}</div>` : ""}
+      ${PAY.info && PAY.info.addr ? `<button class="pay-addr" data-act="pay-addr-copy" data-a="${esc(PAY.info.addr)}"><span>${payAddrShort(PAY.info.addr)}</span>${ic("copy")}</button>` : ""}
+    </div>
+    <div class="pay-racts">
+      <button class="btn cta" data-act="pay-share" data-l="${esc(link)}" data-v="${amt}">${ic("send")}Поделиться</button>
+      <button class="btn ghost" data-act="pay-amt" data-v="${amt}">${amt ? "Изменить сумму" : "Указать сумму"}</button>
+      ${amt ? `<button class="pay-link" data-act="pay-amt-clear">Без суммы</button>` : ""}
+      <button class="pay-link" data-act="pay-print">${ic("download")}QR для печати</button>
+    </div>`;
   const top = SHEETS[SHEETS.length - 1];
   if (top && top.classList.contains("pay-r")) replaceSheet(top, html); else openSheet(html, "pay-r");
   starify(SHEETS[SHEETS.length - 1]);
@@ -214,6 +222,9 @@ async function openPaySend(id, amt = 0, addr = "") {
 const payAmt = el => Math.min(1e12, parseInt((el.querySelector(".pay-a").value || "").replace(/\D/g, ""), 10) || 0);
 
 Object.assign(ACT, {
+  "pay-hist": () => { const t = $("#pay-hist-t"); if (t) t.scrollIntoView({ block: "start", behavior: "smooth" }); },
+  "pay-pin-forgot": async () => { const p = await payPinForgot(); if (p) toast("Пароль обновлён", "ok"); },
+  "pay-send": () => { const q = document.querySelector(".pay-q"); if (q) { q.scrollIntoView({ block: "center", behavior: "smooth" }); q.focus(); } },
   pay: () => openPay(),
   "pay-scan": () => payScan(),
   "pay-recv": () => openPayRecv(0),

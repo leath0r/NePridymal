@@ -6,7 +6,7 @@ import asyncio
 
 from fastapi import Depends
 
-from app import GAME_KINDS, R, app, auth, db, esc, event, kv_get, notify, now, q, q1, tx, user_brief, week_start
+from app import GAME_KINDS, R, app, auth, db, esc, event, kv_get, notify, now, q, q1, qr, tx, user_brief, week_start
 from settings import conf
 
 TIERS = ["Бронза", "Серебро", "Золото", "Платина", "Алмаз", "Легенда"]
@@ -80,8 +80,8 @@ def standings(ws, gid):
         return []
     ids = [m["user"] for m in mem]
     ph = ",".join("?" * len(ids))
-    pts = {r["user"]: r["p"] for r in q(f"""SELECT user, SUM(MIN(ABS(delta), {CAP})) / 100 p FROM events
-                                           WHERE kind IN {GAME_KINDS} AND ts>=? AND ts<? AND user IN ({ph}) GROUP BY user""", ws, ws + WEEK, *ids)}
+    pts = {r["user"]: r["p"] for r in qr(f"""SELECT user, SUM(MIN(ABS(delta), {CAP})) / 100 p FROM events
+                                           WHERE kind IN {GAME_KINDS} AND ts>=? AND ts<? AND user IN ({ph}) GROUP BY user""", max(ws, __import__("app").season_from()), ws + WEEK, *ids)}
     out = [{"user": m["user"], "pts": int(pts.get(m["user"], 0)), "ts": m["ts"]} for m in mem]
     out.sort(key=lambda x: (-x["pts"], x["ts"]))
     return out

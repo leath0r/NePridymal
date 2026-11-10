@@ -17,7 +17,7 @@ const CL_CLAW = `<svg viewBox="0 0 80 70" class="cl-hand"><defs>
   <g class="cl-arm r"><path d="M43 18 L62 36 Q68 48 58 60 L54 57 Q61 47 56 39 L40 24Z" fill="url(#clm)"/></g></svg>`;
 
 async function openClaw() {
-  const el = openSheet(`${gameHead("Toy Bear", "Кран", "Подцепи подарок клешнёй")}<div id="cl-body">${emptyHTML("hourglass", "Включаем автомат…")}</div>`, "cl-s");
+  const el = openSheet(`${gameHead("Toy Bear", "Кран", "Подцепи подарок клешнёй", "claw")}<div id="cl-body">${emptyHTML("hourglass", "Включаем автомат…")}</div>`, "cl-s");
   el._cl = true;
   el._t = setInterval(() => el.isConnected ? clPanelPaint() : clearInterval(el._t), 400);   // ½ ×2 MAX меняют ставку без события input
   el._onClose = () => clearInterval(el._t);

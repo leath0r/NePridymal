@@ -11,7 +11,7 @@ GAME_NAMES.scratch = ["grid", "Скретч-карты"];
 const SC_TIERS = [["bronze", "Бронза", "#d69a5a", "#5a3410"], ["gold", "Золото", "#ffc53d", "#5a3a00"], ["diamond", "Бриллиант", "#7cd8ff", "#0b3a5c"]];
 let SCI = null, scTier = "bronze", SCR = null;
 async function openScratch() {
-  const el = openSheet(`<div class="ghead"><img src="${A.orig("Swiss Watch", 128)}" alt=""><div><h2>Скретч-карты</h2><span>Сотри фольгу пальцем — три одинаковых подарка = приз</span></div></div>
+  const el = openSheet(`<div class="ghead">${gpfBtn("scratch")}<img src="${A.orig("Swiss Watch", 128)}" alt=""><div><h2>Скретч-карты</h2><span>Сотри фольгу пальцем — три одинаковых подарка = приз</span></div></div>
     <div class="sc-tiers" id="sc-tiers"></div>
     <div class="sc-ticket" id="sc-t"></div>
     <div class="wres" id="sc-res">Выбери карту и купи</div>

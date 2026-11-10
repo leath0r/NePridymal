@@ -49,6 +49,7 @@ async function luckyShow(amount) {
 const _rcD = renderCases;
 renderCases = async function () {
   await _rcD();
+  return;   // приветствие убрано: дублировало плитки и перегружало главный экран
   const v = $("#v-cases"); if (!v || !ME || v.querySelector(".hello")) return;
   const h = new Date().getHours(), part = h < 5 ? "Доброй ночи" : h < 12 ? "Доброе утро" : h < 18 ? "Добрый день" : "Добрый вечер";
   const name = (ME.name || "").split(" ")[0];

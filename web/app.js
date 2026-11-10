@@ -25,13 +25,18 @@ if (tg) try {
 
 // ------------------------------------------------------------ звёзды: любой ⭐ в интерфейсе → иконка в стиле Telegram Stars
 const STAR_SVG = '<svg viewBox="0 0 24 24"><use href="#xtr"/></svg>';
+// В русском интерфейсе дробные множители и проценты пишутся через запятую, в каком бы модуле ни был собран текст
+const NUM_RU = (() => { try { return localStorage.getItem("lang") !== "en"; } catch (e) { return true; } })();
+const NUM_DOT = /[x×]\d+\.\d|\d\.\d+(?:%|x\b)/, NUM_DOT_G = /([x×]\d+)\.(\d)|(\d)\.(\d+(?:%|x\b))/g;
 function starify(root) {
   if (!root || !root.ownerDocument && root !== document) return;
   const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: n => n.nodeValue.includes("⭐") && n.parentNode && !n.parentNode.closest("textarea,input,script,style,title") ? 1 : 3,
+    acceptNode: n => (n.nodeValue.includes("⭐") || (NUM_RU && NUM_DOT.test(n.nodeValue))) && n.parentNode && !n.parentNode.closest("textarea,input,script,style,title") ? 1 : 3,
   });
   const list = []; while (w.nextNode()) list.push(w.currentNode);
   for (const n of list) {
+    if (NUM_RU && NUM_DOT.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(NUM_DOT_G, "$1$3,$2$4");
+    if (!n.nodeValue.includes("⭐")) continue;
     const f = document.createDocumentFragment();
     n.nodeValue.replace(/️/g, "").split("⭐").forEach((part, i) => {
       if (i) { const s = document.createElement("span"); s.className = "xtr"; s.innerHTML = STAR_SVG; f.appendChild(s); }
@@ -53,7 +58,7 @@ starify(document.body);
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const enc = s => encodeURIComponent(s).replace(/'/g, "%27").replace(/\(/g, "%28").replace(/\)/g, "%29");
-const fmt = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+const fmt = n => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");   // неразрывный пробел: число не рвётся между строками
 // 12 345 → «12,3K», 10 000 → «10K», 2 500 000 → «2,5M»
 const short = n => { const f = (v, d) => v.toFixed(d).replace(/\.0$/, "").replace(".", ","); return n >= 1e6 ? f(n / 1e6, n >= 1e7 ? 0 : 1) + "M" : n >= 1e4 ? f(n / 1e3, n >= 1e5 ? 0 : 1) + "K" : fmt(n); };
 const pct = p => (p / 10).toString().replace(".", ",") + "%";
@@ -65,31 +70,36 @@ const plural = (n, f) => { n = Math.abs(n) % 100; if (n > 10 && n < 20) return f
 // один и тот же POST (адрес + данные), пока он ещё в пути, второй раз не шлём: двойной тап по «Забрать» / «Играть»
 // давал красное «нечего забирать» / «игра уже идёт» сразу после выигрыша. Дубль тихо отклоняется (status — errlog его не шлёт).
 const API_BUSY = new Set();
-async function api(path, body) {
+async function api(path, body, o) {   // o: timeout (мс) и quiet (без всплывающей ошибки) для запросов, где важна каждая секунда
   const key = body ? path + "|" + JSON.stringify(body) : "";
   if (key && API_BUSY.has(key)) throw Object.assign(new Error("dup"), { status: "dup" });
   if (key) API_BUSY.add(key);
-  try { return await apiReq(path, body); } finally { if (key) API_BUSY.delete(key); }
+  try { return await apiReq(path, body, o); } finally { if (key) API_BUSY.delete(key); }
 }
-async function apiReq(path, body) {
+async function apiReq(path, body, o = {}) {
+  const ac = o.timeout ? new AbortController() : null, tm = ac && setTimeout(() => ac.abort(), o.timeout);
+  try { return await apiFetch(path, body, o, ac); } finally { clearTimeout(tm); }
+}
+async function apiFetch(path, body, o, ac) {
   const headers = { "Content-Type": "application/json" };
   if (inTg) headers["X-Init-Data"] = tg.initData; else if (DEV_USER) headers["X-Dev-User"] = DEV_USER;
   let r;
-  try { r = await fetch("api/" + path, { method: body ? "POST" : "GET", headers, body: body ? JSON.stringify(body) : undefined }); }
-  catch (e) { const m = "Нет связи с сервером — проверь интернет"; if (body) { toast(m, "err"); H.err(); } throw Object.assign(new Error(m), { status: "net" }); }   // фоновые GET — молча
-  let d = null; try { d = await r.json() } catch (e) {}
+  try { r = await fetch("api/" + path, { method: body ? "POST" : "GET", headers, body: body ? JSON.stringify(body) : undefined, signal: ac ? ac.signal : undefined }); }
+  catch (e) { const m = "Нет связи с сервером — проверь интернет"; if (body && !o.quiet) { toast(m, "err"); H.err(); } throw Object.assign(new Error(m), { status: "net" }); }   // фоновые GET — молча
+  let d = null; try { d = await r.json() } catch (e) { if (ac && ac.signal.aborted) throw Object.assign(new Error("timeout"), { status: "net" }); }
   if (!r.ok) {
     let m = d && typeof d.detail === "string" ? d.detail : "";
     if (r.status === 401 || m === "unauthorized") m = "Сессия устарела — закрой и открой игру заново";
     else if (m === "Not Found" || (!m && r.status === 404)) m = "Не найдено — обнови экран";
     else if (!m && r.status === 422) m = "Неверные данные — проверь сумму";
     else if (!m) m = r.status >= 500 ? "Сервер занят — попробуй через пару секунд" : "Ошибка сети — проверь интернет";
-    if (body || (r.status < 500 && r.status !== 401)) { toast(m, "err"); H.err(); }   // сбои фоновых опросов (502 при перезапуске и т. п.) не показываем
+    if (!o.quiet && (body || (r.status < 500 && r.status !== 401))) { toast(m, "err"); H.err(); }   // сбои фоновых опросов (502 при перезапуске и т. п.) не показываем
     throw Object.assign(new Error(m), { status: r.status });   // status — чтобы errlog.js не слал на сервер обычные отказы API
   }
+  if (r.headers.get("X-Rec") && typeof recSoon === "function") recSoon();   // новый личный рекорд (records.js)
   return d;
 }
-const post = (p, b = {}) => api(p, b);
+const post = (p, b = {}, o) => api(p, b, o);
 
 // реестр объектов для data-k в разметке
 const REG = new Map(); let regN = 0;
@@ -250,6 +260,8 @@ function burstAt(el, g) {
 // ------------------------------------------------------------ шторки (стек + BackButton телеги)
 const SHEETS = [];
 function openSheet(html, cls = "") {
+  document.documentElement.classList.add("has-sheet");
+  if (SHEETS.length) SHEETS[SHEETS.length - 1].classList.add("under");
   const el = document.createElement("div");
   el.className = "sheet " + cls;
   el.innerHTML = `<button class="x" data-act="close">${ic("x")}</button><button class="sbal" data-act="daily"><span>⭐</span><b class="bal-live">${ME ? fmt(ME.stars) : "—"}</b></button>` + html;
@@ -262,6 +274,8 @@ function openSheet(html, cls = "") {
 }
 function closeSheet() {
   const el = SHEETS.pop(); if (!el) return;
+  if (!SHEETS.length) document.documentElement.classList.remove("has-sheet");
+  else SHEETS[SHEETS.length - 1].classList.remove("under");
   el.classList.remove("on"); stopLottie(el);
   setTimeout(() => el.remove(), 350);
   if (!SHEETS.length && inTg) tg.BackButton.hide();
@@ -273,6 +287,8 @@ if (inTg) tg.BackButton.onClick(closeSheet);
 // ------------------------------------------------------------ состояние
 let ME = null, CASES = [], BANNERS = null, MYP = null, TAB = "cases";
 const CASE_COL = {
+  first_ed: ["#2fb6a3", "#08352f"], gold_ed: ["#d9a521", "#3f2d05"],
+  champ: ["#e0483f", "#3d0d0a"], gadgets: ["#22a7c9", "#07303c"], treasure: ["#c99a2e", "#3a2a07"], knight: ["#6a7fb5", "#161f38"], cozy: ["#b8603a", "#3a1a0d"], nightlife: ["#c23d9e", "#340b2a"], crown: ["#8a4dff", "#1f0d4a"],
   free: ["#3fb27a", "#123a28"], starter: ["#6b7a91", "#1d2532"], sweet: ["#ff8fb8", "#6e1f45"], winter: ["#62bdff", "#16365f"],
   spooky: ["#ff8a3d", "#45170a"], love: ["#ff5f8f", "#55102b"], gangsta: ["#7d6cff", "#1d1450"], jewel: ["#4fd6c6", "#0d4442"],
   magic: ["#b56cff", "#350e5a"], durov: ["#4aa8ff", "#0b2850"], elite: ["#ffcf5a", "#5e3b00"], mega: ["#ff4d6d", "#38000f"],
@@ -380,7 +396,6 @@ async function renderCases() {
     ${ME.rooms ? `<button class="invbar" data-act="my-invites">${ic("userPlus")}<span><b>Тебя зовут за стол</b>${ME.rooms} ${plural(ME.rooms, ["приглашение", "приглашения", "приглашений"])} — нажми, чтобы сесть</span>${ic("chev")}</button>` : ""}
     ${flashBar()}
     ${frBanner()}
-    <div class="sec-t"><span class="live-dot"></span>Живая лента</div><div class="feed" id="feed"></div>
     <div class="promo">
       <button data-act="case" data-id="free" class="${ME.freeIn ? "" : "ready"}"><span class="pic g">${ic("gift")}</span><div><b>Бесплатный</b><span id="free-t">${ME.freeIn ? "через " + clock(ME.freeIn) : "можно открыть!"}</span></div></button>
       <button data-act="daily" class="${ME.dailyIn ? "" : "ready"}"><span class="pic y">${ic("calendar")}</span><div><b>Бонус дня</b><span>${ME.dailyIn ? "через " + clock(ME.dailyIn) : "забери звёзды"}</span></div></button>
@@ -390,13 +405,12 @@ async function renderCases() {
     <div class="cases">${CASES.filter(c => c.id !== "free").sort((a, b) => a.price - b.price).map((c, ci) => {
       const [k1, k2] = CASE_COL[c.id] || ["#555", "#222"];
       return `<div class="case${c.id === "mega" ? " mega" : ""}${ci >= 6 ? " defer" : ""}" data-act="case" data-id="${c.id}" style="--k1:${k1};--k2:${k2}">
-        <div class="cpat">${patHTML(c.cover, c.pat, CPAT)}</div><div class="rays"></div><div class="halo"></div>
-        ${c.id === "mega" ? `<span class="hot">${ic("flame")}HOT</span>` : c.level > 1 ? `<span class="lvtag">${c.level} ур.</span>` : ""}
-        <img class="cv" src="${A.orig(c.cover)}" alt="" loading="lazy">
-        <div class="cfoot"><div class="nm">${esc(c.title)}</div>
-          <div class="cmeta"><span class="pr">⭐ ${fmt(c.price)}</span><span class="minis">${c.previews.map(x => `<img src="${A.orig(x, 64)}" alt="">`).join("")}</span></div></div>
-        ${lvl < c.level ? `<div class="lock"><b>${ic("lock")}</b>${c.level} уровень</div>` : ""}</div>`;
+                ${c.id === "mega" ? `<span class="hot">${ic("flame")}HOT</span>` : c.level > 1 ? `<span class="lvtag">${c.level} ур.</span>` : ""}
+        <span class="gl-art"><img class="cv" src="${A.orig(c.cover)}" alt="" loading="lazy"></span>
+        <div class="cfoot"><div class="nm">${esc(c.title)}</div>${c.limit ? `<span class="c-limit">${c.left ? `Осталось ${fmt(c.left)} из ${fmt(c.limit)}` : "Тираж закончился"}</span>` : ""}<span class="minis">${c.previews.slice(0, 3).map(x => `<img src="${A.orig(x, 64)}" alt="" loading="lazy">`).join("")}</span></div>
+        ${lvl < c.level ? `<div class="lock">${ic("lock")}${c.level} ур.</div>` : `<span class="pr">⭐ ${fmt(c.price)}</span>`}</div>`;
     }).join("")}</div>
+    <div class="sec-t"><span class="live-dot"></span>Живая лента</div><div class="feed" id="feed"></div>
     <div class="disc">${esc(ME.disclaimer)}</div>`;
   casesReveal(v);
   loadFeed();
@@ -495,7 +509,7 @@ async function doOpenInner(sheet, id, c, n) {
     startLottie(won);
     const wv = won.querySelector("#won-v"), t0v = performance.now();
     (function cnt(t) { const k = Math.min(1, (t - t0v) / 900); if (!wv.isConnected) return; wv.textContent = fmt(g.value * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(cnt); })(t0v);
-    if (c.price && g.value >= c.price * 5) setTimeout(() => bigWin(g.value, g.value / c.price), 700);
+    if (c.price && g.value >= c.price * 5) setTimeout(() => bigWin(g.value, g.value / c.price, g.value / c.price, { gift: g.id }), 700);
   } else {
     const best = gifts.reduce((a, b) => b.value > a.value ? b : a);
     won.innerHTML = `<div class="multi"><div class="mt"><b>Выпало на ⭐ ${fmt(total)}</b><span class="${total >= c.price * n ? "win" : "lose"}">${total >= c.price * n ? "+" : "−"}⭐ ${fmt(Math.abs(total - c.price * n))}</span></div>
@@ -738,11 +752,26 @@ async function editProfile() {
 }
 
 // ============================================================ ПОДАРОК
+const GH_EV = { mint: "Создан", move: "Новый владелец", burn: "Ушёл в банк" };
+async function giftHistory(el, id) {
+  if (!id || !el) return;
+  el.insertAdjacentHTML("beforeend", `<details class="ghist" open><summary>${ic("receipt")}История владельцев</summary><div class="ghist-b">Загружаем…</div></details>`);
+  const box = el.querySelector(".ghist"), body = box.querySelector(".ghist-b");
+  const load = async () => {
+    if (!box.open || box.dataset.ok) return; box.dataset.ok = 1;
+    try {
+      const r = await api("gift/" + id + "/history");
+      body.innerHTML = r.items.length ? r.items.map(x => `<div class="ghist-r"><span>${x.user ? esc(x.user.name) : x.event === "burn" ? "Банк" : "По ссылке"}<small>${GH_EV[x.event] || ""}</small></span><em>${new Date(x.ts * 1000).toLocaleDateString()}</em></div>`).join("") : `<p class="hint">Записей пока нет: история ведётся с этого обновления.</p>`;
+    } catch (e) { body.textContent = ""; }
+  };
+  box.addEventListener("toggle", load); load();
+}
 function openGift(o) {
   const { g } = o, mine = o.mine || g.owner === ME.id;
   H.imp("light");
   const el = openSheet(giftSheetHTML(o, mine), "gsheet");
   el._o = o;
+  giftHistory(el, g.id);
 }
 function giftSheetHTML(o, mine) {
   const g = o.g, sell = Math.floor(g.value * (1 - FEE("sell", .15)));
@@ -753,7 +782,8 @@ function giftSheetHTML(o, mine) {
     acts = g.price != null
       ? `<div class="btns"><button class="btn ghost" data-act="unlist" data-id="${g.id}">Снять с продажи</button></div>`
       : `<div class="btns"><button class="btn ghost" data-act="pin" data-id="${g.id}">${ic("pin")}${pinned ? "Открепить" : "Закрепить"}</button><button class="btn ghost" data-act="list" data-id="${g.id}">${ic("tag")}На маркет</button></div>
-         <div class="btns"><button class="btn red" data-act="sell" data-id="${g.id}">${ic("coins")}Продать сейчас за ⭐ ${fmt(sell)}</button></div>
+         <div class="btns"><button class="btn red" data-act="sell" data-id="${g.id}">${ic("coins")}Продать банку за ⭐ ${fmt(sell)}</button></div>
+         <p class="hint gsell-rate">Курс банка сейчас ${Math.round((1 - FEE("sell", .15)) * 100)}% от ценности. Банк больше — курс выше.</p>
          <div class="btns"><button class="btn gold" data-act="present" data-id="${g.id}">${ic("gift")}Подарить другу</button></div>
          ${g.value >= 100 ? `<div class="btns"><button class="btn ghost" data-act="loan" data-id="${g.id}">${ic("wallet")}Кредит под залог: ⭐ ${fmt(Math.floor(g.value * .5))}</button></div>` : ""}`;
   } else if (g.price != null) {
@@ -945,7 +975,7 @@ const ACT = {
     <div class="box" style="margin-bottom:14px">${(RICH_PERKS || []).map(p => `<div class="row kv"><span class="pill">${p.place}</span><div class="grow">ключ «${esc(p.key)}» каждый день</div><span class="hint">маркет ${p.fee}%</span></div>`).join("")}</div>
     <button class="btn gold" data-m="ok">Понятно</button>`),
   idea: () => {
-    const el = openSheet(`<h2 class="gtitle">Идеи и предложения</h2><p class="hint" style="margin:0 0 12px">Что добавить, что поменять, где баг? Сообщение прочитает создатель игры.</p>
+    const el = openSheet(`<h2 class="gtitle">Идеи</h2><p class="hint" style="margin:0 0 12px">Что добавить, что поменять, где баг? Сообщение прочитает создатель игры.</p>
       <textarea id="idea-t" rows="6" maxlength="1000" placeholder="Например: добавьте покупку бонуса в Пёсиках…"></textarea>
       <button class="btn gold" data-act="idea-send" style="margin-top:10px">${ic("send")}Отправить</button>`);
     setTimeout(() => el.querySelector("#idea-t").focus(), 400);
@@ -966,15 +996,24 @@ const ACT = {
 };
 document.addEventListener("click", e => {
   const t = e.target.closest("[data-tab]");
-  if (t) { H.sel(); return setTab(t.dataset.tab); }
+  if (t) { H.sel(); if (!ME) return; return setTab(t.dataset.tab); }
   const el = e.target.closest("[data-act]");
-  if (el && !el.disabled) { const f = ACT[el.dataset.act]; if (f) Promise.resolve(f(el, e)).catch(() => {}); }
+  if (!el || el.disabled) return;
+  const f = ACT[el.dataset.act]; if (!f) return;
+  if (!ME) return toast("Подожди секунду, игра загружается");   // данные игрока ещё не пришли (например, сервер перезапускается)
+  try { Promise.resolve(f(el, e)).catch(() => {}); }
+  catch (err) { console.error(err); }   // синхронная ошибка в действии не должна ронять страницу
 });
 
 // ============================================================ старт
 (async function boot() {
   paintIcons();
-  try { await loadMe(); } catch (e) {
+  let bootErr = null;
+  for (let i = 0; i < 6; i++) {   // сервер мог перезапускаться (выкладка обновления) — пробуем ещё, прежде чем показать ошибку
+    try { await loadMe(); bootErr = null; break; }
+    catch (e) { bootErr = e; if (i < 5) await new Promise(r => setTimeout(r, 1000 * (i + 1))); }
+  }
+  if (bootErr) {
     $("#boot") && $("#boot").remove();
     document.querySelector("main").innerHTML = `<div class="empty" style="padding-top:80px"><span class="eic">${ic("lock")}</span>${inTg ? "Не удалось войти. Перезапусти приложение." : "Открой игру через бота в Telegram."}</div>`;
     return;
@@ -1007,4 +1046,6 @@ document.addEventListener("click", e => {
       localStorage.setItem("disc1", "1");
     }
   } catch (e) {}
+  if (typeof growthStart === "function") growthStart();   // розыгрыш из ссылки или подарок от друга (growth.js)
+  if (typeof awayStart === "function") setTimeout(awayStart, 2500);   // «С возвращением» после перерыва (care.js), когда других окон нет
 })();

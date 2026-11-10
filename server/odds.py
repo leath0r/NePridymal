@@ -7,7 +7,7 @@ import time
 from fastapi import Depends, Request
 
 import settings
-from app import R, app, db, edge, err, kv_get, promo, q, tx
+from app import R, app, db, edge, err, kv_get, promo, q, qr, tx
 
 # ключ → (название, какие события в журнале, значение по умолчанию из settings.toml)
 GAMES = [
@@ -29,6 +29,9 @@ GAMES = [
     ("games.fish_rtp", "Рыбалка", ("fish",), lambda: settings.conf("games.fish_rtp", 0.96)),
     ("games.keno_rtp", "Кено", ("keno",), lambda: settings.conf("games.keno_rtp", 0.96)),
     ("games.penalty_rtp", "Пенальти", ("penalty",), lambda: settings.conf("games.penalty_rtp", 0.96)),
+    ("games.safe_rtp", "Сейф", ("safe",), lambda: settings.conf("games.safe_rtp", 0.94)),
+    ("games.ladder_rtp", "Лестница", ("ladder",), lambda: settings.conf("games.ladder_rtp", 0.94)),
+    ("games.carousel_rtp", "Карусель", ("carousel",), lambda: settings.conf("games.carousel_rtp", 0.94)),
     ("games.upgrade_edge", "Апгрейд", ("upgrade",), lambda: settings.conf("games.upgrade_edge", 0.92)),
 ]
 KEYS = {g[0]: g for g in GAMES}
@@ -59,7 +62,7 @@ def _routes():
     @app.get(R + "/admin/odds")
     def odds_get(aid=Depends(admin)):
         since = int(time.time()) - 7 * 86400
-        house = {r["kind"]: (-r["s"], r["n"]) for r in q("SELECT kind, SUM(delta) s, COUNT(*) n FROM events WHERE ts>=? GROUP BY kind", since)}
+        house = {r["kind"]: (-r["s"], r["n"]) for r in qr("SELECT kind, SUM(delta) s, COUNT(*) n FROM events WHERE ts>=? GROUP BY kind", since)}
         out = []
         for key, title, kinds, dflt in GAMES:
             d = dflt()

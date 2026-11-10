@@ -31,7 +31,7 @@ let DRL = null, drPick = 1, drBusy = false, drRaf = 0, drMode = "race", drTarget
 const drMs = () => drMode === "depth" ? DRL.depthMults : DRL.mults;
 async function openDrill() {
   drBusy = false; cancelAnimationFrame(drRaf);
-  const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "drill").imgUrl}" alt=""><div><h2>Бур</h2><span>Выбери бур — и пусть победит глубочайший</span></div></div>
+  const el = openSheet(`<div class="ghead">${gpfBtn("drill")}<img src="${GAMES.find(g => g.id === "drill").imgUrl}" alt=""><div><h2>Бур</h2><span>Выбери бур — и пусть победит глубочайший</span></div></div>
     <div class="ar-stage dr-stage" id="dr-stage"><div class="dr-world" id="dr-w">${emptyHTML("hourglass", "Ставим вышки…")}</div>
       <div class="dr-race" id="dr-race"></div></div>
     <div class="ar-ladder dr-tl" id="dr-tl"></div>

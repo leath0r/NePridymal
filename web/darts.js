@@ -56,7 +56,7 @@ GAME_NAMES.darts = ["crosshair", "Дартс"];
 let DTS = null, dtRisk = "mid", dtBusy = false;
 async function openDarts() {
   dtBusy = false;
-  const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "darts").imgUrl}" alt=""><div><h2>Дартс</h2><span>Один бросок — и всё решено</span></div></div>
+  const el = openSheet(`<div class="ghead">${gpfBtn("darts")}<img src="${GAMES.find(g => g.id === "darts").imgUrl}" alt=""><div><h2>Дартс</h2><span>Один бросок — и всё решено</span></div></div>
     <div class="ar-stage dt-stage" id="dt-stage">
       <div class="dt-wall"></div><div class="dt-spot"></div>
       <div class="dt-board" id="dt-board">${dtBoard()}<svg viewBox="-132 -132 264 264" class="dt-fx" id="dt-fx"></svg><div class="dt-darts" id="dt-darts"></div>

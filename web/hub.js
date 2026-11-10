@@ -11,7 +11,7 @@ ICONS.bell = '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.
 ICONS.receipt = '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>';
 
 // ---------------- 1. вкладка «Банк» ----------------
-let BH = "crypto";
+let BH = "shares";
 const BH_TABS = [["crypto", "coin", "Крипта"], ["inc", "store", "Доход"], ["shares", "pie", "Акции"], ["loans", "coins", "Кредиты"]];
 TITLES.crypto = "Банк";
 (() => {

@@ -36,7 +36,7 @@ def games_of(ps):
 
 def standings(game, ws, limit=10):
     return q("SELECT user, SUM(delta) s FROM events WHERE kind=? AND ts>=? AND ts<? GROUP BY user HAVING s>0 ORDER BY s DESC LIMIT ?",
-             game, ws, ws + PERIOD, limit)
+             game, max(ws, A.season_from()), ws + PERIOD, limit)
 
 
 @app.get(R + "/tournaments")
@@ -50,7 +50,7 @@ def tournaments(uid=Depends(auth)):
             u = q1("SELECT * FROM users WHERE id=?", r["user"])
             if u:
                 top.append({**user_brief(u), "score": r["s"], "prize": A.prize_k(POOL * SHARES[i]) if i < len(SHARES) else 0})
-        me = q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind=? AND user=? AND ts>=?", g, uid, ws)["s"]
+        me = q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE kind=? AND user=? AND ts>=?", g, uid, max(ws, A.season_from()))["s"]
         place = next((i + 1 for i, r in enumerate(standings(g, ws, 1000)) if r["user"] == uid), None)
         items.append({"game": g, "title": NAMES[g], "pool": A.prize_k(POOL), "top": top, "me": {"score": me, "place": place}})
     last = [dict(r) | {"result": json.loads(r["result"])} for r in q("SELECT * FROM tourn_results ORDER BY week DESC, game LIMIT 2")]

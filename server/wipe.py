@@ -94,7 +94,7 @@ def thanks_calc(since, until):
     if CFG["thanks_base"] == "buy":
         rows = q("SELECT user, SUM(stars) s FROM payments WHERE ts>=? AND ts<? AND stars>0 GROUP BY user", since, until)
     else:
-        rows = q(f"SELECT user, -SUM(delta) s FROM events WHERE ({bank.BANK_KINDS}) AND ts>=? AND ts<? GROUP BY user", since, until)
+        rows = q(f"SELECT user, -SUM(delta) s FROM events WHERE ({bank.BANK_KINDS}) AND user>0 AND ts>=? AND ts<? GROUP BY user", since, until)
     out, pct, cap = {}, CFG["thanks_pct"], int(CFG["thanks_cap"] or 0)
     for r in rows:
         if r["s"] and r["s"] > 0:
@@ -170,12 +170,26 @@ def _do_wipe(by):
         stats = season_stats(last_wipe(), t + 1)
         st["thanks"] = sum(a for _, a in thanks.values())
         st["season"] = season_no()
+        since = last_wipe()
         wid = db.execute("INSERT INTO wipe_log(ts,by,stats) VALUES(?,?,?)", (t, by, "{}")).lastrowid
+        import legacy
+        legacy.capture(wid, st["season"], since, t, stats, set(CFG["deny"]))   # до удаления подарков: итоги сезона остаются в профиле навсегда
         for r in q("SELECT id, stars FROM users WHERE stars!=?", start):
             A.event(r["id"], "wipe", start - r["stars"])
         db.execute("UPDATE users SET stars=?, inc_ts=?", (start, t))
         # незаконченные игры и сделки — всегда (в них заморожены старые звёзды и подарки)
-        for tb in ("mines", "tower", "chicken", "hilo", "bj"):
+        db.execute("DELETE FROM safe_game")
+        db.execute("DELETE FROM ladder_game")
+        db.execute("DELETE FROM cr_bet")
+        db.execute("DELETE FROM bb_bet")
+        db.execute("DELETE FROM fc_bet")   # и рынки: линии и итоги нового сезона считаются заново
+        db.execute("DELETE FROM fc_market")
+        db.execute("DELETE FROM fc_stat")
+        db.execute("DELETE FROM deposits")
+        db.execute("UPDATE auction SET done=1 WHERE done=0")
+        db.execute("UPDATE cheques SET refunded=1 WHERE claimed_by=0 AND refunded=0")   # старые чеки не переносят звёзды в новый сезон
+        db.execute("DELETE FROM bigwins")
+        for tb in ("mines", "tower", "chicken", "hilo", "bj", "pump", "fish", "penalty"):
             db.execute(f"DELETE FROM {tb}")
         db.execute("UPDATE trades SET status='cancelled' WHERE status='open'")
         db.execute("UPDATE rooms SET status='cancelled' WHERE status NOT IN ('done','cancelled')")
@@ -188,14 +202,21 @@ def _do_wipe(by):
         db.execute("DELETE FROM jp_tickets WHERE day>=?", (A.day_start(),))
         if CFG["gifts"]:
             db.execute("DELETE FROM gifts")
+            db.execute("DELETE FROM feed")
+            db.execute("DELETE FROM sales")
             db.execute("DELETE FROM vault")
+            db.execute("DELETE FROM bank_vault")   # проигранные в апгрейде подарки: иначе они вернутся в новый сезон через аукцион и апгрейд
             db.execute("UPDATE gift_links SET status='cancelled' WHERE status='open'")
         if CFG["loans"]:
-            db.execute("DELETE FROM loans")   # и долги, и история (лимит кредита без залога — снова с первой ступени)
+            db.execute("DELETE FROM loans")   # и долги, и история: рейтинг тоже с нуля
+            db.execute("DELETE FROM credit")
         elif CFG["gifts"]:
             db.execute("DELETE FROM loans WHERE status='open' AND gift IS NOT NULL")   # залоги исчезли вместе с подарками
         if CFG["biz"]:
             db.execute("DELETE FROM biz")
+            if not CFG["loans"]:
+                db.execute("UPDATE loans SET status='cancelled', closed=? WHERE status='open' AND biz IS NOT NULL", (t,))
+            db.execute("DELETE FROM biz_mgr")
         if CFG["crypto"]:
             db.execute("DELETE FROM crypto")
             db.execute("DELETE FROM crypto_stake")
@@ -205,6 +226,7 @@ def _do_wipe(by):
         if CFG["keys"]:
             db.execute("DELETE FROM case_keys")
         if CFG["clans"]:
+            db.execute("DELETE FROM clan_biz")
             import clans as C
             for c in q("SELECT * FROM clans"):   # места за уровень остаются купленными — иначе состав больше лимита (30/25)
                 db.execute("UPDATE clans SET slots=? WHERE id=?", (max(C.cap(c), q1("SELECT COUNT(*) n FROM clan_members WHERE clan=?", c["id"])["n"]), c["id"]))
@@ -212,6 +234,10 @@ def _do_wipe(by):
         if CFG["bank"]:
             db.execute("INSERT INTO kv(k,v) VALUES('bank_from',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (str(t),))
             db.execute("DELETE FROM shares")
+            db.execute("DELETE FROM clan_shares")
+            db.execute("DELETE FROM bank_saviors")
+            db.execute("DELETE FROM bank_recycled")
+            db.execute("UPDATE crisis_log SET end=? WHERE end=0", (t,))
         # благодарность банка — уже после сброса, платит банк нового сезона (kind thanks входит в BANK_KINDS)
         deny = set(CFG["deny"])
         for r in q("SELECT id FROM users WHERE banned=0"):
@@ -234,6 +260,7 @@ def _do_wipe(by):
         import bank
         import clans
         bank._BV["ts"] = 0
+        bank._FK["ts"] = 0
         clans.refresh_tax()
     except Exception as e:
         print("wipe after:", e, flush=True)
@@ -386,7 +413,7 @@ def admin_wipe(aid=Depends(admin)):
     return {"cfg": {k: CFG[k] for k in DEFAULTS if k != "warned"}, "parts": PARTS, "bases": BASES, "now": _stats(), "last": last,
             "canEdit": aid in OWNERS, "frozen": frozen(), "running": STATE["running"], "season": season_no(), "since": last_wipe(), "deny": deny,
             "thanks": {"players": len(th), "total": sum(a for _, a in th.values()),
-                       "top": [{**A.user_brief(q1("SELECT * FROM users WHERE id=?", u)), "base": b, "amount": a} for u, (b, a) in top]}}
+                       "top": [{**A.user_brief(r), "base": b, "amount": a} for u, (b, a) in top for r in [q1("SELECT * FROM users WHERE id=?", u)] if r]}}
 
 
 @app.post(R + "/admin/wipe")

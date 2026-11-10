@@ -27,6 +27,16 @@ setTimeout(() => {
   } catch (e) {}
 }, 6000);
 
+const LOOK_AC = ["#ffc53d", "#4f8cff", "#9b6bff", "#29c5e6", "#2fd08a", "#ff5f9e", "#ff6b4a"];
+const lookOn = c => { const n = parseInt(c.slice(1), 16), l = .299 * (n >> 16) + .587 * (n >> 8 & 255) + .114 * (n & 255); return l > 165 ? "#2a1c00" : "#ffffff"; };
+const lookGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } };
+const lookAc = () => lookGet("ac", LOOK_AC[0]);
+const lookGp = () => +lookGet("glass", 60);
+function lookGlass(v) {
+  document.documentElement.style.setProperty("--gp", v);
+  try { localStorage.setItem("glass", v); } catch (e) {}
+  const l = $("#look-gv"); if (l) l.textContent = v + "%";
+}
 function openSettings() {
   const row = (k, t, s, on) => `<div class="row kv"><div class="grow"><div class="t">${t}</div><div class="s" style="white-space:normal">${s}</div></div><button class="sw${on ? " on" : ""}" data-act="pref" data-k="${k}"></button></div>`;
   openSheet(`<h2 class="gtitle">${ic("gear")} Настройки</h2>
@@ -36,9 +46,26 @@ function openSettings() {
       ${row("vibro", "Вибрация", "Отклик телефона на нажатия, выигрыши и проигрыши", !PREF.noVibro)}
       ${row("notif", "Уведомления от бота", "Бесплатный кейс, серия бонусов, твой ход за столом, дивиденды", ME.notif !== false)}
     </div>
-    <div class="disc">Режим оптимизации, звук и вибрация сохраняются на этом телефоне.</div>`);
+    <div class="box lookb"><div class="t">Цвет акцента</div>
+      <div class="swatches">${LOOK_AC.map(c => `<button data-act="look-ac" data-v="${c}" style="--c:${c}" class="${lookAc() === c ? "on" : ""}" aria-label="${c}"></button>`).join("")}</div>
+      <div class="lookr"><span class="t">Прозрачность</span><b id="look-gv">${lookGp()}%</b></div>
+      <input type="range" class="drange" id="look-g" min="0" max="100" step="5" value="${lookGp()}" oninput="lookGlass(this.value)"></div>
+    <div class="box"><div class="row kv"><div class="grow"><div class="t">Язык</div>${LANG === "en" ? `<div class="s">Часть текста пока на русском</div>` : ""}</div>
+      <div class="chips" style="margin:0"><button data-act="set-lang" data-v="ru" class="${LANG === "ru" ? "on" : ""}">RU</button><button data-act="set-lang" data-v="en" class="${LANG === "en" ? "on" : ""}">EN</button></div></div></div>
+    <div class="box">
+      <div class="row tap" data-act="fair"><span class="pic g">${ic("shield")}</span><div class="grow"><div class="t">Честность</div><div class="s">Provably fair: сиды, хэши и проверка каждой ставки прямо здесь</div></div>${ic("chev")}</div>
+      <div class="row tap" data-act="limits"><span class="pic b">${ic("clock")}</span><div class="grow"><div class="t">Лимиты и перерыв</div><div class="s">Дневной лимит проигрыша и перерыв от суток</div></div>${ic("chev")}</div>
+    </div>
+    <div class="disc">Сборка ${(document.querySelector('script[src*="bundle.js"]') || { src: "" }).src.split("v=")[1] || "dev"}</div>`);
 }
 Object.assign(ACT, {
+  "look-ac": el => {
+    document.documentElement.style.setProperty("--ac", el.dataset.v);
+    document.documentElement.style.setProperty("--ac-on", lookOn(el.dataset.v));
+    try { localStorage.setItem("ac", el.dataset.v); } catch (e) {}
+    document.querySelectorAll(".swatches button").forEach(b => b.classList.toggle("on", b === el)); H.sel();
+  },
+  "set-lang": el => { if (el.dataset.v === LANG) return; try { localStorage.setItem("lang", el.dataset.v); } catch (e) {} location.reload(); },
   settings: () => openSettings(),
   pref: async el => {
     const k = el.dataset.k, on = !el.classList.contains("on");

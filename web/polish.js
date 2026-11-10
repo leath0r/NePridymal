@@ -65,6 +65,7 @@ const GAME_SECTIONS = [
 const _rg2 = renderGames;
 renderGames = function () {
   _rg2();
+  if (typeof GCAT !== "undefined") return;   // разделы, поиск и избранное теперь строит хаб (games.js)
   const hub = $("#v-games .ghub"); if (!hub) return;
   const cards = Object.fromEntries([...hub.querySelectorAll(".gcard")].map(c => [c.dataset.id, c]));
   const frag = document.createDocumentFragment();

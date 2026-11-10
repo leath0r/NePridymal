@@ -24,7 +24,7 @@ let KNS = null, knRisk = "mid", knBusy = false;
 const knPicks = new Set();
 async function openKeno() {
   knBusy = false;
-  const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "keno").imgUrl}" alt=""><div><h2>Кено</h2><span>Отметь числа и жди тиража</span></div></div>
+  const el = openSheet(`<div class="ghead">${gpfBtn("keno")}<img src="${GAMES.find(g => g.id === "keno").imgUrl}" alt=""><div><h2>Кено</h2><span>Отметь числа и жди тиража</span></div></div>
     <div class="ar-stage kn-stage" id="kn-stage">
       <div class="kn-top">
         <div class="kn-dome" id="kn-dome"><div class="kn-mix">${[3, 14, 27, 38, 9, 22, 31, 17, 5, 36, 12, 25].map((n, i) => knBall(n, "m m" + i)).join("")}</div>

@@ -65,8 +65,8 @@ def cd_finish(d, t=None):
         pay = int(d["stake"] * 2 * (1 - DUEL_FEE))
         lose = d["b"] if win == d["a"] else d["a"]
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, win))
-        event(win, "duel", pay - d["stake"])
-        event(lose, "duel", -d["stake"])
+        event(win, "duel", pay - d["stake"], stake=d["stake"])
+        event(lose, "duel", -d["stake"], stake=d["stake"])
     db.execute("UPDATE duels SET status='done', winner=?, ra=?, rb=?, done=? WHERE id=?",
                (win, json.dumps([ca]), json.dumps([cb]), now(), d["id"]))
     return True
@@ -175,12 +175,14 @@ def hilo(uid=Depends(auth)):
 @app.post(R + "/hilo/start")
 async def hilo_start(req: Request, uid=Depends(auth)):
     bet = int((await req.json()).get("bet", 0))
+    import fair
     with tx():
         if q1("SELECT 1 FROM hilo WHERE user=?", uid):
             err("сначала доиграй текущую партию")
         check_bet(uid, bet)
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (bet, uid))
-        c, s = random.randint(1, 13), random.randint(0, 3)
+        rr, pf = fair.rolls(uid, "hilo", "start", 2)
+        c, s = 1 + fair.idx(rr[0], 13), fair.idx(rr[1], 4)
         db.execute("INSERT INTO hilo VALUES(?,?,?,?,?,?,?)", (uid, bet, 1.0, c, s, json.dumps([[c, s, None]]), now()))
         lvl = add_xp(uid, max(1, bet // 20))
     out = hl_out(q1("SELECT * FROM hilo WHERE user=?", uid))
@@ -191,19 +193,22 @@ def _hl_pay(uid, h, mult):
     pay = int(h["bet"] * mult)
     db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, uid))
     db.execute("DELETE FROM hilo WHERE user=?", (uid,))
-    event(uid, "hilo", pay - h["bet"])
+    event(uid, "hilo", pay - h["bet"], stake=h["bet"])
     return pay
 
 
 @app.post(R + "/hilo/guess")
 async def hilo_guess(req: Request, uid=Depends(auth)):
     d = str((await req.json()).get("dir", ""))
+    import fair
     with tx():
         h = q1("SELECT * FROM hilo WHERE user=?", uid)
         if not h:
             err("партия не начата")
         hist = json.loads(h["hist"])
-        c, s = random.randint(1, 13), random.randint(0, 3)
+        rr, pf = fair.rolls(uid, "hilo", d[:8], 2)
+        c, s = 1 + fair.idx(rr[0], 13), fair.idx(rr[1], 4)
+        fair.record(uid, "hilo", 0, 0, {"card": c, "suit": s}, pf)
         if d == "skip":
             if len([x for x in hist if x[2] == "skip"]) >= 10:
                 err("пропускать можно не больше 10 раз")
@@ -217,7 +222,7 @@ async def hilo_guess(req: Request, uid=Depends(auth)):
         hist.append([c, s, d if ok else "x"])
         if not ok:
             db.execute("DELETE FROM hilo WHERE user=?", (uid,))
-            event(uid, "hilo", -h["bet"])
+            event(uid, "hilo", -h["bet"], stake=h["bet"])
             return {"active": False, "res": "lose", "card": c, "suit": s, "hist": hist, "bet": h["bet"], "stars": bal(uid)}
         mult = round(h["mult"] * edge(tuned("games.hilo_edge", HL_EDGE)) / o["p"], 4)
         if mult >= HL_MAX:
@@ -245,21 +250,21 @@ def hilo_cashout(uid=Depends(auth)):
 CRAFT_TIERS = [(0.72, 0.55, 0.90), (0.23, 0.95, 1.50), (0.05, 1.50, 2.50)]
 
 
-def _craft_target():
-    x, acc = random.random(), 0
+def _craft_target(rr):
+    x, acc = rr[0], 0
     for p, lo, hi in CRAFT_TIERS:
         acc += p
         if x <= acc:
-            return random.uniform(lo, hi)
+            return lo + (hi - lo) * rr[1]
     return 1.0
 
 
-def _craft_variant(col, target):
+def _craft_variant(col, target, rng):
     """Вариант подарка коллекции с ценностью как можно ближе к цели."""
     d = E.CATALOG[col]
     best, bd = None, None
     for _ in range(3000):
-        m, b, s = random.choice(d["models"]), random.choice(d["backdrops"]), random.choice(d["symbols"])
+        m, b, s = rng.choice(d["models"]), rng.choice(d["backdrops"]), rng.choice(d["symbols"])
         v = max(1, round(E.base(col) * E.mult(col, m[1], b[1], s[1])))
         dist = abs(math.log(v / target))
         if bd is None or dist < bd:
@@ -274,6 +279,7 @@ async def craft(req: Request, uid=Depends(auth)):
     col = str(b.get("col", ""))
     if len(set(gids)) < 3:
         err("нужно минимум 3 подарка")
+    import fair
     with tx():
         gs = [own_gift(g, uid) for g in set(gids)]
         if any(g["price"] is not None for g in gs):
@@ -282,9 +288,11 @@ async def craft(req: Request, uid=Depends(auth)):
         if col not in cols:
             err("коллекция должна быть одной из выбранных")
         total = sum(g["value"] for g in gs)
-        k = _craft_target()
+        rr, pf = fair.rolls(uid, "craft", col, 3)
+        k = _craft_target(rr)
         target = total * k
-        model, backdrop, symbol, value = _craft_variant(col, target)
+        rng = random.Random(f"{rr[2]:.15f}")   # вид подарка: подбор детерминирован третьим броском ставки
+        model, backdrop, symbol, value = _craft_variant(col, target, rng)
         # коллекция не дотягивает до выпавшей ценности (дешёвая) — разницу доплачиваем звёздами
         bonus = int(target - value) if value < target * 0.9 else 0
         if bonus:
@@ -294,9 +302,9 @@ async def craft(req: Request, uid=Depends(auth)):
             unpin(uid, g["id"])
             cancel_trades_with(g["id"])
         cur = db.execute("INSERT INTO gifts(owner,col,model,backdrop,symbol,num,value,created) VALUES(?,?,?,?,?,?,?,?)",
-                         (uid, col, model, backdrop, symbol, random.randint(1, E.supply(col)), value, now()))
+                         (uid, col, model, backdrop, symbol, rng.randint(1, E.supply(col)), value, now()))
         new = gift_out(q1("SELECT * FROM gifts WHERE id=?", cur.lastrowid))
-        event(uid, "craft", value + bonus - total)
+        event(uid, "craft", value + bonus - total, stake=total, pf=pf, res={"k": round(k, 6), "value": value, "bonus": bonus})
         db.execute("INSERT INTO feed(user,gift,cs,ts) VALUES(?,?,?,?)", (uid, cur.lastrowid, "craft", now()))
         lvl = add_xp(uid, max(1, total // 50))
     return {"gift": new, "total": total, "k": round((value + bonus) / total, 3), "bonus": bonus, "stars": bal(uid), "levelup": lvl}

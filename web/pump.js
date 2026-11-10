@@ -42,7 +42,7 @@ const PM_PUMP = `<svg viewBox="0 0 120 190" class="pm-psvg"><defs>
 let PMP = null, pmMode = "mid", pmBusy = false;
 async function openPump() {
   pmBusy = false;
-  const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "pump").imgUrl}" alt=""><div><h2>Насос</h2><span>Качай, пока не страшно — и забирай</span></div></div>
+  const el = openSheet(`<div class="ghead">${gpfBtn("pump")}<img src="${GAMES.find(g => g.id === "pump").imgUrl}" alt=""><div><h2>Насос</h2><span>Качай, пока не страшно — и забирай</span></div></div>
     <div class="ar-stage pm-stage" id="pm-stage">
       <div class="pm-sky"><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div class="pm-floor"></div>

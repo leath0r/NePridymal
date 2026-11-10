@@ -13,15 +13,23 @@ from app import unpin as A_unpin, cancel_trades_with as A_cancel, gift_out as A_
 SUITS = "SHDC"
 
 
+def _shuffle(x, ref):
+    """Перемешивание из общего сида дня (fair.py): колоду можно пересчитать, когда сид раскроется."""
+    import fair
+    rng = fair.pub("cards", ref)
+    rng.shuffle(x)
+    fair.close_pub(rng)
+
+
 def deck52():
     d = [r + s for r in "23456789TJQKA" for s in SUITS]
-    random.shuffle(d)
+    _shuffle(d, "deck52")
     return d
 
 
 def deck36():
     d = [r + s for r in "6789TJQKA" for s in SUITS]
-    random.shuffle(d)
+    _shuffle(d, "deck36")
     return d
 
 
@@ -74,7 +82,7 @@ def _bj_finish(uid, r, deck, p, d):
         res, pay = "lose", 0
     db.execute("DELETE FROM bj WHERE user=?", (uid,))
     db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, uid))
-    event(uid, "blackjack", pay - bet)
+    event(uid, "blackjack", pay - bet, stake=bet)
     view = {"p": json.dumps(p), "d": json.dumps(d), "bet": bet}
     return _bj_view(view, True, {"result": res, "pay": pay, "stars": bal(uid)})
 
@@ -217,7 +225,7 @@ def _finish(r, winners):
             db.execute("UPDATE gifts SET owner=? WHERE id=?", (w, g["id"]))
             got[w] += g["value"]
         for u in allp:
-            event(u, "cards", got.get(u, 0) - staked[u])
+            event(u, "cards", got.get(u, 0) - staked[u], stake=staked[u])
         r["result"] = {"winners": winners, "share": share, "pot": pot, "gifts": [g["id"] for g in gifts]}
         r["escrow"] = {}
         r["status"] = "done"
@@ -227,7 +235,7 @@ def _finish(r, winners):
         got = share if u in winners else 0
         if got:
             db.execute("UPDATE users SET stars=stars+? WHERE id=?", (got, u))
-        event(u, "cards", got - r["stake"])
+        event(u, "cards", got - r["stake"], stake=r["stake"])
     r["status"] = "done"
     r["result"] = {"winners": winners, "share": share, "pot": pot}
     _save(r)
@@ -308,7 +316,7 @@ def _101_draw(st, n=1):
                 break
             top = st["pile"][-1]
             st["deck"] = st["pile"][:-1]
-            random.shuffle(st["deck"])
+            _shuffle(st["deck"], "reshuffle")
             st["pile"] = [top]
         got.append(st["deck"].pop())
     return got
@@ -643,7 +651,7 @@ async def room_action(rid: int, action: str, req: Request, uid=Depends(auth)):
             if len(r["players"]) < 2:
                 err("нужно минимум 2 игрока")
             r["status"] = "playing"
-            random.shuffle(r["players"])
+            _shuffle(r["players"], "seats")
             (_21_start if r["game"] == "21" else _101_start)(r)
             if r["status"] != "done":
                 _save(r)

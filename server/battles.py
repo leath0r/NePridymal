@@ -55,12 +55,15 @@ def _out(b, uid=None):
 def _resolve(b):
     """Все места заняты: каждый открывает rounds кейсов, победитель забирает всё (внутри tx)."""
     cost = b["price"] * b["rounds"]
+    import fair
+    rng = fair.pub("battle", str(b["id"]))
     drops = []                         # drops[slot] = [подарок за каждый раунд]
     for _ in b["players"]:
-        drops.append([E.open_case(b["cid"]) for _ in range(b["rounds"])])
+        drops.append([E.open_case(b["cid"], rng) for _ in range(b["rounds"])])
     totals = [sum(d["value"] for d in ds) for ds in drops]
     top = max(totals)
-    win_slot = random.choice([i for i, t in enumerate(totals) if t == top])
+    win_slot = rng.choice([i for i, t in enumerate(totals) if t == top])
+    fair.close_pub(rng, {"totals": totals, "win": win_slot})
     winner = b["players"][win_slot]
     t = now()
     out_drops = []
@@ -77,7 +80,7 @@ def _resolve(b):
     total_all = sum(totals)
     for p in b["players"]:
         if p != BOT:
-            event(p, "battle", (total_all if p == winner else 0) - cost)
+            event(p, "battle", (total_all if p == winner else 0) - cost, stake=cost)
             add_xp(p, max(20, cost // 10))
     if winner != BOT:
         best = max((g for row in out_drops for g in row), key=lambda g: g["value"])
@@ -102,7 +105,7 @@ def battles(uid=Depends(auth)):
     mine = [_out(_b(r["id"]), uid) for r in q("SELECT id FROM battles WHERE status='done' AND players LIKE ? ORDER BY id DESC LIMIT 8", f"%{uid}%")]
     mine = [m for m in mine if m["mine"]][:5]
     cases = [{"id": c["id"], "title": c["title"], "cover": c["cover"], "price": case_price(c), "level": c["level"]}
-             for c in E.CASES.values() if c["price"]]
+             for c in E.CASES.values() if c["price"] and c["id"] not in E.LIMITED]
     cases.sort(key=lambda c: c["price"])
     return {"open": opn, "mine": mine, "cases": cases, "rounds": ROUNDS, "slots": SLOTS, "stars": bal(uid)}
 
@@ -122,7 +125,7 @@ async def battle_new(req: Request, uid=Depends(auth)):
     _pvp_guard(uid)
     bd = await req.json()
     cid, rounds, slots = str(bd.get("cid", "")), int(bd.get("rounds", 1)), int(bd.get("slots", 2))
-    c = E.CASES.get(cid)
+    c = E.CASES.get(cid) if cid not in E.LIMITED else None
     if not c or not c["price"]:
         err("выбери платный кейс")
     if rounds not in ROUNDS or slots not in SLOTS:

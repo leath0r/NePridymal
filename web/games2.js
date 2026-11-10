@@ -17,7 +17,7 @@ let TW = { active: false }, twMode = "mid", twBusy = false, TWM = null;
 const TW_N = { easy: 4, mid: 3, hard: 2 };
 async function openTower() {
   twBusy = false;
-  openSheet(`${gameHead("Artisan Brick", "Башня", "Лезь вверх и не наступи на бомбу")}
+  openSheet(`${gameHead("Artisan Brick", "Башня", "Лезь вверх и не наступи на бомбу", "tower")}
     <div class="tower" id="tw"></div>
     <div class="mstat"><div><span>Выигрыш</span><b id="tw-win">—</b></div><div><span>Следующий</span><b id="tw-next">—</b></div></div>
     <div class="betp" id="tw-ctl">
@@ -74,7 +74,7 @@ async function twStep(t) {
 const DC = { target: 50, over: true, busy: false };
 function openDice() {
   DC.busy = false;
-  openSheet(`${gameHead("Evil Eye", "Кубик", "Больше или меньше — сам выбираешь шанс")}
+  openSheet(`${gameHead("Evil Eye", "Кубик", "Больше или меньше — сам выбираешь шанс", "dice")}
     <div class="dicebig"><b id="dc-roll">50.00</b><span id="dc-res">Выбери порог и бросай</span></div>
     <div class="dbar"><div class="dzone" id="dc-zone"></div><div class="dmark" id="dc-mark" style="left:50%"></div></div>
     <input type="range" class="drange" id="dc-t" min="2" max="98" step="1" value="${DC.target}">
@@ -128,7 +128,7 @@ async function dcRoll() {
 const LB = { busy: false };
 function openLimbo() {
   LB.busy = false;
-  openSheet(`${gameHead("Astral Shard", "Лимбо", "Загадай икс — выпадет больше, и ты в плюсе")}
+  openSheet(`${gameHead("Astral Shard", "Лимбо", "Загадай икс — выпадет больше, и ты в плюсе", "limbo")}
     <div class="limbo" id="lb-box"><b id="lb-v">1.00x</b><span id="lb-s">Цель x2.00</span></div>
     <div class="betp">
       <div class="lbt"><span>Цель</span><label class="autof"><input id="lb-t" inputmode="decimal" value="2.00"><span>x</span></label>
@@ -169,7 +169,7 @@ const slMachine = (m, small) => `<div class="slot${small ? " sm" : ""}" id="sl-m
   `<div class="sreel"><div class="sstrip" id="sl-s${m}-${i}"></div></div>`).join("")}</div><div class="sline"></div><div class="swin" id="sl-w${m}"></div></div>`;
 async function openSlots() {
   slBusy = false;
-  openSheet(`${gameHead("Money Pot", "Слоты", "Три барабана с подарками")}
+  openSheet(`${gameHead("Money Pot", "Слоты", "Три барабана с подарками", "slots")}
     <div class="slots" id="sl-box"></div>
     <div class="wres" id="sl-res">Крути барабаны</div>
     <div class="betp">
@@ -189,7 +189,7 @@ function slBuild() {
   for (let m = 0; m < slN; m++) for (let i = 0; i < 3; i++) $(`#sl-s${m}-${i}`).innerHTML = slSym((SL.syms.length - 1 - i - m) % SL.syms.length);
   slBtnText();
 }
-function slBtnText() { const b = $("#sl-btn"); if (b && !slBusy) b.textContent = slN > 1 ? `Крутить x${slN} · ⭐ ${fmt(betVal("sl-amt") * slN)}` : "Крутить"; }
+function slBtnText() { const b = $("#sl-btn"); if (b && !slBusy) b.textContent = slN > 1 ? `Крутить x${slN} · ⭐ ${short(betVal("sl-amt") * slN)}` : "Крутить"; }
 const slSym = i => `<div class="ssym"><img src="${A.orig(SL.syms[i], 128)}" alt=""></div>`;
 async function slSpin() {
   if (slBusy || !SL) return;
@@ -246,7 +246,11 @@ async function slSpin() {
 // ============================================================ действия
 const _gameAct = ACT.game;
 Object.assign(ACT, {
-  game: el => GAME_OPEN[el.dataset.id] ? (H.imp("light"), GAME_OPEN[el.dataset.id]()) : _gameAct(el),
+  game: el => {
+    const id = el.dataset.id;
+    GREC = [id, ...GREC.filter(x => x !== id)].slice(0, 8); gSave("grecent", GREC);   // недавние — для хаба
+    return GAME_OPEN[id] ? (H.imp("light"), GAME_OPEN[id]()) : _gameAct(el);
+  },
   "tw-mode": el => { if (TW.active) return; twMode = el.dataset.v; H.sel(); document.querySelectorAll("#tw-mode button").forEach(b => b.classList.toggle("on", b === el)); twDraw(); },
   "tw-btn": () => twBtn(),
   "tw-step": el => twStep(+el.dataset.t),

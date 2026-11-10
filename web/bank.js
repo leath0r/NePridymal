@@ -90,7 +90,8 @@ function fillBK(el) {
       <span>Банк ниже ⭐ ${short(cr.at)}. Ставки — не больше ⭐ ${short(cr.maxBet)}, дивиденды на паузе. Не хватает ⭐ ${short(cr.need)}.</span>
       <em>Подари банку ⭐ ${short(cr.saviorMin)}+ — получишь титул «Спаситель банка»${cr.mine ? ` · ты уже спас на ⭐ ${short(cr.mine)}` : ""}</em></div></div>` : ""}
     <div class="bkh${cr.on ? " crisis" : ""}">
-      <div class="bkh-top"><span class="bkh-i">${ic("bank")}</span><div><span>Банк игры</span><b>⭐ ${fmt(BK.bank)}</b></div></div>
+      <div class="bkh-top"><span class="bkh-i">${ic("bank")}</span><div><span>Банк игры</span><b>⭐ ${fmt(BK.bank)}</b></div>
+        ${BK.lvl ? `<span class="bklvl">${ic("trophy")}Ур. ${BK.lvl.lvl}${BK.lvl.next ? "" : " · макс"}</span>` : ""}</div>
       <div class="bkh-stats">
         <div><span>Сегодня</span><b class="${BK.today >= 0 ? "up" : "dn"}">${sgn(BK.today)}</b></div>
         <div><span>14 дней</span><b class="${d14 >= 0 ? "up" : "dn"}">${sgn(d14)}</b></div>
@@ -128,6 +129,14 @@ function fillBK(el) {
       <p>Каждый день в 00:00 UTC (11:00 по Сахалину) ${Math.round(BK.divShare * 100)}% вчерашней прибыли банка делится на акции у игроков (если акций у игроков меньше ${short(BK.divFloor || 10000)} — делится как на ${short(BK.divFloor || 10000)}, остаток остаётся в банке). В убыточный для банка день дивидендов нет.</p>
       <p>Не больше ${fmt(BK.maxPer)} акций в одни руки. Продать можно через сутки после покупки, комиссия ${pctF(BK.sellFee)}.</p></details>
 
+    <div class="sec-t">${ic("coins")}Вклады в банк</div>
+    <div class="bkdep">
+      ${BK.lvl && (BK.lvl.lvl || BK.lvl.next) ? `<div class="bkdep-lvl"><span>Уровень банка <b>${BK.lvl.lvl}</b>${BK.lvl.lvl ? ` · вклады доходнее на ${Math.round(BK.lvl.bonus * BK.lvl.lvl * 100)}%` : ""}</span>
+        ${BK.lvl.next ? `<div class="cbar"><div style="width:${Math.max(2, BK.lvl.progress)}%"></div></div><small>до уровня ${BK.lvl.lvl + 1} банку не хватает ⭐ ${short(BK.lvl.next - BK.bank)}</small>` : `<small>максимальный уровень — банк монстр</small>`}</div>` : ""}
+      <div class="hint" style="font-size:12.5px;line-height:1.5">Вложи звёзды — они станут «телом» банка (акции и уровень считаются от него), а банк заплатит проценты. Капают каждую минуту, выплата в конце срока.</div>
+      <button class="btn cta gold" data-act="bk-dep" style="width:100%;margin-top:10px">${ic("coins")}Вложить звёзды</button>
+    </div>
+
     <div class="seg bk-tabs">${[["holders", "Акционеры"], ["robbers", "Обыграли"], ["sponsors", "Спонсоры"], ["donors", "Меценаты"], ...((BK.crisis || {}).on || ((BK.crisis || {}).saviors || []).length ? [["saviors", "Спасители"]] : [])].map(([k, t]) => `<button data-act="bk-top" data-v="${k}" class="${k === bkTop ? "on" : ""}">${t}</button>`).join("")}</div>
     <div class="box" id="bk-top">${bkTopHTML()}</div>
     <div class="disc">Банк = 50 млн стартового резерва + всё, что игроки проиграли, − всё, что выиграли, − розыгрыши и дивиденды. ${esc(ME.disclaimer)}</div>`;
@@ -142,6 +151,9 @@ function bankTicker(d) {
     let tag = bar.querySelector(".bk-crt");
     if (d.crisis && !tag) bar.querySelector("div").insertAdjacentHTML("beforeend", `<span class="bk-crt">${ic("flame")}кризис</span>`);
     if (!d.crisis && tag) tag.remove();
+    let lv = bar.querySelector(".bk-lvl");
+    if (d.lvl && !lv) bar.querySelector("div").insertAdjacentHTML("beforeend", `<span class="bk-lvl">${ic("trophy")}${d.lvl}</span>`);
+    if (!d.lvl && lv) lv.remove();
   });
   const w = d.win;
   if (bkLastWin === null) { bkLastWin = w ? w.id : 0; return; }   // при первом заходе старые выигрыши не показываем
@@ -244,3 +256,87 @@ function bkKHTML(k) {
       ${tile("coins", "Скупка", String(Math.round(k.sellRate * 1000) / 10).replace(".", ",") + "%", Math.sign(k.sell), "мгновенная продажа")}</div>
     <div class="bkk-n">Курс = банк / ⭐ ${short(k.ref)}. Банк растёт — призы больше, кейсы дешевле, скупка дороже. Худеет — наоборот.</div></div>`;
 }
+
+
+// ============================================================ Вклады в банк
+// звёзды лежат до конца срока, проценты платит банк; досрочное закрытие — с комиссией в пользу банка
+let DEPD = null;
+async function openBankDep() {
+  H.imp("light");
+  openSheet(`<div id="dep-body">${emptyHTML("hourglass", "Открываем вклады…")}</div>`, "dep-s");
+  await bkDepLoad();
+}
+async function bkDepLoad() {
+  try { DEPD = await api("bank/deposits"); } catch (e) { return; }
+  DEPD.sel = DEPD.sel || 7;
+  bkDepDraw();
+}
+const depDays = k => LANG === "en" ? `${k} day${k === 1 ? "" : "s"}` : `${k} ${plural(k, ["день", "дня", "дней"])}`;
+const depLeft = s => { const h = Math.ceil(s / 3600); return h >= 48 ? depDays(Math.ceil(h / 24)) : h > 1 ? `${h} ч` : `${Math.max(1, Math.ceil(s / 60))} мин`; };
+// итог считается по той же ставке, что показана на кнопке срока
+function bkDepSum() {
+  const d = DEPD, get = $("#dep-get"), lab = $("#dep-lab"), inp = $("#dep-amt"); if (!d || !get || !inp) return;
+  const room = Math.max(d.min, d.maxTotal - d.total);   // MAX и ввод не выходят за общий лимит вкладов
+  if (+inp.value > room) inp.value = room;
+  const amount = Math.max(0, Math.floor(+inp.value || 0));
+  lab.textContent = LANG === "en" ? `In ${depDays(d.sel)} you'll get` : `Через ${depDays(d.sel)} получишь`;
+  get.textContent = `⭐ ${fmt(Math.floor(amount * (1 + d.rates[String(d.sel)] / 100)))}`;
+}
+function bkDepDraw() {
+  const d = DEPD, el = $("#dep-body"); if (!d || !el) return;
+  const rate = k => String(d.rates[String(k)]).replace(".", ",");
+  const start = Math.max(d.min, Math.min(10000, Math.floor(ME.stars)));
+  const blocked = d.crisis || d.mine.length >= d.maxN || d.total + d.min > d.maxTotal;
+  el.innerHTML = `
+    <h2 class="gtitle">${ic("bank")} Вклады</h2>
+    <div class="sec-t">Срок</div>
+    <div class="dep-terms" style="--n:${d.days.length}">${d.days.map(k => `<button data-act="bk-dep-days" data-v="${k}" class="${d.sel === k ? "on" : ""}"><b>${depDays(k)}</b><span>+${rate(k)}%</span></button>`).join("")}</div>
+    <div class="betp dep-form">${betHTML("dep-amt", start, [d.min, 10000, 100000, "max"])}
+      <div class="dep-sum"><span id="dep-lab"></span><b id="dep-get"></b></div>
+      <button class="btn cta gold" data-act="bk-dep-open" ${blocked ? "disabled" : ""}>${ic("coins")}Открыть вклад</button>
+      <div class="dep-meta"><span>Минимум<b>⭐ ${fmt(d.min)}</b></span><span>На вкладах<b>⭐ ${short(d.total)} из ${short(d.maxTotal)}</b></span></div>
+      ${blocked ? `<div class="dep-warn">${d.crisis ? "В кризис банка вклады закрыты" : d.mine.length >= d.maxN ? `Открыто ${d.maxN} вклада, это максимум` : "Лимит вкладов исчерпан"}</div>` : ""}</div>
+    <div class="sec-t">Мои вклады${d.mine.length ? ` · ${d.mine.length} из ${d.maxN}` : ""}</div>
+    ${d.mine.length ? `<div class="dep-list">${d.mine.map(x => `
+      <div class="dep-it"><div class="dep-it-h"><b>⭐ ${fmt(x.amount)}</b><em>+${String(x.rate).replace(".", ",")}%</em>
+        <button class="btn sm ${x.left ? "ghost" : "cta"}" data-act="bk-dep-out" data-id="${x.id}">${x.left ? "Досрочно" : "Получить"}</button></div>
+        <div class="cbar"><div style="width:${Math.max(2, 100 - x.left / (x.days * 864))}%"></div></div>
+        <div class="dep-it-s"><span>${x.left ? "осталось " + depLeft(x.left) : "готов к выдаче"}</span><span>проценты +${fmt(x.accrued)}</span></div></div>`).join("")}</div>`
+      : `<div class="dep-empty">Вкладов пока нет</div>`}
+    <p class="dep-note">Проценты платит банк, они начисляются равномерно и приходят вместе с вкладом в конце срока. Закрыть раньше можно с комиссией ${+(d.earlyFee * 100).toFixed(1)}%, проценты при этом сгорают.</p>
+    <div class="disc">${esc(ME.disclaimer)}</div>`;
+  $("#dep-amt").addEventListener("input", bkDepSum);
+  bkDepSum();
+}
+Object.assign(ACT, {
+  "bk-dep": () => openBankDep(),
+  "bk-dep-days": el => {   // без перерисовки: введённая сумма остаётся
+    DEPD.sel = +el.dataset.v; H.sel();
+    el.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === el));
+    bkDepSum();
+  },
+  "bk-dep-open": async el => {
+    const amount = betVal("dep-amt");
+    if (amount < DEPD.min) return toast(`Вклад от ⭐ ${fmt(DEPD.min)}`);
+    if (amount > ME.stars) return toast("Не хватает звёзд ⭐");
+    if (DEPD.total + amount > DEPD.maxTotal) return toast(`Вклады суммарно не больше ⭐ ${fmt(DEPD.maxTotal)}`);
+    el.disabled = true;
+    try {
+      const r = await post("bank/deposit", { amount, days: DEPD.sel });
+      setStars(r.stars); H.ok(); toast("Вклад открыт — банк растёт", "ok");
+      await bkDepLoad(); loadBank();
+    } catch (e) { el.disabled = false; }
+  },
+  "bk-dep-out": async el => {
+    const x = (DEPD.mine || []).find(m => m.id === +el.dataset.id); if (!x) return;
+    if (x.left > 0 && !await confirmM("Забрать вклад досрочно?",
+      `Вернём ⭐ ${fmt(Math.floor(x.amount * (1 - DEPD.earlyFee)))} (комиссия ${(DEPD.earlyFee * 100).toFixed(0)}%). Накапанные проценты (+${fmt(x.accrued)}) сгорят.`, "Забрать")) return;
+    el.disabled = true;
+    try {
+      const r = await post("bank/deposit/withdraw", { id: x.id });
+      setStars(r.stars); r.early ? H.imp("light") : H.ok();
+      toast(`+⭐ ${fmt(r.pay)}`, "ok");
+      await bkDepLoad(); loadBank();
+    } catch (e) { el.disabled = false; }
+  },
+});

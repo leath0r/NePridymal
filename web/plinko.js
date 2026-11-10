@@ -22,7 +22,7 @@ GAME_NAMES.plinko = ["target", "Плинко"];
 
 const PKS = { risk: "mid", d: null, balls: [], fx: [], flash: {}, hits: {}, raf: 0, busy: 0, lastT: 0 };
 async function openPlinko() {
-  const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "plinko").imgUrl}" alt=""><div><h2>Плинко</h2><span>Шарик падает по штырькам — лови иксы по краям</span></div></div>
+  const el = openSheet(`<div class="ghead">${gpfBtn("plinko")}<img src="${GAMES.find(g => g.id === "plinko").imgUrl}" alt=""><div><h2>Плинко</h2><span>Шарик падает по штырькам — лови иксы по краям</span></div></div>
     <div class="pk-hist" id="pk-hist"><span class="pk-h0">Здесь будут твои броски</span></div>
     <div class="ar-stage pk-stage" id="pk-stage"><canvas id="pk-cv"></canvas><div class="pk-pops" id="pk-pops"></div></div>
     <div class="betp">

@@ -42,7 +42,7 @@ GAMES[GAMES.length - 1].imgUrl = "data:image/svg+xml," + encodeURIComponent(CK_H
 let CK = null, ckMode = "mid", ckBusy = false, ckCars = null;
 async function openChicken() {
   ckBusy = false;
-  openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "chicken").imgUrl}" alt=""><div><h2>Курица</h2><span>Перебеги дорогу — каждая полоса умножает ставку</span></div></div>
+  openSheet(`<div class="ghead">${gpfBtn("chicken")}<img src="${GAMES.find(g => g.id === "chicken").imgUrl}" alt=""><div><h2>Курица</h2><span>Перебеги дорогу — каждая полоса умножает ставку</span></div></div>
     <div class="ckroad" id="ck-road"><div class="ckworld" id="ck-w"></div></div>
     <div class="wres" id="ck-res">Выбери сложность и ставку</div>
     <div class="betp">

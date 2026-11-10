@@ -271,3 +271,21 @@
 @keyframes auspin{to{transform:rotate(360deg)}}
 
 .cashl-b{grid-template-columns:repeat(5,1fr)}.cashl-b b{font-size:14px}.cashl-b button.off{opacity:.4}.cashl-b button.off .ic{width:13px;height:13px;color:var(--hint)}
+
+/* ============================================================
+   Хаб игр v2: поиск, избранное, недавние
+   ============================================================ */
+.gq{margin:10px 0 2px}
+.gq input{width:100%}
+.gfav{position:absolute;right:8px;top:8px;z-index:3;width:30px;height:30px;border-radius:10px;display:grid;place-items:center;
+  background:rgba(10,10,25,.45);border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.55);backdrop-filter:blur(4px)}
+.gfav .ic{width:15px;height:15px}
+.gfav.on{color:#ff5c7a;border-color:color-mix(in srgb,#ff5c7a 55%,transparent);background:color-mix(in srgb,#ff5c7a 18%,rgba(10,10,25,.45))}
+.gfav.on .ic{fill:#ff5c7a}
+.grecent{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
+.grecent::-webkit-scrollbar{display:none}
+.grecent button{flex:none;display:flex;align-items:center;gap:7px;padding:8px 14px 8px 8px;border-radius:999px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--k1,#333) 26%,var(--card)),var(--card));
+  border:1px solid var(--line);color:var(--text);font-size:13px;font-weight:600}
+.grecent button:active{transform:scale(.95)}
+.grecent img{width:24px;height:24px;object-fit:contain}

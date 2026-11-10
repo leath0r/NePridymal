@@ -53,9 +53,9 @@ def vip_until(uid):
     return r["vip_until"] if r and r["vip_until"] and r["vip_until"] > now() else 0
 
 
-def chest_drop():
-    col = random.choices([c for c, _ in CHEST], weights=[p for _, p in CHEST])[0]
-    return max((E.roll(col) for _ in range(CHEST_ROLLS)), key=lambda d: d["value"])
+def chest_drop(rng=random):
+    col = rng.choices([c for c, _ in CHEST], weights=[p for _, p in CHEST])[0]
+    return max((E.roll(col, rng) for _ in range(CHEST_ROLLS)), key=lambda d: d["value"])
 
 
 _CHEST_EV = {}
@@ -144,10 +144,14 @@ def fulfill(uid, k, xtr, charge, p):
             stars = o[1]
             db.execute("UPDATE users SET stars=stars+? WHERE id=?", (stars, uid))
             event(uid, "buy", stars)
+            __import__("bank").back(stars)
             db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (uid, o[2]))
             msg = (f"🎁 Набор дня: +{stars:,} ⭐ и ключ от кейса «{esc(E.CASES[o[2]]['title'])}». Спасибо!").replace(",", " ")
         elif k == "chest":
-            d = chest_drop()
+            import fair
+            rng = fair.stream(uid, "chest", "chest")
+            d = chest_drop(rng)
+            fair.record(uid, "chest", 0, d["value"], {"col": d["col"], "value": d["value"]}, fair.close_stream(rng))
             cur = db.execute("INSERT INTO gifts(owner,col,model,backdrop,symbol,num,value,created) VALUES(?,?,?,?,?,?,?,?)",
                              (uid, d["col"], d["model"], d["backdrop"], d["symbol"], d["num"], d["value"], t))
             db.execute("INSERT INTO feed(user,gift,cs,ts) VALUES(?,?,?,?)", (uid, cur.lastrowid, "chest", t))

@@ -43,7 +43,7 @@ GAME_NAMES.penalty = ["ball", "Пенальти"];
 let PNS = null, pnMode = "mid", pnBusy = false, pnLastZ = -1, pnSeries = [];
 async function openPenalty() {
   pnBusy = false; pnSeries = [];
-  const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "penalty").imgUrl}" alt=""><div><h2>Пенальти</h2><span>Бей в угол и не останавливайся</span></div></div>
+  const el = openSheet(`<div class="ghead">${gpfBtn("penalty")}<img src="${GAMES.find(g => g.id === "penalty").imgUrl}" alt=""><div><h2>Пенальти</h2><span>Бей в угол и не останавливайся</span></div></div>
     <div class="ar-stage pn-stage" id="pn-stage">
       <div class="pn-lights"><i></i><i></i></div>
       <div class="pn-crowd" id="pn-crowd"><div class="pn-fans"></div><div class="pn-fans b"></div></div>

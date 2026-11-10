@@ -72,16 +72,16 @@ def _cum(col, key):
     return _CUM[k]
 
 
-def _pick(col, key):
+def _pick(col, key, rng=random):
     items, cum = _cum(col, key)
-    return random.choices(items, cum_weights=cum)[0]
+    return rng.choices(items, cum_weights=cum)[0]
 
 
-def roll(col):
-    m, b, s = _pick(col, "models"), _pick(col, "backdrops"), _pick(col, "symbols")
+def roll(col, rng=random):
+    m, b, s = _pick(col, "models", rng), _pick(col, "backdrops", rng), _pick(col, "symbols", rng)
     return {
         "col": col, "model": m[0], "backdrop": b[0], "symbol": s[0],
-        "num": random.randint(1, supply(col)),
+        "num": rng.randint(1, supply(col)),
         "value": max(1, round(base(col) * mult(col, m[1], b[1], s[1]))),
     }
 
@@ -108,7 +108,19 @@ def ev(col):
 
 # ---------------- кейсы: от дешёвых до мега ----------------
 # id, название, эмодзи-обложка (коллекция для превью), мин. уровень, состав
+# Лимитные кейсы: у каждого тираж, открытые не возвращаются. Счётчик остатка хранится в базе (таблица case_limit).
+JOKE_DROPS = {"mega": {"Desk Calendar": 0.01}}   # шуточные подарки: календарь в МЕГЕ с шансом ровно 1%
+LIMITED = {"first_ed": 5000, "gold_ed": 1000}
 CASES_DEF = [
+    ("first_ed", "Первый тираж", "Lucky Locket", 5, ["Lucky Locket", "Timeless Book", "Liberty Figure", "Mirage Lamp", "Moon Pendant", "Genie Lamp"]),
+    ("gold_ed", "Золотая серия", "Money Pot", 8, ["Money Pot", "Mini Oscar", "Swiss Watch", "Signet Ring", "Durov's Glasses", "Diamond Ring"]),
+    ("champ", "Чемпион", "Victory Medal", 3, ["Victory Medal", "UFC Strike", "Khabib's Papakha", "Mighty Arm", "Heroic Helmet", "Intelligence Cup", "Algorithm Cup"]),
+    ("gadgets", "Электроника", "Tama Gadget", 3, ["Tama Gadget", "Input Key", "Ionic Dryer", "Record Player", "Star Notepad", "Fine Pen", "Surge Board"]),
+    ("treasure", "Клад", "Loot Bag", 5, ["Loot Bag", "Money Pot", "Lucky Locket", "Timeless Book", "Mini Oscar", "Moon Pendant", "Faith Amulet"]),
+    ("knight", "Рыцарь", "Light Sword", 6, ["Light Sword", "Heroic Helmet", "Liberty Figure", "Artisan Brick", "Mighty Arm", "Neko Helmet"]),
+    ("cozy", "Уют", "Spiced Wine", 2, ["Spiced Wine", "Holiday Drink", "Love Candle", "Eternal Candle", "Mood Pack", "Winter Wreath", "Snow Globe"]),
+    ("nightlife", "Ночная жизнь", "Vice Cream", 4, ["Vice Cream", "Bling Binky", "Chill Flame", "Swag Bag", "Vintage Cigar", "Snoop Cigar", "Party Sparkler"]),
+    ("crown", "Корона", "Signet Ring", 7, ["Signet Ring", "Swiss Watch", "Mini Oscar", "Genie Lamp", "Bonded Ring", "Perfume Bottle", "Magic Potion"]),
     ("free", "Бесплатный", "Lol Pop", 1, ["Lol Pop", "Desk Calendar", "B-Day Candle", "Lunar Snake", "Homemade Cake", "Jingle Bells", "Hex Pot"]),
     ("starter", "Ширпотреб", "Desk Calendar", 1, ["Lol Pop", "Desk Calendar", "B-Day Candle", "Lunar Snake", "Homemade Cake",
                                                   "Party Sparkler", "Cookie Heart", "Big Year", "Snake Box", "Pet Snake", "Sakura Flower"]),
@@ -186,12 +198,14 @@ FLOOR = 0.4    # из платного кейса не выпадает пода
 SAMPLES = 2000
 
 
-def _draw(c, floor):
+def _draw(c, floor, rng=random):
     """Дроп кейса: коллекция по весу, внутри неё перебрасываем вариант, пока ценность ниже планки."""
-    col = random.choices(c["cols"], cum_weights=c["cum"])[0]
+    col = rng.choices(c["cols"], cum_weights=c["cum"])[0]
+    if col in c.get("joke", ()):   # шуточный подарок выпадает как есть, без планки ценности
+        return roll(col, rng)
     best = None
     for _ in range(25):
-        d = roll(col)
+        d = roll(col, rng)
         if d["value"] >= floor:
             return d
         if not best or d["value"] > best["value"]:
@@ -226,12 +240,23 @@ def build_cases():
                 price = _nice(sum(odds[x] * evs[x] for x in cols) / RTP)
                 floor = FLOOR * price
         c.update(evs=evs, floor=floor, price=0 if cid == "free" else price)
+        extra = {k: p for k, p in JOKE_DROPS.get(cid, {}).items() if k in CATALOG}
+        if extra:   # точный шанс; цена пересчитывается, чтобы заявленный возврат кейса не изменился
+            keep = 1 - sum(extra.values())
+            odds = {**{x: p * keep for x, p in odds.items()}, **extra}
+            evs = {**evs, **{k: ev(k) for k in extra}}
+            names = list(odds)
+            acc, cum = 0.0, []
+            for x in names:
+                acc += odds[x]
+                cum.append(acc)
+            c.update(cols=names, cum=cum, odds=odds, evs=evs, joke=set(extra), price=_nice(sum(odds[x] * evs[x] for x in names) / RTP))
         CASES[cid] = c
 
 
-def open_case(cid):
+def open_case(cid, rng=random):
     c = CASES[cid]
-    return _draw(c, c["floor"])
+    return _draw(c, c["floor"], rng)
 
 
 build_cases()

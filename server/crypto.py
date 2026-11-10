@@ -7,6 +7,7 @@ import httpx
 from fastapi import Depends, Request
 
 from app import R, app, auth, bal, db, err, event, notify, now, q, q1, tx, user_brief
+from settings import conf
 
 db.executescript("""
 CREATE TABLE IF NOT EXISTS crypto(user INTEGER, asset TEXT, qty REAL DEFAULT 0, cost REAL DEFAULT 0, PRIMARY KEY(user, asset));
@@ -19,7 +20,7 @@ CREATE TABLE IF NOT EXISTS crypto_pos(id INTEGER PRIMARY KEY, user INTEGER, asse
 CREATE INDEX IF NOT EXISTS crypto_pos_open ON crypto_pos(status, user);
 """)
 STAR_USD = 0.015        # курс игровой звезды к доллару (примерно как Telegram Stars)
-FEE = 0.002             # комиссия биржи 0,2% с каждой сделки
+FEE = conf("economy.crypto_fee", 0.004)        # комиссия биржи с каждой сделки (настройка [economy] crypto_fee)
 MIN_TRADE = 10
 STALE = 90              # старше — торговать нельзя, курс не обновился
 # id, название, пара на OKX, цвет, знак
@@ -257,8 +258,10 @@ async def crypto_sell(aid: str, req: Request, uid=Depends(auth)):
 # ============================================================ стейкинг
 # доходность в сутки — на уровне дохода с подарков (2%/сут): стабильные монеты меньше, волатильные больше.
 # APY (годовая, без сложного процента) отдаём фронту как раньше: в день = APY / 365
+STAKE_SCALE = conf("economy.stake_scale", 0.35)   # множитель доходности стейкинга
 DAILY = {"USDT": 0.007,   # USDT не меняет курс — доход без риска и без лимита суммы, поэтому ставка ниже
           "BTC": 0.03, "ETH": 0.035, "SOL": 0.04, "DOGE": 0.045, "GRAM": 0.05, "NOT": 0.06}
+DAILY = {k: v * STAKE_SCALE for k, v in DAILY.items()}
 STAKE_CAP = 86400   # награда копится максимум сутки с последнего сбора — потом надо забрать (как доход с подарков)
 APY = {k: v * 365 for k, v in DAILY.items()}
 YEAR = 365 * 86400
@@ -338,7 +341,7 @@ def crypto_claim(uid=Depends(auth)):
 
 
 # ============================================================ обмен монета → монета
-SWAP_FEE = 0.003
+SWAP_FEE = conf("economy.swap_fee", 0.005)   # обмен монета → монета
 
 
 @app.post(R + "/crypto/{aid}/swap")
@@ -370,7 +373,7 @@ async def crypto_swap(aid: str, req: Request, uid=Depends(auth)):
 
 # ============================================================ фьючерсы: лонг/шорт с плечом
 LEVS = [2, 5, 10, 25, 50]
-FUT_FEE = 0.001         # 0,1% от объёма позиции при открытии и закрытии
+FUT_FEE = conf("economy.fut_fee", 0.002)   # от объёма позиции при открытии и закрытии фьючерса
 STAKE_TAX = 0.0         # налог с наград стейкинга (часть монет) — меняется в админке, fees.py
 LIQ = 0.9               # ликвидация, когда убыток съел 90% маржи
 MAX_POS = 10

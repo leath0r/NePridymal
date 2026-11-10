@@ -41,7 +41,7 @@ const avLabel = s => s.t === "add" ? "+" + String(s.v).replace(".", ",") : s.t =
 const avK = k => "×" + (k >= 100 ? Math.round(k) : k.toFixed(2).replace(".", ","));
 function openAvia() {
   avBusy = false;
-  openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "avia").imgUrl}" alt=""><div><h2>Самолётик</h2><span>Собирай иксы и посади самолёт на корабль</span></div></div>
+  openSheet(`<div class="ghead">${gpfBtn("avia")}<img src="${GAMES.find(g => g.id === "avia").imgUrl}" alt=""><div><h2>Самолётик</h2><span>Собирай иксы и посади самолёт на корабль</span></div></div>
     <div class="avsc" id="av-sc">
       <div class="avstars"></div><div class="avmoon"></div><div class="avfar"></div>
       <div class="avspeed" id="av-spd"></div><div class="avworld" id="av-w"></div>

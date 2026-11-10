@@ -137,6 +137,7 @@ def on_paid(m):
         db.execute("INSERT INTO payments(charge,user,xtr,stars,ts,kind) VALUES(?,?,?,?,?,'pack')", (charge, uid, xtr, stars, now()))
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (stars, uid))
         event(uid, "buy", stars)
+        __import__("bank").back(stars)
     notify(uid, (f"✅ Оплата прошла: +{stars:,} ⭐ на баланс" + (" — первая покупка, звёзд вдвое больше!" if first else "") + " Спасибо!").replace(",", " "))
     try:
         __import__("refs").on_buy(uid, stars)   # пригласившему — % от покупки (refs.py)
@@ -156,6 +157,7 @@ def gift_paid(uid, to, xtr, charge):
         db.execute("INSERT INTO payments(charge,user,xtr,stars,ts,kind) VALUES(?,?,?,?,?,'gift')", (charge, uid, xtr, stars, now()))
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (stars, to))
         event(to, "buy_gift", stars)
+        __import__("bank").back(stars)
         names = {r["id"]: r["name"] for r in db.execute("SELECT id,name FROM users WHERE id IN (?,?)", (uid, to))}
     if to == uid:
         return notify(uid, f"✅ Оплата прошла: +{stars:,} ⭐ на баланс. Спасибо!".replace(",", " "))

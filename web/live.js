@@ -13,7 +13,7 @@ function liveTicker() {
   ["v-cases", "v-games"].forEach(id => {
     const v = document.getElementById(id); if (!v || !v.classList.contains("on")) return;
     let t = v.querySelector(".lv-tick");
-    const items = LIVE.wins.map(w => `<span class="lv-it">${avaHTML(w.user, 18)}<b>${esc(w.user.name)}</b><i>${esc(w.game)}</i><em>+⭐ ${short(w.amount)}</em></span>`).join("");
+    const items = LIVE.wins.map(w => `<span class="lv-it">${avaHTML(w.user, 18)}<b>${esc(w.user.name)}</b><i>${esc(w.game)}</i>${w.ok ? `<u class="lv-ok">${ic("check")}</u>` : ""}<em>+⭐ ${short(w.amount)}</em></span>`).join("");
     const html = `<span class="lv-on"><i></i>${LIVE.online} онлайн</span><div class="lv-track"><div class="lv-run">${items || `<span class="lv-it"><i>Крупные выигрыши появятся здесь</i></span>`}${items}</div></div>`;
     if (!t) {
       t = document.createElement("button"); t.className = "lv-tick"; t.dataset.act = "live";
@@ -42,11 +42,11 @@ async function openLive() {
   const el = openSheet(emptyHTML("hourglass", "Загружаем…"), "lv-s");
   const draw = async () => {
     const d = await api("live?full=1").catch(() => null); if (!d || !el.isConnected) return;
-    replaceSheet(el, `<h2 class="gtitle">Крупные выигрыши</h2><div class="lv-head"><span class="lv-on"><i></i>${d.online} онлайн</span><span class="hint">выигрыши от ⭐ 3 000 во всех играх</span></div>
+    replaceSheet(el, `<h2 class="gtitle">Выигрыши</h2><div class="lv-head"><span class="lv-on"><i></i>${d.online} онлайн</span><span class="hint">выигрыши от ⭐ 3 000 во всех играх</span></div>
       <div class="box">${d.wins.map(w => `<div class="row lv-row tap" data-act="profile" data-id="${w.user.id}">${avaHTML(w.user, 36)}<div class="grow"><div class="t">${esc(w.user.name)}${w.user.title ? ` <span class="ttl">${esc(w.user.title)}</span>` : ""}</div>
         <div class="s">${esc(w.game)} · ${clockAgo(w.ts)}</div>
         <div class="lv-reacts">${d.reactsList.map(e => `<button data-act="lv-react" data-id="${w.id}" data-e="${e}" class="${w.mine === e ? "on" : ""}" ${w.user.id === ME.id ? "disabled" : ""}>${e}${w.reacts[e] ? `<b>${w.reacts[e]}</b>` : ""}</button>`).join("")}</div></div>
-        <b class="tw">+⭐ ${short(w.amount)}</b></div>`).join("") || `<div class="hint" style="padding:14px">Пока пусто</div>`}</div>`);
+        ${w.ok ? `<button class="lv-okb" data-act="fair" aria-label="Проверено">${ic("check")}Проверено</button>` : ""}<b class="tw">+⭐ ${short(w.amount)}</b></div>`).join("") || `<div class="hint" style="padding:14px">Пока пусто</div>`}</div>`);
     starify(el);
   };
   el._redraw = draw; await draw();

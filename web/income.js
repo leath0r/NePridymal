@@ -27,10 +27,10 @@ async function loadInc() {
 }
 function paintIncBar(el) {
   if (!INC) return;
-  const full = INC.gifts.full || INC.biz.some(b => b.full);
+  const full = INC.gifts.full || INC.biz.some(b => b.batch && !b.batch.readyIn) || INC.biz.some(b => b.level && b.full);
   el.classList.toggle("full", full);
   el.innerHTML = `<span class="inc-i">${ic("wallet")}</span><span class="inc-t"><b>Доход · готово <span data-live="total">⭐ ${fmt(INC.ready)}</span></b>
-    <small>${full ? "копилка полная — забери, пока не простаивает" : `коллекция ⭐ ${short(INC.gifts.perDay)}/день${INC.biz.some(b => b.level) ? ` · бизнесы ⭐ ${short(INC.biz.reduce((s, b) => s + (b.level ? b.income : 0), 0))}/час` : ""}`}</small></span>${ic("chev")}`;
+    <small>${full ? "есть что забрать" : `+⭐ ${short(INC.gifts.perDay / 24 + INC.biz.reduce((s, b) => s + (b.level ? b.income : 0), 0))} в час${INC.biz.some(b => b.batch && !b.batch.readyIn) ? " · партия товара готова" : ""}`}</small></span>${ic("chev")}`;
 }
 async function openInc() {
   H.imp("light");
@@ -45,31 +45,41 @@ function fillInc(el) {
   const hrs = s => { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} ч ${m} мин` : `${m} мин`; };
   el.querySelector("#inc-body").innerHTML = `
     <div class="inchero"><span>Готово к сбору</span><b data-live="total">⭐ ${fmt(INC.ready)}</b>
-      <div class="incrate">${ic("trend")}+⭐ ${fmt1(g.perDay / 24 + INC.biz.reduce((s, b) => s + (b.level ? b.income : 0), 0))} в час</div>
+      <div class="incrate">${ic("trend")}Всего +⭐ ${fmt1(g.perDay / 24 + INC.biz.reduce((s, b) => s + (b.level ? b.income : 0), 0))} в час</div>
       <button class="btn cta gold" data-act="inc-collect">${ic("coins")}Забрать всё</button>
-      <small>Копилки наполняются сами: коллекция — до 12 часов, бизнесы — до 8 часов. Заходи забирать, чтобы доход не простаивал.</small></div>
+      <small>Коллекция копит доход до 12 часов, бизнесы до 8.</small></div>
 
     <div class="sec-t">${ic("gift")}Доход с коллекции</div>
-    <div class="inccard"><div class="ic-row"><div><b>+⭐ ${perHourTxt(g.perDay / 24)} в час</b><span>каждый подарок в инвентаре приносит 2% своей ценности в сутки · легендарные ×2, эпики ×1,5 · всего ⭐ ${fmt(g.perDay)} в день</span></div><em data-live="gifts">⭐ ${fmt(g.accrued)}</em></div>
+    <div class="inccard"><div class="ic-row"><div><b>+⭐ ${perHourTxt(g.perDay / 24)} в час</b><span>каждый подарок в инвентаре приносит долю своей ценности в сутки · легендарные ×2, эпики ×1,5 · всего ⭐ ${fmt(g.perDay)} в день</span></div><em data-live="gifts">⭐ ${fmt(g.accrued)}</em></div>
       <div class="cbar big"><div style="width:${fillPct}%"></div></div>
       <div class="ic-sub">${g.full ? "Копилка полная — забери доход" : `заполнится через ${hrs(g.since + g.cap - t)}`}</div>
       ${g.perDay ? "" : `<div class="hint" style="font-size:12.5px;margin-top:6px">Открой кейсы — подарки в инвентаре начнут приносить звёзды</div>`}</div>
 
     <div class="sec-t">${ic("store")}Бизнесы</div>
-    <div class="bizg">${INC.biz.map(b => {
-      const owned = b.level > 0, pct = owned ? Math.min(100, b.accrued / Math.max(1, b.cap) * 100) : 0, col = BIZ_COL[b.id] || "#16b874";
-      return `<div class="biz${owned ? " own" : ""}${b.full ? " full" : ""}" style="--bc:${col}">
-        <div class="biz-ped"><img src="${A.orig(b.col, 128)}" alt="">${owned ? `<i class="bcoin"></i><i class="bcoin d2"></i>` : `<span class="biz-lock">${ic("lock")}</span>`}</div>
-        <b>${esc(b.name)}</b>
-        ${owned ? `<div class="biz-lv">${Array.from({ length: 10 }, (_, i) => `<i class="${i < b.level ? "on" : ""}"></i>`).join("")}</div>` : ""}
-        <span class="biz-inc">+⭐ ${short(b.income)}<small>/час</small></span>
-        ${owned ? `<div class="biz-bar"><div style="width:${pct}%"></div></div><span class="ba">${b.full ? "копилка полная!" : `⭐ ${short(b.accrued)} / ${short(b.cap)}`}</span>` : `<span class="ba">окупится за ~${Math.round(b.price / b.income)} ч</span>`}
-        ${owned ? (b.shiftIn ? `<span class="bshift wait">${ic("clock")}смена через ${clock(b.shiftIn)}</span>`
-          : `<button class="btn sm green bshift" data-act="biz-shift" data-id="${b.id}">${ic("flame")}Смена: до ⭐ ${short(b.income)}</button>`) : ""}
-        ${!owned ? `<button class="btn sm gold" data-act="biz-buy" data-id="${b.id}">Купить · ⭐ ${short(b.price)}</button>`
-          : b.upgrade ? `<button class="btn sm ghost" data-act="biz-buy" data-id="${b.id}">${ic("trend")}⭐ ${short(b.upgrade)} → ${short(b.next)}/ч</button>`
-          : `<button class="btn sm ghost" disabled>Макс. уровень</button>`}
-        ${owned ? `<button class="bsell" data-act="biz-sell" data-id="${b.id}">Продать</button>` : ""}</div>`;
+    <p class="hint fintro">Каждый бизнес приносит доход в час, он копится до 8 часов. Сверху можно закупать товар: через 4 часа забираешь с наценкой, она зависит от спроса, цепочки и банка. Не забрал за 8 часов — товар начнёт портиться.</p>
+    ${(own => own.length ? `<div class="bz-sum"><div><span>Бизнесы приносят в час</span><b class="bz-profit">+⭐ ${short(own.reduce((s, b) => s + b.income, 0))}</b></div>
+      <div><span>Накопилось</span><b>⭐ ${short(INC.bizReady)}</b></div></div>
+      <div class="bz-sum"><div><span>Полные партии, за 4 часа</span><b class="bz-profit">+⭐ ${short(own.reduce((s, b) => s + b.batchProfit, 0))}</b></div>
+      <div><span>Нужно вложить</span><b>⭐ ${short(own.reduce((s, b) => s + b.batchCap, 0))}</b></div></div>` : "")(INC.biz.filter(b => b.level))}
+    <div class="bz-list">${INC.biz.map(b => {
+      const owned = b.level > 0, col = BIZ_COL[b.id] || "#16b874", dem = b.demand >= 1.2 ? "hi" : b.demand <= 0.8 ? "lo" : "";
+      const bt = b.batch;
+      return `<div class="bz${owned ? " own" : ""}" style="--bc:${col}">
+        <div class="bz-top"><span class="bz-art"><img src="${A.orig(b.col, 128)}" alt="" loading="lazy"></span>
+          <div class="bz-t"><b>${esc(b.name)}${owned ? ` <small>ур. ${b.level}</small>` : ""}</b>
+            ${owned ? `<span class="bz-hr">Доход <b>⭐ ${short(b.income)}</b> в час</span>` : ""}<span class="bz-dem ${dem}">Спрос ×${String(b.demand).replace(".", ",")}<small>смена ${clock(b.demandIn)}</small></span></div>
+          ${!bt ? `<em class="bz-m">+${String(b.margin).replace(".", ",")}%</em>` : ""}</div>
+        ${b.supplier ? `<span class="biz-chain${b.noSupply ? " bad" : ""}">${b.noSupply ? `Нет поставщика: ${esc(b.supplier)}, наценка −40%` : `Поставщик: ${esc(b.supplier)}`}</span>` : ""}
+        ${b.chainFull ? `<span class="biz-chain ok">Полная цепочка +15%</span>` : ""}
+        ${b.mgr ? `<span class="biz-chain ok">Управляющий +${b.mgr.bonus}%</span>` : ""}
+        ${!owned ? `<button class="btn sm cta" data-act="biz-buy" data-id="${b.id}"><span class="bz-b"><span>Купить ⭐ ${short(b.price)}</span><em>+⭐ ${short(b.income)}/ч</em></span></button>`
+          : bt ? `<div class="bz-batch"><div class="cbar"><div style="width:${bt.readyIn ? Math.max(3, 100 - bt.readyIn / 144) : 100}%"></div></div>
+              <div class="bz-bt"><span>Вложено ⭐ ${short(bt.cost)}</span><b>⭐ ${short(bt.now)}</b></div>
+              ${bt.readyIn ? `<button class="btn sm ghost" disabled>Готово через ${clock(bt.readyIn)}</button>`
+                : `<button class="btn sm cta" data-act="biz-deliver" data-id="${b.id}">Забрать${bt.spoilIn ? ` · портится через ${clock(bt.spoilIn)}` : " · уже портится"}</button>`}</div>`
+          : `<button class="btn sm cta" data-act="biz-supply" data-id="${b.id}"><span class="bz-b"><span>Закупить на ⭐ ${short(b.batchCap)}</span><em>+⭐ ${short(b.batchProfit)}</em></span></button>`}
+        ${b.pledged ? `<div class="bz-acts"><span class="bz-pledge">${ic("lock")}В залоге у банка: продать и улучшить нельзя</span>${b.mgr ? "" : `<button data-act="biz-mgr" data-id="${b.id}">Управляющий</button>`}</div>` : owned ? `<div class="bz-acts">${b.upgrade ? `<button data-act="biz-buy" data-id="${b.id}">Улучшить ⭐ ${short(b.upgrade)}</button>` : ""}
+          ${b.mgr ? "" : `<button data-act="biz-mgr" data-id="${b.id}">Управляющий</button>`}<button data-act="biz-sell" data-id="${b.id}">Продать</button></div>` : ""}</div>`;
     }).join("")}</div>
 
     <div class="sec-t">${ic("lock")}Сейф</div>
@@ -97,8 +107,17 @@ Object.assign(ACT, {
   inc: () => openInc(),
   "inc-collect": async el => {
     if (incLive().gifts + incLive().biz < 1) return toast("Пока накопилось меньше звезды — загляни чуть позже");
-    const r = await post("income/collect"); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.got)} дохода${r.tax ? ` (налог ${feeP("income", .03)} в банк: ⭐ ${fmt(r.tax)})` : ""}`, "ok"); burstAt(el);
+    const r = await post("income/collect"); setStars(r.stars); H.ok(); toast(`+⭐ ${fmt(r.got)} дохода${r.tax ? ` (налог ${feeP("income", .03)} в банк: ⭐ ${fmt(r.tax)})` : ""}${r.loanPaid ? `, в счёт кредита ⭐ ${fmt(r.loanPaid)}` : ""}`, "ok"); burstAt(el);
     await loadInc();
+  },
+  "biz-supply": async el => {
+    const b = incBiz(el.dataset.id); if (!b) return;
+    const v = await promptM("Закупка товара", `От 100 до ${fmt(b.batchCap)} звёзд. Наценка сейчас +${b.margin}%, через 4 часа получишь больше вложенного. После налога прибыль меньше.`, String(Math.min(b.batchCap, Math.max(100, Math.floor(ME.stars)))), "Закупить", "number");
+    if (v === null) return;
+    try { const r = await post(`biz/${b.id}/supply`, { amount: Math.floor(+v) }); setStars(r.stars); H.ok(); toast(`Через 4 часа: ⭐ ${fmt(r.pay)}`, "ok"); await loadInc(); } catch (e) {}
+  },
+  "biz-deliver": async el => {
+    try { const r = await post(`biz/${el.dataset.id}/deliver`); setStars(r.stars); H.ok(); toast(`Получено ⭐ ${fmt(r.got)}`, "ok"); await loadInc(); } catch (e) {}
   },
   "biz-shift": el => { const b = incBiz(el.dataset.id); if (b) bizShift(b); },
   "biz-tap": el => bizTap(el),
@@ -106,16 +125,16 @@ Object.assign(ACT, {
     const b = incBiz(el.dataset.id); if (!b) return; const cost = b.level ? b.upgrade : b.price;
     if (cost > ME.stars) return toast("Не хватает звёзд ⭐");
     if (!await confirmM(b.level ? "Прокачать?" : "Купить бизнес?", b.level
-      ? `${esc(b.name)} → ${b.level + 1} ур.: доход ⭐ ${fmt(b.income)} → ⭐ ${fmt(b.next)} в час за ⭐ ${fmt(cost)}. Накопленное заберётся автоматически.`
-      : `${esc(b.name)} за ⭐ ${fmt(cost)} — будет приносить ⭐ ${fmt(b.income)} в час (копится до 8 часов).`, b.level ? "Прокачать" : "Купить")) return;
+      ? `${esc(b.name)} → ${b.level + 1} ур. за ⭐ ${fmt(cost)}. Доход ⭐ ${fmt(b.income)} → ⭐ ${fmt(b.next)} в час, партия вырастет до ⭐ ${fmt(b.nextCap)}.`
+      : `${esc(b.name)} за ⭐ ${fmt(cost)}. Доход ⭐ ${fmt(b.income)} в час, копится до 8 часов. Партия товара до ⭐ ${fmt(b.batchCap)} даёт ещё ⭐ ${fmt(b.batchProfit)} за 4 часа при текущем спросе.`, b.level ? "Прокачать" : "Купить")) return;
     const r = await post(`biz/${b.id}/buy`); setStars(r.stars); H.ok(); toast(b.level ? "Бизнес прокачан" : "Бизнес куплен", "ok"); burstAt(el);
     await loadInc(); afterLevelUp(r.levelup);
   },
   "biz-sell": el => {
     const b = incBiz(el.dataset.id); if (!b || !b.level) return;
     const acc = b.accrued ? ` Накопленные ⭐ ${fmt(b.accrued)} заберутся автоматически.` : "";
-    openSheet(`<h2 class="gtitle">${ic("coins")}Продать: ${esc(b.name)}</h2>
-      <div class="hint" style="font-size:13px;margin:-4px 0 12px">Возвращается половина того, что ты вложил.${acc}</div>
+    openSheet(`<h2 class="gtitle">${ic("coins")}Продать</h2>
+      <div class="hint" style="font-size:13px;margin:-4px 0 12px">Возвращается ${b.sellPct}% вложенного.${acc}</div>
       ${b.down ? `<button class="btn ghost" data-act="biz-sell-go" data-id="${b.id}" data-w="level" style="margin-bottom:8px"><span class="bs-t"><b>Продать улучшение · +⭐ ${fmt(b.down)}</b><small>${b.level} → ${b.level - 1} ур., доход ⭐ ${fmt(b.income)} → ⭐ ${fmt(b.prev)}/ч</small></span></button>` : ""}
       <button class="btn red" data-act="biz-sell-go" data-id="${b.id}" data-w="all"><span class="bs-t"><b>Продать бизнес · +⭐ ${fmt(b.sell)}</b><small>все ${b.level} ${plural(b.level, ["уровень", "уровня", "уровней"])}, купить заново — за полную цену</small></span></button>`, "bizsell-s");
   },

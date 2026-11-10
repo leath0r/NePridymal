@@ -34,9 +34,13 @@ DEFAULTS = {
     "milestones": "3:2000,10:7500,25:20000,50:50000",   # активных друзей : ⭐
     "buy_pct": 10,                                  # % от игровых звёзд, купленных другом за Telegram Stars
     "top_on": True, "top_prizes": "15000,7500,3000", "top_min": 3,
+    "gift_on": True,                                # новичку по ссылке — ключ от кейса «от друга»
+    "duo_on": True, "duo_prize": 1000,              # цель на двоих: каждому (с поправкой на курс банка)
+    "duo_friend": 50000, "duo_ref": 20000,          # оборот друга и пригласившего за неделю (сумма исходов)
 }
 LIMITS = {"new_bonus": (0, 100000), "join_bonus": (0, 100000), "l1_level": (2, 50), "l1_bonus": (0, 100000),
-          "l2_level": (2, 100), "l2_bonus": (0, 200000), "buy_pct": (0, 50), "top_min": (1, 100)}
+          "l2_level": (2, 100), "l2_bonus": (0, 200000), "buy_pct": (0, 50), "top_min": (1, 100),
+          "duo_prize": (0, 50000), "duo_friend": (1000, 10_000_000), "duo_ref": (0, 10_000_000)}
 CFG = {}
 try:
     CFG.update({k: v for k, v in json.loads(A.kv_get("refcfg", "{}")).items() if k in DEFAULTS})
@@ -59,6 +63,11 @@ def _pairs(s):
 
 def _prizes(s):
     return [int(x) for x in str(s).replace(" ", "").split(",") if x]
+
+
+def top_prizes():
+    """Призы недельного топа с поправкой на курс банка: банк растёт — растут и призы."""
+    return [A.prize_k(p) for p in _prizes(cfg("top_prizes"))]
 
 
 def xp_for(L):
@@ -146,17 +155,17 @@ def _top_payout():
     prev = week_start() - 7 * 86400
     if q1("SELECT 1 FROM ref_top WHERE week=?", prev) or prev < LAUNCH - 7 * 86400:
         return []
-    msgs = []
+    msgs, prizes = [], top_prizes()
     with tx():
         if q1("SELECT 1 FROM ref_top WHERE week=?", prev):
             return []
         place = 0
         for r in _week_top(prev):
-            if place >= len(_prizes(cfg("top_prizes"))) or r["n"] < cfg("top_min"):
+            if place >= len(prizes) or r["n"] < cfg("top_min"):
                 break
             if not q1("SELECT 1 FROM users WHERE id=? AND banned=0", r["ref"]):
                 continue
-            amount = _prizes(cfg("top_prizes"))[place]
+            amount = prizes[place]
             place += 1
             db.execute("INSERT INTO ref_top(week,place,user,n,amount) VALUES(?,?,?,?,?)", (prev, place, r["ref"], r["n"], amount))
             msgs.append(_pay(r["ref"], amount, "ref_top", f"🏆 {place} место в недельном топе приглашений ({r['n']} активных друзей) — <b>+{nf(amount)} ⭐</b>"))
@@ -168,7 +177,7 @@ def _top_payout():
 def _tick():
     if not cfg("on"):
         return
-    for uid, text in _levels() + _milestones() + _top_payout():
+    for uid, text in _levels() + _milestones() + _top_payout() + _duo():
         notify(uid, text)
 
 
@@ -199,6 +208,112 @@ def on_buy(uid, stars):
     notify(u["ref_by"], f"💎 Твой друг <b>{esc(u['name'])}</b> пополнил баланс — тебе {cfg('buy_pct')}%: <b>+{nf(amount)} ⭐</b>")
 
 
+# ============================== подарок от друга и цель на двоих ==============================
+GIFT_CASE = "starter"
+DUO_DAYS = 7
+DUO_LEVEL = 5   # друг должен дорасти до 5 уровня: против твинков, как во франшизе
+db.executescript("""
+CREATE TABLE IF NOT EXISTS ref_gift(user INTEGER PRIMARY KEY, ref INTEGER, cid TEXT, ts INTEGER, opened INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS ref_duo(friend INTEGER PRIMARY KEY, ref INTEGER, start INTEGER, until INTEGER, status TEXT DEFAULT 'open', prize INTEGER DEFAULT 0, ts INTEGER);
+CREATE INDEX IF NOT EXISTS ref_duo_ref ON ref_duo(ref, status);
+""")
+
+
+def on_register(uid, ref):
+    """Из app.register (внутри его транзакции): новичок пришёл по ссылке."""
+    if not cfg("on"):
+        return
+    t = now()
+    if cfg("gift_on"):
+        db.execute("INSERT OR IGNORE INTO ref_gift(user,ref,cid,ts) VALUES(?,?,?,?)", (uid, ref, GIFT_CASE, t))
+        db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (uid, GIFT_CASE))
+    if cfg("duo_on"):
+        db.execute("INSERT OR IGNORE INTO ref_duo(friend,ref,start,until,ts) VALUES(?,?,?,?,?)", (uid, ref, t, t + DUO_DAYS * 86400, t))
+
+
+def on_key_open(uid, cid, col):
+    """Из open_case (внутри транзакции): новичок открыл кейс ключом. Если это подарок друга — говорим другу."""
+    r = q1("SELECT * FROM ref_gift WHERE user=? AND cid=? AND opened=0", uid, cid)
+    if not r:
+        return
+    db.execute("UPDATE ref_gift SET opened=? WHERE user=?", (now(), uid))
+    u = q1("SELECT name FROM users WHERE id=?", uid)
+    notify(r["ref"], f"Подарок дошёл: у <b>{esc(u['name'] if u else 'друга')}</b> из кейса от тебя выпал <b>{esc(col)}</b>")
+
+
+def gift_of(uid):
+    """Неоткрытый подарок от друга — для приветствия в игре."""
+    r = q1("SELECT g.ref, g.cid, u.name, k.n FROM ref_gift g JOIN users u ON u.id=g.ref LEFT JOIN case_keys k ON k.user=g.user AND k.cid=g.cid "
+           "WHERE g.user=? AND g.opened=0", uid)
+    if not r or not r["n"]:
+        return None
+    import economy as E
+    c = E.CASES.get(r["cid"])
+    return {"from": r["ref"], "name": r["name"], "cid": r["cid"], "title": c["title"] if c else r["cid"]}
+
+
+def _turn(uid, a, b):
+    return q1(f"SELECT COALESCE(SUM(ABS(delta)),0) s FROM events WHERE user=? AND kind IN {A.GAME_KINDS} AND ts>=? AND ts<?", uid, a, b)["s"]
+
+
+def duo_view(d, me):
+    t = now()
+    other = d["ref"] if me == d["friend"] else d["friend"]
+    o = q1("SELECT * FROM users WHERE id=?", other)
+    f = q1("SELECT xp FROM users WHERE id=?", d["friend"])
+    return {"friend": d["friend"], "ref": d["ref"], "me": "friend" if me == d["friend"] else "ref", "other": user_brief(o) if o else None,
+            "fTurn": _turn(d["friend"], d["start"], d["until"]), "rTurn": _turn(d["ref"], d["start"], d["until"]),
+            "fNeed": cfg("duo_friend"), "rNeed": cfg("duo_ref"), "level": A.level(f["xp"]) if f else 0, "levelNeed": DUO_LEVEL,
+            "left": max(0, d["until"] - t), "prize": A.prize_k(cfg("duo_prize")), "status": d["status"]}
+
+
+def _duo():
+    """Цель на двоих: за неделю друг дорос до 5 уровня и набрал оборот, пригласивший тоже — награда обоим.
+    Оборот — сумма исходов раундов: при возврате 94% потеря игрока не меньше 3,1% этой суммы, поэтому
+    награда (по умолчанию 2 × 1 000) дешевле, чем твинку набрать оборот 50 000 + 20 000, — накрутка убыточна."""
+    msgs = []
+    if not (cfg("on") and cfg("duo_on")):
+        return msgs
+    t = now()
+    for d in q("SELECT * FROM ref_duo WHERE status='open' ORDER BY start LIMIT 500"):
+        f = q1("SELECT id, name, xp, banned FROM users WHERE id=?", d["friend"])
+        r = q1("SELECT id, name, banned FROM users WHERE id=?", d["ref"])
+        if not f or not r or f["banned"] or r["banned"]:
+            with tx():
+                db.execute("UPDATE ref_duo SET status='void' WHERE friend=?", (d["friend"],))
+            continue
+        end = min(t, d["until"])
+        ok = (A.level(f["xp"]) >= DUO_LEVEL and _turn(f["id"], d["start"], end + 1) >= cfg("duo_friend")
+              and _turn(r["id"], d["start"], end + 1) >= cfg("duo_ref"))
+        if ok:
+            prize = A.prize_k(cfg("duo_prize"))
+            with tx():
+                if q1("SELECT status FROM ref_duo WHERE friend=?", d["friend"])["status"] != "open":
+                    continue
+                db.execute("UPDATE ref_duo SET status='done', prize=? WHERE friend=?", (prize, d["friend"]))
+                if prize:
+                    msgs.append(_pay(f["id"], prize, "ref_duo", f"Цель с другом <b>{esc(r['name'])}</b> выполнена: тебе +{nf(prize)} ⭐"))
+                    msgs.append(_pay(r["id"], prize, "ref_duo", f"Цель с другом <b>{esc(f['name'])}</b> выполнена: тебе +{nf(prize)} ⭐"))
+        elif t >= d["until"]:
+            with tx():
+                db.execute("UPDATE ref_duo SET status='expired' WHERE friend=? AND status='open'", (d["friend"],))
+    return msgs
+
+
+@app.get(R + "/refs/bar")
+def refs_bar(uid=Depends(auth)):
+    """Баннер во вкладке «Игры»: цель на двоих (если идёт) и неделя приглашений."""
+    duo = q1("SELECT * FROM ref_duo WHERE status='open' AND (friend=? OR ref=?) ORDER BY friend=? DESC, until LIMIT 1", uid, uid, uid)
+    ws = week_start()
+    week = None
+    if cfg("on") and cfg("top_on"):
+        mine = q1("SELECT COUNT(*) n FROM ref_pay WHERE stage='l1' AND ref=? AND ts>=?", uid, ws)["n"]
+        top = _week_top(ws)
+        place = next((i + 1 for i, r in enumerate(top) if r["ref"] == uid), 0)
+        week = {"mine": mine, "place": place, "lead": top[0]["n"] if top else 0, "prizes": top_prizes(), "min": cfg("top_min"), "left": ws + 7 * 86400 - now()}
+    return {"duo": duo_view(duo, uid) if duo else None, "week": week, "gift": gift_of(uid)}
+
+
 # ============================== игроку ==============================
 def summary(uid):
     """Для /me и /ref: что даёт программа."""
@@ -210,7 +325,7 @@ def summary(uid):
 def my_refs(uid=Depends(auth)):
     u = q1("SELECT refs FROM users WHERE id=?", uid)
     active = _active_count(uid)
-    earned = q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind IN ('ref','ref_lvl','ref_ms','ref_buy','ref_top')", uid)["s"]
+    earned = q1("SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind IN ('ref','ref_lvl','ref_ms','ref_buy','ref_top','ref_duo')", uid)["s"]
     ms = _pairs(cfg("milestones"))
     got = {r["cnt"] for r in q("SELECT cnt FROM ref_ms WHERE user=?", uid)}
     friends = [{**user_brief(f), "lv": A.level(f["xp"]), "ts": f["created"]}
@@ -225,8 +340,13 @@ def my_refs(uid=Depends(auth)):
     mine = q1("SELECT COUNT(*) n FROM ref_pay WHERE stage='l1' AND ref=? AND ts>=?", uid, ws)["n"]
     return {**summary(uid), "invited": u["refs"], "active": active, "earned": earned,
             "milestones": [{"n": c, "amount": a, "done": c in got} for c, a in ms],
-            "friends": friends, "top": top, "topOn": cfg("top_on"), "prizes": _prizes(cfg("top_prizes")), "topMin": cfg("top_min"),
-            "myWeek": mine, "weekEnds": ws + 7 * 86400, "link": f"https://t.me/{A.bot_name()}?start=ref_{uid}"}
+            "friends": friends, "top": top, "topOn": cfg("top_on"), "prizes": top_prizes(), "topMin": cfg("top_min"),
+            "myWeek": mine, "weekEnds": ws + 7 * 86400, "link": f"https://t.me/{A.bot_name()}?start=ref_{uid}",
+            "duos": [duo_view(d, uid) for d in q("SELECT * FROM ref_duo WHERE (ref=? OR friend=?) AND status='open' ORDER BY until LIMIT 20", uid, uid)],
+            "duoOn": cfg("on") and cfg("duo_on"), "duoPrize": A.prize_k(cfg("duo_prize")), "duoFriend": cfg("duo_friend"), "duoRef": cfg("duo_ref"),
+            "duoLevel": DUO_LEVEL, "duoDays": DUO_DAYS, "giftOn": cfg("on") and cfg("gift_on"),
+            "giftLinks": q1("SELECT COUNT(*) n FROM gift_links WHERE sender=?", uid)["n"],
+            "giftFriends": q1("SELECT COUNT(*) n FROM gift_links g JOIN users u ON u.id=g.taker WHERE g.sender=? AND u.ref_by=? AND u.created>=g.ts", uid, uid)["n"]}
 
 
 # ============================== админка ==============================
@@ -238,7 +358,7 @@ def admin_refs(aid=Depends(admin)):
           "all": q1("SELECT COUNT(*) n FROM users WHERE ref_by IS NOT NULL")["n"],
           "users": q1("SELECT COUNT(*) n FROM users")["n"],
           "active": q1("SELECT COUNT(*) n FROM users WHERE ref_by IS NOT NULL AND xp>=?", xp_for(cfg("l1_level")))["n"],
-          "paid7": {r["kind"]: r["s"] for r in q("SELECT kind, SUM(delta) s FROM events WHERE kind IN ('ref','ref_lvl','ref_ms','ref_buy','ref_top') AND ts>=? GROUP BY kind", w)}}
+          "paid7": {r["kind"]: r["s"] for r in q("SELECT kind, SUM(delta) s FROM events WHERE kind IN ('ref','ref_lvl','ref_ms','ref_buy','ref_top','ref_duo') AND ts>=? GROUP BY kind", w)}}
     top = []
     for r in q("SELECT ref_by r, COUNT(*) n, SUM(xp>=?) a FROM users WHERE ref_by IS NOT NULL AND created>=? GROUP BY ref_by ORDER BY n DESC LIMIT 10",
                xp_for(cfg("l1_level")), w):

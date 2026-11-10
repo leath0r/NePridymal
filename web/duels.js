@@ -28,7 +28,7 @@ function duelCard(x) {
 async function openDuels(to = null) {
   H.imp("light");
   DUEL.to = to ? await api("user/" + to).catch(() => null) : null;
-  const el = openSheet(`${gameHead("Light Sword", "Дуэли", "Играй 1 на 1 — победитель забирает банк")}
+  const el = openSheet(`${gameHead("Light Sword", "Дуэли", "Играй 1 на 1 — победитель забирает банк", "duel")}
     <div class="dnew">
       <div class="seg" id="d-game">${Object.entries(DGAMES).map(([k, [i, t]]) => `<button data-act="duel-game" data-v="${k}" class="${DUEL.game === k ? "on" : ""}">${ic(i)}${t}</button>`).join("")}</div>
       <div class="dsub" id="d-sub">${DGAMES[DUEL.game][2]}</div>

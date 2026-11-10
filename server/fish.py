@@ -31,11 +31,12 @@ def t_of(x):
     return math.log(x) / K
 
 
-def _bust():
-    """Точка обрыва: P(bust ≥ x) = RTP / x; с шансом 1 − RTP рыба срывается сразу после поклёвки."""
-    u = random.random()
+def _bust(uid):
+    """Точка обрыва: P(bust ≥ x) = RTP / x; с шансом 1 − RTP рыба срывается сразу после поклёвки (честный бросок)."""
+    import fair
+    u, pf = fair.one(uid, "fish", ref="bust")
     b = edge(tuned("games.fish_rtp", RTP)) / max(1e-9, 1 - u)
-    return 1.0 if b < 1.01 else min(MAX, math.floor(b * 100) / 100)
+    return (1.0 if b < 1.01 else min(MAX, math.floor(b * 100) / 100)), pf
 
 
 def _resolve(uid, r, at=None):
@@ -48,7 +49,7 @@ def _resolve(uid, r, at=None):
         return _pay(uid, r, r["auto"])
     if x >= r["bust"]:
         db.execute("DELETE FROM fish WHERE user=?", (uid,))
-        event(uid, "fish", -r["bet"])
+        event(uid, "fish", -r["bet"], stake=r["bet"], res={"bust": r["bust"]})
         return {"active": False, "lost": True, "bust": r["bust"], "bet": r["bet"]}
     return None
 
@@ -58,7 +59,7 @@ def _pay(uid, r, x):
     pay = int(r["bet"] * x)
     db.execute("DELETE FROM fish WHERE user=?", (uid,))
     db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, uid))
-    event(uid, "fish", pay - r["bet"])
+    event(uid, "fish", pay - r["bet"], stake=r["bet"], res={"bust": r["bust"], "mult": x})
     col = random.choice([c for c in CATCH if c in E.CATALOG] or list(E.CATALOG))
     return {"active": False, "won": True, "mult": x, "pay": pay, "bet": r["bet"], "bust": r["bust"], "gift": preview_out(col, E.roll(col))}
 
@@ -93,12 +94,13 @@ async def fish_cast(req: Request, uid=Depends(auth)):
             err("удочка уже заброшена")
         check_bet(uid, bet)
         bite = time.time() + random.uniform(1.4, 3.6)   # поклёвка — пауза для атмосферы, на шанс не влияет
+        bust, pf = _bust(uid)
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (bet, uid))
         db.execute("INSERT INTO fish(user,bet,bust,t0,auto,ts) VALUES(?,?,?,?,?,?) ON CONFLICT(user) DO UPDATE SET bet=excluded.bet, "
-                   "bust=excluded.bust, t0=excluded.t0, auto=excluded.auto, ts=excluded.ts", (uid, bet, _bust(), bite, auto, int(time.time())))
+                   "bust=excluded.bust, t0=excluded.t0, auto=excluded.auto, ts=excluded.ts", (uid, bet, bust, bite, auto, int(time.time())))
         lvl = add_xp(uid, max(1, bet // 20))
         r = q1("SELECT * FROM fish WHERE user=?", uid)
-    return {**_state(r), "stars": bal(uid), "levelup": lvl}
+    return {**_state(r), "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 @app.post(R + "/fish/reel")

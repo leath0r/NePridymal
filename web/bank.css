@@ -221,3 +221,66 @@ button.bkh-top{width:100%;text-align:left;color:inherit;position:relative;z-inde
 .bkk-t small{font-size:10px;color:var(--hint);line-height:1.2;max-width:100%}
 .bkk-t.up b{color:#35d07f}.bkk-t.dn b{color:#ff6b78}
 .bkk-n{margin-top:10px;font-size:11.5px;color:var(--hint);text-align:center}
+
+/* ============================================================
+   Вклады в банк + уровень банка
+   ============================================================ */
+.bklvl{flex:none;display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:5px 10px;border-radius:999px;
+  font-size:11.5px;font-weight:700;color:#ffd76a;background:color-mix(in srgb,#ffd76a 12%,transparent);
+  border:1px solid color-mix(in srgb,#ffd76a 30%,transparent)}
+.bklvl .ic{width:13px;height:13px}
+.bkdep{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
+.bkdep-lvl{display:flex;flex-direction:column;gap:6px;font-size:13px;margin-bottom:8px}
+.bkdep-lvl span{display:flex;justify-content:space-between;align-items:baseline}
+.bkdep-lvl small{color:var(--hint);font-size:11.5px}
+.bkdep .cbar{height:6px;border-radius:4px;background:color-mix(in srgb,var(--hint) 15%,transparent);overflow:hidden}
+.bkdep .cbar div{height:100%;border-radius:4px;background:linear-gradient(90deg,#ffd76a,#ff9d4d)}
+.bk-lvl{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:2px 7px;border-radius:999px;
+  font-size:10.5px;font-weight:700;font-style:normal;color:#ffd76a;background:color-mix(in srgb,#ffd76a 14%,transparent)}
+.bk-lvl .ic{width:11px;height:11px}
+.row.dep .s{white-space:normal}
+
+/* вклады */
+.dep-terms{display:grid;grid-template-columns:repeat(var(--n,3),minmax(0,1fr));gap:8px}
+.dep-terms button{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;padding:11px 4px;border-radius:14px;background:var(--card);border:1px solid var(--line);transition:background-color .15s,border-color .15s}
+.dep-terms b{font-size:14.5px;white-space:nowrap}
+.dep-terms span{font-size:12.5px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
+.dep-terms button.on{background:color-mix(in srgb,var(--ac) 16%,var(--card));border-color:var(--ac)}
+.dep-form{margin-top:10px}
+.dep-sum{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:12px 2px}
+.dep-sum span{min-width:0;font-size:13px;color:var(--hint)}
+.dep-sum b{flex:none;font-size:17px;font-variant-numeric:tabular-nums}
+.dep-form>.btn{width:100%}
+.dep-meta{display:flex;justify-content:space-between;gap:12px;margin:12px 2px 0;font-size:12px;color:var(--hint)}
+.dep-meta span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dep-meta span:last-child{text-align:right}
+.dep-meta b{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;font-variant-numeric:tabular-nums}
+.dep-warn{margin-top:10px;font-size:12.5px;color:#ff8a8a;text-align:center}
+.dep-list{display:flex;flex-direction:column;gap:8px}
+.dep-it{padding:12px;border-radius:16px;background:var(--card);border:1px solid var(--line)}
+.dep-it-h{display:flex;align-items:center;gap:8px}
+.dep-it-h b{min-width:0;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.dep-it-h em{flex:none;font-style:normal;font-size:12.5px;font-weight:700;color:var(--gold)}
+.dep-it-h .btn{flex:none;margin-left:auto}
+.dep-it .cbar{height:5px;margin:10px 0 7px;border-radius:4px;background:color-mix(in srgb,var(--hint) 15%,transparent);overflow:hidden}
+.dep-it .cbar div{height:100%;border-radius:4px;background:var(--ac)}
+.dep-it-s{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--hint);font-variant-numeric:tabular-nums}
+.dep-empty{padding:18px 12px;border-radius:16px;background:var(--card);border:1px solid var(--line);text-align:center;font-size:13px;color:var(--hint)}
+.dep-note{margin:12px 4px 0;font-size:12.5px;line-height:1.5;color:var(--hint)}
+.bkdep>.hint{white-space:normal}
+.bkh-top{position:relative}
+.bkh-top>div{min-width:0}
+.bkh-top .bklvl{position:absolute;top:-4px;right:0;margin:0}
+.bkk{margin:12px 0}
+/* бизнесы */
+.bz-sum{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;padding:12px;border-radius:16px;background:var(--card);border:1px solid var(--line)}
+.bz-sum>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.bz-sum span{font-size:12px;color:var(--hint)}
+.bz-sum b{font-size:16px;font-variant-numeric:tabular-nums}
+.bz-sum>div:last-child{text-align:right;flex:none}
+.bz-profit{color:#4ee0ad}
+.bz-b{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;min-width:0}
+.bz-b>span{min-width:0;white-space:nowrap}
+.bz-b>em{flex:none;font-style:normal;font-weight:800;font-variant-numeric:tabular-nums}
+.bz-b .ic,.bz-b img{flex:none}
+@media (max-width:370px){.bz-b>em{font-size:12px}}

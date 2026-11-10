@@ -10,7 +10,7 @@ function nameHTML(u) { return `<span class="unm${nickCls(u)}">${esc((u && u.name
 
 // купленная рамка — если нет сезонной
 const _avaSty = avaHTML;
-avaHTML = function (u, s, o) { return _avaSty(u && !u.frame && u.pframe ? { ...u, frame: u.pframe } : u, s, o); };
+avaHTML = function (u, s, o) { return _avaSty(u && u.pframe ? { ...u, frame: u.pframe } : u, s, o); };   // купленная рамка важнее бесплатной сезонной; снятая возвращает сезонную
 
 // профиль: акцент, статус под именем, выбранные значки, ник
 const _phSty = profileHTML;
@@ -104,7 +104,7 @@ Object.assign(ACT, {
   },
   "sty-cover": () => {
     const s = topSheet();
-    pickGift("Подарок для узора обложки", g => { s._sty.cover = g.id; styDraw(s); });
+    pickGift("Узор обложки", g => { s._sty.cover = g.id; styDraw(s); });
   },
   "sty-cover0": () => { const s = topSheet(); s._sty.cover = 0; H.sel(); styDraw(s); },
   "sty-wear": el => {

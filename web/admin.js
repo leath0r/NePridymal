@@ -252,7 +252,7 @@ async function admRender(el = topSheet()) {
       <div class="disc">«Удача ×N» умножает шанс «удачного момента» (сюрприз до 2 500 ⭐ после раунда) и даёт поймать его ещё раз за ивент. Выигрыши в играх не меняются — иначе ивент стал бы «станком».</div>`;
     starify(body);
   } else if (ADM.tab === "ref") {   // реферальная программа (refs.py)
-    const d = await api("admin/refs"), c = d.cfg, ed = d.canEdit, s = d.stats, p = s.paid7;
+    const [d, gw] = await Promise.all([api("admin/refs"), api("admin/gw").catch(() => null)]), c = d.cfg, ed = d.canEdit, s = d.stats, p = s.paid7;
     const sw = (k, title, hint) => `<div class="row kv"><div class="grow"><div class="t">${title}</div><div class="s" style="white-space:normal">${hint}</div></div>
       ${ed ? `<button class="sw${c[k] ? " on" : ""}" data-act="adm-ref-sw" data-k="${k}" data-v="${c[k] ? 0 : 1}"></button>` : `<b>${c[k] ? "да" : "нет"}</b>`}</div>`;
     const field = (k, title, hint, unit, text) => `<div class="adm-odd"><div class="adm-oh"><b>${title}</b>${d.changed.includes(k) ? `<span class="adm-tag">изменено</span>` : ""}</div>
@@ -282,7 +282,29 @@ async function admRender(el = topSheet()) {
         ${sw("top_on", "Недельный топ приглашений", "Призы в понедельник за прошлую неделю — по числу друзей, ставших активными")}
         ${field("top_prizes", "Призы топа", "за 1, 2, 3… место через запятую", "", true)}
         ${field("top_min", "Минимум для приза", "активных друзей за неделю", "шт")}
+        ${sw("gift_on", "Ключ от кейса «от друга»", "Новичок по ссылке получает ключ от «Ширпотреба», пригласившему приходит сообщение, когда тот откроет")}
+        ${sw("duo_on", "Цель на двоих", "За 7 дней друг доходит до 5 ур. и набирает оборот, пригласивший тоже, награда обоим")}
+        ${field("duo_prize", "Цель на двоих: награда каждому", "с поправкой на курс банка", "⭐")}
+        ${field("duo_friend", "Оборот друга за неделю", "сумма выигрышей и проигрышей; потеря на ней не меньше 3,1%, держи награду ниже", "⭐")}
+        ${field("duo_ref", "Оборот пригласившего за неделю", "", "⭐")}
       </div>
+      ${gw ? `<div class="sec-t">Розыгрыши в канале</div>
+      <div class="box">
+        <div class="adm-odd"><div class="adm-oh"><b>Канал</b>${gw.channel ? `<span class="adm-tag">${esc(gw.channel)}</span>` : ""}</div>
+          <div class="adm-os" style="white-space:normal">Добавь бота в канал администратором с правом публиковать, потом укажи @имя канала</div>
+          ${gw.canEdit ? `<div class="adm-oc"><input class="adm-oi" style="flex:1" data-gw="channel" placeholder="@channel" value=""><button class="btn sm gold" data-act="adm-gw-ch">${ic("check")}</button></div>` : ""}</div>
+        ${gw.canEdit && gw.channel ? `<div class="adm-odd"><div class="adm-oh"><b>Новый розыгрыш</b></div>
+          <div class="adm-os" style="white-space:normal">Приз из банка, сейчас до ⭐ ${fmt(gw.cap)}. Бот опубликует пост с кнопкой «Участвовать»</div>
+          <div class="adm-gwf"><input class="adm-oi" data-gw="title" placeholder="Название" maxlength="60">
+            <label><span>Приз, ⭐</span><input class="adm-oi" data-gw="prize" inputmode="numeric" value="10000"></label>
+            <label><span>Победителей</span><input class="adm-oi" data-gw="winners" inputmode="numeric" value="5"></label>
+            <label><span>Часов</span><input class="adm-oi" data-gw="hours" inputmode="numeric" value="24"></label>
+            <label><span>С уровня</span><input class="adm-oi" data-gw="minLevel" inputmode="numeric" value="2"></label>
+            <button class="btn gold" data-act="adm-gw-new">${ic("send")}Опубликовать</button></div></div>` : ""}
+      </div>
+      ${gw.list.length ? `<div class="box gw-list">${gw.list.map(g => `<div class="row kv tap" data-act="adm-gw-open" data-id="${g.id}"><div class="grow" style="min-width:0"><div class="t">${esc(g.title)}</div>
+        <div class="s">${g.status === "open" ? `идёт · участников ${g.count}` : g.status === "done" ? `итоги · участников ${g.count}` : "отменён"} · ⭐ ${fmt(g.prize)} на ${g.winners}</div></div>
+        ${gw.canEdit && g.status === "open" ? `<button class="btn sm ghost" data-act="adm-gw-cancel" data-id="${g.id}">${ic("x")}</button>` : ""}</div>`).join("")}</div>` : ""}` : ""}
       ${ed ? "" : `<div class="hint" style="font-size:12px;text-align:center;margin-top:8px">Менять настройки может только владелец</div>`}
       <div class="disc">Бонусы за уровни друга платятся только за друзей, пришедших после запуска новой программы (14.10). Рубежи считаются по всем друзьям. Награды растут с уровнем друга, а не с его ставками — накрутить оборотом нельзя.</div>`;
     starify(body);
@@ -600,6 +622,23 @@ Object.assign(ACT, {
   "adm-ref": async el => {
     const k = el.dataset.k, v = topSheet().querySelector(`.adm-oi[data-k="${k}"]`).value;
     await post("admin/refs", { [k]: v }); H.ok(); toast("Сохранено", "ok"); admRender();
+  },
+  "adm-gw-ch": async () => {
+    const v = topSheet().querySelector('[data-gw="channel"]').value.trim(); if (!v) return toast("Укажи канал");
+    const r = await post("admin/gw/channel", { channel: v }); H.ok(); toast("Канал подключён: " + (r.title || r.channel), "ok"); admRender();
+  },
+  "adm-gw-new": async el => {
+    const f = k => topSheet().querySelector(`[data-gw="${k}"]`).value.trim();
+    const b = { title: f("title"), prize: f("prize"), winners: f("winners"), hours: f("hours"), minLevel: f("minLevel") };
+    if (!b.title) return toast("Введи название");
+    if (!await confirmM("Опубликовать розыгрыш?", `«${b.title}»: ⭐ ${fmt(+b.prize)} на ${b.winners}, итоги через ${b.hours} ч. Пост сразу появится в канале.`, "Опубликовать")) return;
+    el.disabled = true;
+    try { await post("admin/gw", b); H.ok(); toast("Опубликовано", "ok"); admRender(); } finally { el.disabled = false; }
+  },
+  "adm-gw-open": el => openGw(+el.dataset.id),
+  "adm-gw-cancel": async el => {
+    if (!await confirmM("Отменить розыгрыш?", "Призы не выплатятся. Пост в канале останется, удали его вручную.", "Отменить")) return;
+    await post(`admin/gw/${el.dataset.id}/cancel`); H.ok(); toast("Отменён", "ok"); admRender();
   },
   "adm-ref-rs": async el => { await post("admin/refs", { [el.dataset.k]: null }); H.ok(); toast("Вернули по умолчанию", "ok"); admRender(); },
   "adm-fr": async el => {

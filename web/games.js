@@ -11,22 +11,62 @@ const GAMES = [
   { id: "wheel", t: "Колесо", s: "Крути и лови множитель", img: "Hypno Lollipop", k: ["#ff4fa0", "#4c0b2c"], chips: ["до x5"] },
   { id: "swap", t: "Обменник", s: "Поменяй подарок на другой той же ценности — покрасивее", img: "Loot Bag", k: ["#ffb340", "#4a2200"], chips: ["без риска", "12 вариантов"] },
 ];
-const gameHead = (img, t, s) => `<div class="ghead"><img src="${A.orig(img, 128)}" alt=""><div><h2>${t}</h2><span>${s}</span></div></div>`;
+// бейдж в шапке игры: сколько игра возвращает игрокам, по нажатию — панель «Честность»
+const gpfBtn = id => { const v = ME && ME.edges && ME.edges[id]; return `<button class="gpf" data-act="fair" data-game="${id}" aria-label="Честность игры">${ic("shield")}${v ? (v * 100).toFixed(v * 100 % 1 ? 1 : 0) + "%" : ""}</button>`; };
+const gameHead = (img, t, s, pf) => `<div class="ghead"><img src="${A.orig(img, 128)}" alt=""><div><h2>${t}</h2><span>${s}</span></div>${pf ? gpfBtn(pf) : ""}</div>`;
 
-// ------------------------------------------------------------ хаб
+// ------------------------------------------------------------ хаб: категории, избранное, недавние
+const GCAT = { crash: "top", upgrade: "top", mines: "top", wheel: "top", dogs: "top", slots: "top",
+  dice: "fast", limbo: "fast", plinko: "fast", rlt: "fast", keno: "fast", scratch: "fast", hilo: "fast",
+  chicken: "fast", stack: "fast", pump: "fast", penalty: "fast",
+  swap: "gifts", craft: "gifts", claw: "gifts", jroul: "gifts", starfall: "gifts", darts: "gifts", drill: "gifts",
+  fish: "gifts", avia: "gifts", duels: "friends", blackjack: "friends", "101": "friends", battle: "friends" };
+const GCAT_RU = { top: "Популярное", fast: "Быстрые", gifts: "На подарках", friends: "С друзьями", other: "Ещё игры" };
+const gLoad = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(d)); } catch (e) { return d; } };
+const gSave = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+let GFAV = new Set(gLoad("gfav", [])), GREC = gLoad("grecent", []);
+
+const G_NEW = new Set(["carousel", "ladder", "safe", "bankbet", "auction"]);
+const G_EDGE = { duels: "duel", "101": "cards", blackjack: "cards" };
+function gCardHTML(g) {
+  const fav = GFAV.has(g.id), rtp = ME && ME.edges && ME.edges[G_EDGE[g.id] || g.id];
+  const sub = g.id === "crash" ? `<span class="gc-live" id="hub-crash"><i></i>LIVE</span>` : rtp ? `<span class="gc-rtp">Возврат ${(rtp * 100).toFixed(rtp * 100 % 1 ? 1 : 0)}%</span>` : `<span class="gc-rtp">Игроки между собой</span>`;
+  return `<div class="gcard gl" data-act="game" data-id="${g.id}" style="--k1:${g.k[0]};--k2:${g.k[1]}">
+    <span class="gl-art"><img class="gc-img" src="${g.imgUrl || A.orig(g.img, 128)}" alt="" loading="lazy"></span>
+    <span class="gl-txt"><span class="gc-t">${g.t}${G_NEW.has(g.id) ? `<i class="gl-new">NEW</i>` : ""}</span>${sub}</span>
+    <button class="gfav${fav ? " on" : ""}" data-act="g-fav" data-id="${g.id}" aria-label="В избранное">${ic("heart")}</button></div>`;
+}
+
+function gDrawSections() {
+  const el = $("#gsec"); if (!el) return;
+  let html = "";
+  html = `<button class="fbanner" data-act="fair"><span>${ic("shield")}</span><div><b>Честная игра</b><small>Шансы открыты, ставки проверяемы</small></div>${ic("chev")}</button>` + html;
+  if (GREC.length) {
+    const recent = GREC.map(id => GAMES.find(g => g.id === id)).filter(Boolean).slice(0, 8);
+    if (recent.length) html += `<div class="sec-t">Недавние</div><div class="grecent">${recent.map(g =>
+      `<button data-act="game" data-id="${g.id}" style="--k1:${g.k[0]};--k2:${g.k[1]}"><img src="${g.imgUrl || A.orig(g.img, 64)}" alt="">${g.t}</button>`).join("")}</div>`;
+  }
+  if (GFAV.size) {
+    const favs = GAMES.filter(g => GFAV.has(g.id));
+    if (favs.length) html += `<div class="sec-t">${ic("heart")} Избранное</div><div class="ghub">${favs.map(gCardHTML).join("")}</div>`;
+  }
+  const fresh = GAMES.filter(g => G_NEW.has(g.id));
+  if (fresh.length) html += `<div class="sec-t">Новинки</div><div class="ghub">${fresh.map(gCardHTML).join("")}</div>`;
+  for (const cat of ["top", "fast", "gifts", "friends", "other"]) {
+    const items = GAMES.filter(g => (GCAT[g.id] || "other") === cat && !G_NEW.has(g.id));
+    if (!items.length) continue;
+    html += `<div class="sec-t">${GCAT_RU[cat]}</div><div class="ghub">${items.map(gCardHTML).join("")}</div>`;
+  }
+  el.innerHTML = html;
+}
+
 let hubPoll = null;
 function renderGames() {
   const v = $("#v-games");
   v.innerHTML = `<div class="bankbar" id="bank"><span class="bk-i">${ic("wallet")}</span><div><span>Банк игры</span><b id="bank-v">—</b></div><em id="bank-d"></em></div>
-    <div class="ghub">${GAMES.map((g, i) => `
-    <div class="gcard${(typeof WIDE_GAMES !== "undefined" ? WIDE_GAMES.has(g.id) : i < 2) ? " wide" : ""}" data-act="game" data-id="${g.id}" style="--k1:${g.k[0]};--k2:${g.k[1]}">
-      <div class="gc-bg"></div><div class="gc-glow"></div>
-      <img class="gc-img" src="${g.imgUrl || A.orig(g.img, 256)}" alt="">
-      ${g.id === "crash" ? `<div class="gc-live" id="hub-crash"><i></i>LIVE</div>` : ""}
-      <div class="gc-t">${g.t}</div><div class="gc-s">${g.s}</div>
-      <div class="gc-chips">${g.chips.map(c => `<span>${c}</span>`).join("")}</div>
-    </div>`).join("")}</div>
-    <div class="disc">Все игры — на игровых звёздах. ${esc(ME.disclaimer)}</div>`;
+    <div id="gsec"></div>
+    <div class="disc">${esc(ME.disclaimer)}</div>`;
+  gDrawSections();
   const live = async () => {
     if (TAB !== "games") return clearInterval(hubPoll);
     if (bgOff()) return;
@@ -48,21 +88,29 @@ function gamesResume() {
 }
 
 // ------------------------------------------------------------ общий блок ставки
-const betHTML = (id, val = 100) => `
+const betHTML = (id, val = 100, qs = [100, 500, 1000, 5000, "max"]) => `
   <div class="amt"><button data-act="gamt" data-for="${id}" data-v="half">½</button>
     <label class="amtf"><span>⭐</span><input id="${id}" inputmode="numeric" value="${val}"></label>
     <button data-act="gamt" data-for="${id}" data-v="dbl">×2</button></div>
-  <div class="quick">${["100", "500", "1000", "5000", "max"].map(x => `<button data-act="gamt" data-for="${id}" data-v="${x}">${x === "max" ? "MAX" : short(+x)}</button>`).join("")}</div>`;
+  <div class="quick">${qs.map(x => `<button data-act="gamt" data-for="${id}" data-v="${x}">${x === "max" ? "MAX" : short(+x)}</button>`).join("")}</div>`;
 const betVal = id => Math.floor(+document.getElementById(id).value || 0);
 
 // ============================================================ КРАШ
 let cVisHook = false, CRASH_ALLIN = -1, CS = null, cOff = 0, cPoll = null, cRaf = null, cBoomRound = 0, autoOn = false, CRASH_ON = false;
 let cStars = [], cBoom = null, cTip = null, cLastT = 0;
+let cSeq = 0, cApplied = 0, cCashing = false, cStallAt = 0;
+// Опрос завис при активной ставке: пишем в журнал сервера, чтобы такие случаи было видно без телефона игрока
+function crashStall(what) {
+  if (!CS || !CS.my || Date.now() - cStallAt < 30000) return;
+  cStallAt = Date.now();
+  post("clienterr", { m: "crash " + what + " timeout", s: "crash", l: "", ua: navigator.userAgent }, { timeout: 4000, quiet: true }).catch(() => {});
+}
 const ROCKET = new Image(); ROCKET.src = A.orig("Stellar Rocket", 128);
 function openCrash() {
-  const el = openSheet(`${gameHead("Stellar Rocket", "Краш", "Забери ставку до взрыва ракеты")}
+  const el = openSheet(`${gameHead("Stellar Rocket", "Краш", "Забери ставку до взрыва ракеты", "crash")}
     <div class="crash-box" id="cbox"><canvas id="ccv"></canvas><div class="mul" id="cmul">—</div></div>
     <div class="hist" id="chist"></div>
+    <div class="cpf" id="cpf" data-act="fair" data-game="crash"></div>
     <div class="betp">
       ${betHTML("camt")}
       <div class="auto"><button class="sw${autoOn ? " on" : ""}" id="csw" data-act="auto-tog"></button><span style="flex:1">Автовывод</span>
@@ -72,6 +120,8 @@ function openCrash() {
     <div class="sec-t">Игроки раунда <span id="ccount"></span></div><div class="box" id="cbets"></div>
     <div class="disc">${esc(ME.disclaimer)}</div>`, "crash-s");
   el._onClose = () => { CRASH_ON = false; stopCrash(); };
+  // в полёте кэшаут срабатывает с касания, не дожидаясь отпускания пальца
+  el.querySelector("#cbtn").addEventListener("pointerdown", () => { if (CS && CS.phase === "run" && CS.my && !CS.my.cashed) crashBtn(); });
   if (!cVisHook) { cVisHook = true; document.addEventListener("visibilitychange", () => { if (CRASH_ON && !bgOff()) pollCrash(); }); }   // вернулись в игру — сразу свежий раунд
   CRASH_ON = true; CS = null; cBoom = null;
   cStars = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), z: .2 + Math.random() * .8 }));
@@ -83,12 +133,20 @@ function stopCrash() { clearInterval(cPoll); cPoll = null; cancelAnimationFrame(
 const mClass = m => m < 1.5 ? "m-lo" : m < 3 ? "m-mid" : m < 10 ? "m-hi" : "m-top";
 const mColor = m => m < 2 ? "#ffffff" : m < 5 ? "#4cf0a0" : m < 10 ? "#ffd04d" : "#ff7ac2";
 async function pollCrash() {
-  try { CS = await api("crash"); } catch (e) { return; }
+  const seq = ++cSeq, t0 = Date.now();
+  let s;
+  try { s = await api("crash", undefined, { timeout: 2500 }); } catch (e) { crashStall("poll"); return; }
+  if (seq <= cApplied) return;   // ответ опоздал: уже применён более свежий
+  cApplied = seq; CS = s;
   if (!CRASH_ON || !$("#chist")) { if (CRASH_ON) stopCrash(), CRASH_ON = false; return; }   // окно краша уже закрыто — опрос гасим
-  cOff = CS.now - Date.now() / 1000;
+  cOff = CS.now - (t0 + Date.now()) / 2000;   // середина запроса: задержка ответа не сбивает часы раунда
   setStars(CS.stars);
   $("#chist").innerHTML = CS.history.map(m => `<span class="${mClass(m)}">${m.toFixed(2)}x</span>`).join("");
   $("#ccount").textContent = CS.bets.length || "";
+  const cpf = $("#cpf");
+  if (cpf) cpf.innerHTML = CS.phase === "end"
+    ? `${ic("shield")}<span>Сид раунда раскрыт. <b>Проверить</b></span>${ic("chev")}`
+    : `${ic("shield")}<span>Сид раунда зафиксирован. <b>Как проверить</b></span>${ic("chev")}`;
   $("#cbets").innerHTML = CS.bets.length ? CS.bets.map(b => `<div class="row tap" data-act="profile" data-id="${b.id}">${avaHTML(b, 34)}<div class="grow"><div class="t">${esc(b.name)}</div><div class="s">⭐ ${fmt(b.amount)}</div></div>
       ${b.cashed ? `<span class="win">x${b.cashed.toFixed(2)} · +${short(b.amount * b.cashed)}</span>` : CS.phase === "end" ? `<span class="lose">−${short(b.amount)}</span>` : `<span class="hint">в игре</span>`}</div>`).join("")
     : emptyHTML("rocket", "Пока никто не поставил — будь первым");
@@ -108,6 +166,8 @@ function crashFrame(now) {
   if (cv.width !== Math.round(W * d)) { cv.width = W * d; cv.height = Hh * d; }
   const c = cv.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0); c.clearRect(0, 0, W, Hh);
   const st = Date.now() / 1000 + cOff, mul = $("#cmul"), btn = $("#cbtn");
+  // Старт известен заранее: если ответ опроса задержался, раунд идёт по часам, и кнопка «Забрать» доступна сразу
+  if (CS.phase === "bet" && st >= CS.until) CS = { ...CS, phase: "run", start: CS.until };
   let t = 0, m = 1;
   if (CS.phase === "run") { t = Math.max(0, st - CS.start); m = Math.exp(CS.k * t); }
   else if (CS.phase === "end") { m = CS.crash; t = Math.log(m) / CS.k; }
@@ -178,7 +238,8 @@ function crashFrame(now) {
     else if (crashLate()) setBtn(btn, "ghost wait", "Старт — ставка на следующий раунд", true);
     else setBtn(btn, "cta gold", `Поставить ⭐ ${fmt(betVal("camt"))}`, false);
   } else if (CS.phase === "run" && my && !my.cashed) {
-    setBtn(btn, "green cta", `Забрать ⭐ ${fmt(my.amount * m)}`, false);
+    if (cCashing) setBtn(btn, "green cta", "Забираем…", true);
+    else setBtn(btn, "green cta", `Забрать ⭐ ${fmt(my.amount * m)}`, false);
   } else if (my && my.cashed) {
     setBtn(btn, "ghost placed", `Забрал x${my.cashed.toFixed(2)} · +⭐ ${fmt(my.amount * my.cashed)}`, true);
   } else setBtn(btn, "ghost wait", CS.phase === "end" ? `Ставки через ${Math.max(1, Math.ceil(CS.until - st))} с` : `В полёте x${m.toFixed(2)} · ставки после взрыва`, true);
@@ -202,6 +263,7 @@ async function crashAllin() {
   try {
     const r = await post("crash/bet", { amount, auto }); H.imp("heavy"); setStars(ME.stars - amount);
     document.body.classList.remove("bw-shake"); void document.body.offsetWidth; document.body.classList.add("bw-shake");
+    CS.my = { amount, auto: auto || null, cashed: null }; cApplied = cSeq;   // ответ опроса, ушедшего до ставки, её не сотрёт
     CRASH_ALLIN = CS.round; await pollCrash(); afterLevelUp(r.levelup);
   } catch (e) {}
 }
@@ -212,13 +274,38 @@ async function crashBtn() {
     const amount = betVal("camt");
     const auto = autoOn ? parseFloat(($("#cauto").value || "").replace(",", ".")) : null;
     if (amount > ME.stars) return toast("Не хватает звёзд ⭐");
-    try { const r = await post("crash/bet", { amount, auto }); H.imp("medium"); setStars(ME.stars - amount); await pollCrash(); afterLevelUp(r.levelup); } catch (e) {}
+    try { const r = await post("crash/bet", { amount, auto }); H.imp("medium"); setStars(ME.stars - amount); CS.my = { amount, auto: auto || null, cashed: null }; cApplied = cSeq; await pollCrash(); afterLevelUp(r.levelup); } catch (e) {}
   } else if (CS.phase === "run" && CS.my && !CS.my.cashed) {
+    // Экран идёт по часам сервера (cOff), поэтому шлём показанный множитель. Сервер платит min(показанный, текущий)
+    // и о взрыве объявляет с задержкой: запрос, ушедший до взрыва, успевает, даже если пинг довёз его позже.
+    if (cCashing) return;
+    cCashing = true;
+    const mSeen = Math.exp(CS.k * (Date.now() / 1000 + cOff - CS.start)), round = CS.round, until = Date.now() + 15000;
+    setBtn($("#cbtn"), "green cta", "Забираем…", true);
+    H.imp("medium");
     try {
-      const r = await post("crash/cashout"); H.ok(); toast(`x${r.mult.toFixed(2)} · +⭐ ${fmt(r.pay)}`, "ok"); coinShower($("#cbox"), Math.min(70, 10 + r.mult * 6));
-      const allin = CRASH_ALLIN === CS.round; await pollCrash();
+      let r = null;
+      while (!r) {
+        try { r = await post("crash/cashout", { m: +mSeen.toFixed(4) }, { timeout: 3000, quiet: true }); }
+        catch (e) {
+          if (e.status === "net" || e.status === "dup" || e.status >= 500) {   // запрос пропал: повторяем с тем же множителем, дважды сервер не заплатит
+            crashStall("cashout");
+            if (Date.now() > until) { toast("Нет связи с сервером. Ставка не забрана", "err"); H.err(); return; }
+            await new Promise(ok => setTimeout(ok, 200));
+            continue;
+          }
+          await pollCrash();
+          if (CS.round === round && CS.my && CS.my.cashed) return;   // первая попытка уже дошла, ответ на неё потерялся
+          if (CS.round === round && CS.phase === "bet") { await new Promise(ok => setTimeout(ok, 150)); continue; }   // нажал в первые миллисекунды, сервер ещё не стартовал
+          toast("Не успел — ракета взорвалась"); H.err();
+          return;
+        }
+      }
+      if (CS.round === round && CS.my) { CS.my.cashed = r.mult; cApplied = cSeq; }   // кнопка обновится, даже если опрос ещё висит
+      H.ok(); toast(`x${r.mult.toFixed(2)} · +⭐ ${fmt(r.pay)}`, "ok"); coinShower($("#cbox"), Math.min(70, 10 + r.mult * 6));
+      const allin = CRASH_ALLIN === round; await pollCrash();
       if (r.mult >= 5 || (allin && r.mult >= 1.5)) bigWin(r.pay, r.mult, allin ? Math.max(5, r.mult * 4) : r.mult);
-    } catch (e) {}
+    } finally { cCashing = false; }
   }
 }
 
@@ -257,19 +344,19 @@ async function pickGifts(title, o, cb) {
 }
 
 // ============================================================ АПГРЕЙД (пачка подарков → одна или несколько целей)
-const UP = { gs: [], ts: [], items: [], total: 0, cols: [], busy: false, angle: 0, fast: false, f: { col: "", qs: "", k: "all" } };
-const UPK = { all: [1.2, 1000, "Все"], low: [1.2, 3, "x1.2–3"], mid: [3, 10, "x3–10"], high: [10, 1000, "x10+"] };
+const UP = { gs: [], ts: [], items: [], total: 0, cols: [], edge: 0, busy: false, angle: 0, fast: false, f: { col: "", qs: "", k: "all" } };
+const UPK = { all: [.2, 1000, "Все"], low: [1.2, 3, "x1.2–3"], mid: [3, 10, "x3–10"], high: [10, 1000, "x10+"] };
 const RING_TICKS = Array.from({ length: 60 }, (_, i) => {
   const a = i / 60 * Math.PI * 2, r1 = i % 5 ? 55 : 53.5;
   return `<line x1="${60 + Math.sin(a) * r1}" y1="${60 - Math.cos(a) * r1}" x2="${60 + Math.sin(a) * 57.5}" y2="${60 - Math.cos(a) * 57.5}"/>`;
 }).join("");
 const upSV = () => UP.gs.reduce((s, g) => s + g.value, 0);
 const upTV = () => UP.ts.reduce((s, g) => s + g.value, 0);
-const upgChance = (tv = upTV()) => tv ? Math.min(80, upSV() / tv * 90) : 0;
+const upgChance = (tv = upTV()) => tv ? Math.min(80, upSV() / tv * (UP.edge || 90)) : 0;   // edge шлёт сервер: акция и админка меняют возврат на лету
 const upKey = t => t.col + "|" + t.model;
 function openUpgrade() {
-  UP.gs = []; UP.ts = []; UP.items = []; UP.busy = false; UP.f = { col: "", qs: "", k: "all" };
-  openSheet(`${gameHead("Mighty Arm", "Апгрейд", "Рискни подарками ради подарков дороже")}
+  UP.gs = []; UP.ts = []; UP.items = []; UP.busy = false; UP.edge = 0; UP.f = { col: "", qs: "", k: "all" };
+  openSheet(`${gameHead("Mighty Arm", "Апгрейд", "Рискни подарками ради подарков дороже", "upgrade")}
     <div class="uring" id="u-ring">
       <svg viewBox="0 0 120 120"><defs><linearGradient id="u-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7dffb8"/><stop offset="1" stop-color="#16c88d"/></linearGradient></defs>
         <g class="ticks">${RING_TICKS}</g>
@@ -311,9 +398,8 @@ function upgMarks() {
     const on = sel.has(upKey(x)), ch = upgChance(on ? tv : tv + x.value), b = c.querySelector(".chance");
     c.classList.toggle("picked", on);
     if (b) b.textContent = `${ch.toFixed(ch < 10 ? 1 : 0)}%`;
-    const s = c.querySelector(".sel");
-    if (on && !s && b) b.insertAdjacentHTML("afterend", `<span class="sel">${ic("check")}</span>`);
-    else if (!on && s) s.remove();
+    const s = c.querySelector(".uqty");
+    if (s) { s.hidden = !on; const n = s.querySelector("b"); if (n) n.textContent = "×" + UP.ts.filter(t => upKey(t) === upKey(x)).length; }
   });
 }
 function upgDraw(result, marks) {
@@ -346,7 +432,7 @@ function upgDraw(result, marks) {
   $("#u-targets").innerHTML = UP.items.length ? UP.items.map(x => {
     const on = sel.has(upKey(x)), c = upgChance(on ? upTV() : upTV() + x.value);
     return `<div class="gcell item${on ? " picked" : ""}" data-act="upg-target" data-k="${reg(x)}">
-      ${giftHTML(x, { lite: true, plain: true })}<span class="chance">${c.toFixed(c < 10 ? 1 : 0)}%</span>${on ? `<span class="sel">${ic("check")}</span>` : ""}
+      ${giftHTML(x, { lite: true, plain: true })}<span class="chance">${c.toFixed(c < 10 ? 1 : 0)}%</span><span class="uqty"${on ? "" : " hidden"}><button data-act="upg-minus" data-k="${reg(x)}" aria-label="Убрать одну">−</button><b>×${UP.ts.filter(t => upKey(t) === upKey(x)).length}</b></span>
       <div class="cap">${esc(x.col)}<br><small>${esc(x.model)} · ⭐ ${short(x.value)}</small></div></div>`;
   }).join("") + (UP.total > UP.items.length ? `<div class="hint" style="grid-column:1/-1;text-align:center;font-size:12.5px;padding:6px">Показаны первые ${UP.items.length} — уточни поиск или коллекцию</div>` : "")
     : `<div style="grid-column:1/-1">${emptyHTML("search", "Ничего не нашлось")}</div>`;
@@ -355,11 +441,15 @@ async function upgLoad() {
   if (!UP.gs.length) return;
   const [kmin, kmax] = UPK[UP.f.k];
   const d = await api(`upgrade/targets?gid=${UP.gs.map(g => g.id).join(",")}&col=${enc(UP.f.col)}&qs=${enc(UP.f.qs)}&kmin=${kmin}&kmax=${kmax}`);
-  UP.items = d.items; UP.total = d.total; UP.cols = d.cols;
-  if (!UP.ts.length && d.items.length) UP.ts = [d.items[Math.min(5, d.items.length - 1)]];
+  UP.items = d.items; UP.total = d.total; UP.cols = d.cols; UP.edge = d.edge;
+  if (!UP.ts.length && d.items.length) {   // цель по умолчанию: дороже ставки, а если дороже нет — две самых дорогих
+    const up = d.items.filter(x => x.value >= 1.2 * upSV());
+    if (up.length) UP.ts = [up[up.length - 1]];
+    else { const top = d.items.reduce((a, b) => b.value > a.value ? b : a); UP.ts = Array(Math.min(10, Math.ceil(1.2 * upSV() / top.value))).fill(top); }
+  }
   upgDraw();
 }
-function upgPick() { if (!UP.busy) pickGifts("Какие подарки ставим?", { pre: UP.gs, max: 10 }, gs => { UP.gs = gs; UP.ts = []; UP.items = []; upgDraw(); upgLoad(); }); }
+function upgPick() { if (!UP.busy) pickGifts("Что ставим?", { pre: UP.gs, max: 10 }, gs => { UP.gs = gs; UP.ts = []; UP.items = []; upgDraw(); upgLoad(); }); }
 async function upgGo() {
   if (UP.busy || !UP.gs.length || !UP.ts.length) return;
   const ch = upgChance();
@@ -368,9 +458,18 @@ async function upgGo() {
   let r;
   try { r = await post("upgrade", { gids: UP.gs.map(g => g.id), targets: UP.ts.map(t => ({ col: t.col, model: t.model })) }); }
   catch (e) { UP.busy = false; upgDraw(undefined, true); return; }
+  // сектор на экране всегда такой же, как у сервера: шанс мог измениться, пока окно было открыто
+  if (r.chance < 80) UP.edge = r.chance * upTV() / upSV();
+  const Cr = 2 * Math.PI * 47;
+  $("#u-arc").style.strokeDasharray = `${Cr * r.chance / 100} ${Cr}`;
+  $("#u-arc").style.transform = `rotate(${90 - r.chance * 1.8}deg)`;
   const arc = r.chance / 100 * 360;
   const m = Math.min(6, arc * .2);   // отступ от краёв сектора: стрелка не встаёт «на линию»
-  const stop = r.win ? m + Math.random() * (arc - 2 * m) : arc + 7 + Math.random() * (346 - arc);
+  // зазор проигрыша — МИНИМУМ 14°, не 7°: скруглённые концы дуги (stroke-linecap:round) рисуют зелёный
+  // ещё на ~6° за математическую границу + у стрелки есть ширина. При 7° она визуально «ложилась
+  // на зелёный краешек», хотя сектор уже кончился → подарок сгорал и выглядело это как враньё казино.
+  // зазор одинаковый с обеих сторон сектора: проигрыш останавливается в диапазоне arc+14° … 360−14°
+  const stop = r.win ? m + Math.random() * (arc - 2 * m) : arc + 14 + Math.random() * (332 - arc);
   const start = UP.angle, to = start - (start % 360) + 360 * (UP.fast ? 1 : 4) + (180 - arc / 2) + stop;   // 4 оборота, в конце медленно ползёт — интрига до последнего   // сектор начинается в 180° − arc/2 (центр снизу)
   const needle = $("#u-needle"), t0 = performance.now(), dur = UP.fast ? 700 : 3200;
   let lastTick = start;
@@ -405,7 +504,7 @@ const gEdge = k => (ME && ME.edges && ME.edges[k]) || .96;
 const minesMult = (n, k) => { let m = gEdge("mines"); for (let i = 0; i < k; i++) m *= (25 - i) / (25 - n - i); return k ? m : 1; };
 async function openMines() {
   mineBusy = false;
-  openSheet(`${gameHead("Ion Gem", "Мины", "Открывай клетки и не наступи на мину")}
+  openSheet(`${gameHead("Ion Gem", "Мины", "Открывай клетки и не наступи на мину", "mines")}
     <div class="ladder" id="m-lad"></div>
     <div class="mgrid" id="m-grid">${Array.from({ length: 25 }, (_, i) => `<button class="mc" data-act="mine" data-i="${i}"><span></span></button>`).join("")}</div>
     <div class="mstat"><div><span>Выигрыш</span><b id="m-win">—</b></div><div><span>Следующий</span><b id="m-next">—</b></div></div>
@@ -471,7 +570,7 @@ const WCOL_R = [["#363a48", "#1d2029"], ["#64708a", "#363d4d"], ["#4f9bff", "#1b
 const wcol = m => { const u = [...new Set(WH)].sort((a, b) => a - b); return WCOL_R[Math.min(WCOL_R.length - 1, u.indexOf(m))] || WCOL_R[0]; };
 async function openWheel() {
   whBusy = false;
-  openSheet(`${gameHead("Hypno Lollipop", "Колесо", "Крути и лови множитель")}
+  openSheet(`${gameHead("Hypno Lollipop", "Колесо", "Крути и лови множитель", "wheel")}
     <div class="wheel"><div class="bulbs" id="w-bulbs">${Array.from({ length: 20 }, (_, i) => `<i style="transform:rotate(${i * 18 + 9}deg) translateY(calc(var(--wr) * -1))"></i>`).join("")}</div>
       <canvas id="w-cv" width="640" height="640"></canvas><div class="wptr"></div>
       <div class="whub"><span>⭐</span></div></div>
@@ -581,9 +680,15 @@ async function swapGo(i) {
 // ============================================================ действия
 Object.assign(ACT, {
   game: el => { H.imp("light"); ({ crash: openCrash, upgrade: openUpgrade, mines: openMines, wheel: openWheel, swap: openSwap, duels: () => openDuels() })[el.dataset.id](); },
+  "g-fav": el => {
+    const id = el.dataset.id;
+    GFAV.has(id) ? GFAV.delete(id) : GFAV.add(id);
+    gSave("gfav", [...GFAV]); H.sel(); gDrawSections();
+  },
   gamt: el => {
     const i = document.getElementById(el.dataset.for), v = el.dataset.v, cur = +i.value || 0;
     i.value = v === "half" ? Math.max(10, Math.floor(cur / 2)) : v === "dbl" ? Math.min(ME.stars, cur * 2) : v === "max" ? ME.stars : v;
+    i.dispatchEvent(new Event("input", { bubbles: true }));   // чтобы подписи с итогом обновлялись и от кнопок
     H.sel();
   },
   "upg-pick": () => upgPick(),
@@ -594,7 +699,14 @@ Object.assign(ACT, {
   "upg-target": el => {
     if (UP.busy) return;
     const x = REG.get(el.dataset.k), i = UP.ts.findIndex(t => upKey(t) === upKey(x));
-    if (i >= 0) UP.ts.splice(i, 1); else if (UP.ts.length >= 5) return toast("Максимум 5 целей"); else UP.ts.push(x);
+    if (UP.ts.length >= 10) return toast("Максимум 10 целей");   // повторное нажатие добавляет ещё такую же цель
+    UP.ts.push(x);
+    H.sel(); upgDraw(undefined, true);
+  },
+  "upg-minus": el => {
+    if (UP.busy) return;
+    const x = REG.get(el.dataset.k), i = UP.ts.findIndex(t => upKey(t) === upKey(x));
+    if (i >= 0) UP.ts.splice(i, 1);
     H.sel(); upgDraw(undefined, true);
   },
   "pg-all": () => { const s = topSheet(), p = s && s._pg; if (!p) return; p.free.slice(0, p.max).forEach(x => p.sel.add(x.id)); H.sel(); s._pgDraw(); },

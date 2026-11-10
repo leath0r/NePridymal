@@ -19,7 +19,7 @@ GAME_NAMES.fish = ["fish", "Рыбалка"];
 let FSH = null, fsPhase = "idle", fsBiteAt = 0, fsRaf = 0, fsPolling = false, fsAuto = false, fsBusy = false, fsLastPoll = 0, fsBob = { x: 0, y: 0 };
 async function openFish() {
   fsStop();
-  const el = openSheet(`<div class="ghead"><img src="${GAMES.find(g => g.id === "fish").imgUrl}" alt=""><div><h2>Рыбалка</h2><span>Подсеки и вытащи, пока леска держит</span></div></div>
+  const el = openSheet(`<div class="ghead">${gpfBtn("fish")}<img src="${GAMES.find(g => g.id === "fish").imgUrl}" alt=""><div><h2>Рыбалка</h2><span>Подсеки и вытащи, пока леска держит</span></div></div>
     <div class="ar-stage fs-stage" id="fs-stage">
       <div class="fs-sky"><i class="fs-sun"></i></div><div class="fs-mnt b"></div><div class="fs-mnt f"></div><div class="fs-pines"></div>
       <div class="fs-water"><i class="fs-glit"></i><i class="fs-wave"></i></div>

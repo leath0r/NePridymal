@@ -22,6 +22,7 @@ from contextvars import ContextVar
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import economy as E
@@ -34,18 +35,36 @@ CUR_TOKEN = ContextVar("cur_token", default=None)  # франшиза: отве�
 DEV = os.environ.get("DEV") == "1"
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "game.db"))
 WEB_DIR = os.environ.get("WEB_DIR", os.path.join(os.path.dirname(__file__), "..", "web"))
+def app_url_v():
+    """Адрес игры с номером сборки: Telegram кэширует страницу, а новый адрес всегда открывается свежим."""
+    try:
+        m = re.search(r"bundle\.js\?v=([0-9a-f]+)", open(os.path.join(WEB_DIR, "index.html"), encoding="utf-8").read())
+        return APP_URL + ("&" if "?" in APP_URL else "?") + "v=" + m.group(1)
+    except (OSError, AttributeError):
+        return APP_URL
+
+
 SERVE_WEB = os.environ.get("SERVE_WEB") == "1"   # отдавать фронт самим (запуск без nginx — run.py)
 
 START_STARS = conf("start.start_stars", 5000)
 REF_BONUS = conf("start.ref_bonus", 2500)
 FREE_CASE_EVERY = int(conf("start.free_case_hours", 3.0) * 3600)
 DAILY_EVERY = int(conf("start.daily_hours", 20.0) * 3600)
+DAILY_SCALE = conf("start.daily_scale", 1.0)
 SELL_RATE = conf("economy.sell_rate", 0.85)
 MARKET_FEE = conf("economy.market_fee", 0.05)
 TRADE_FEE = conf("economy.trade_fee", 0.05)   # со звёзд, переданных в обмене, — в банк
 INCOME_TAX = conf("economy.income_tax", 0.03)  # с собранного дохода и наград сейфа — в банк
 DISCLAIMER = ("Это игра. Подарки и звёзды здесь игровые: звёзды можно купить за Telegram Stars, но вывести их или "
               "обменять на настоящие подарки Telegram нельзя. Картинки подарков — @GiftChanges (api.changes.tg).")
+DISCLAIMER_NOSHOP = ("Это игра. Подарки и звёзды здесь игровые: вывести их или обменять на настоящие подарки Telegram нельзя. "
+                     "Картинки подарков — @GiftChanges (api.changes.tg).")
+
+
+def disclaimer():
+    """Про покупку за Telegram Stars говорим, только пока владелец держит продажу включённой (админка → «Продажи»)."""
+    import shop
+    return DISCLAIMER if shop.shop_on() else DISCLAIMER_NOSHOP
 
 # ============================== БД ==============================
 LOCK = threading.RLock()
@@ -53,6 +72,11 @@ db = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None)
 db.row_factory = sqlite3.Row
 db.executescript("""
 PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
+PRAGMA cache_size=-16384;
+PRAGMA temp_store=MEMORY;
+PRAGMA mmap_size=67108864;
+PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS users(
   id INTEGER PRIMARY KEY, name TEXT, username TEXT, photo TEXT,
   stars INTEGER, xp INTEGER DEFAULT 0, ref_by INTEGER, refs INTEGER DEFAULT 0,
@@ -68,6 +92,7 @@ CREATE TABLE IF NOT EXISTS events(user INTEGER, kind TEXT, delta INTEGER, ts INT
 CREATE INDEX IF NOT EXISTS events_ts ON events(ts);
 CREATE INDEX IF NOT EXISTS events_user ON events(user, ts);
 CREATE INDEX IF NOT EXISTS events_kind ON events(kind, ts, delta);
+CREATE INDEX IF NOT EXISTS events_kind_user ON events(kind, ts, user, delta);
 CREATE TABLE IF NOT EXISTS feed(id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER, gift INTEGER, cs TEXT, ts INTEGER);
 CREATE TABLE IF NOT EXISTS friends(a INTEGER, b INTEGER, status TEXT, ts INTEGER, PRIMARY KEY(a,b));
 CREATE TABLE IF NOT EXISTS trades(id INTEGER PRIMARY KEY AUTOINCREMENT, src INTEGER, dst INTEGER,
@@ -78,14 +103,68 @@ CREATE TABLE IF NOT EXISTS sales(id INTEGER PRIMARY KEY AUTOINCREMENT, gift INTE
 """)
 
 
+def _exec(sql, a, c=None):
+    c = c or db
+    try:
+        return c.execute(sql, a)
+    except sqlite3.OperationalError as e:
+        if "integer overflow" not in str(e) or "SUM(" not in sql.upper():
+            raise
+        print(f"[db] integer overflow, retry with TOTAL(): {sql[:160]}", flush=True)
+        return c.execute(sql.replace("SUM(", "TOTAL("), a)
+
+
 def q(sql, *a):
     with LOCK:
-        return db.execute(sql, a).fetchall()
+        return _exec(sql, a).fetchall()
 
 
 def q1(sql, *a):
     with LOCK:
-        return db.execute(sql, a).fetchone()
+        return _exec(sql, a).fetchone()
+
+
+# Тяжёлые подсчёты (топы за сезон, полная сверка банка, редкость достижений) читаем отдельным соединением только для чтения,
+# без общего лока: WAL позволяет читать параллельно с записью, и ставки остальных игроков их не ждут. Видны только
+# закоммиченные данные — для таблиц лидеров это то же самое. Обычные запросы идут через общее соединение: у него тёплый кэш.
+_RD = threading.local()
+
+
+def _rd():
+    c = getattr(_RD, "c", None)
+    if c is None:
+        if DB_PATH == ":memory:":
+            return None
+        c = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None, timeout=5)
+        c.row_factory = sqlite3.Row
+        c.executescript("PRAGMA query_only=1; PRAGMA cache_size=-8192; PRAGMA temp_store=MEMORY; PRAGMA mmap_size=67108864; PRAGMA busy_timeout=5000;")
+        _RD.c = c
+    return c
+
+
+def qr(sql, *a):
+    """Как q(), но без общего лока — для долгих агрегатов. Внутри tx() читает общим соединением (видит свои записи)."""
+    c = None if LOCK._is_owned() else _rd()
+    if c is None:
+        return q(sql, *a)
+    cur = _exec(sql, a, c)
+    try:
+        return cur.fetchall()
+    finally:
+        cur.close()
+
+
+def qr_snap(*queries):
+    """Несколько чтений одним согласованным снимком базы, без общего лока: [(sql, args), ...] -> [rows, ...]."""
+    c = None if LOCK._is_owned() else _rd()
+    if c is None:
+        with LOCK:
+            return [_exec(sq, a).fetchall() for sq, a in queries]
+    c.execute("BEGIN")
+    try:
+        return [_exec(sq, a, c).fetchall() for sq, a in queries]
+    finally:
+        c.execute("COMMIT")
 
 
 class tx:
@@ -123,12 +202,17 @@ def kv_get(k, default=None):
     return r["v"] if r else default
 
 
+def season_from():
+    """Начало текущего сезона: рейтинги, призы и кэшбэк не считают то, что было до вайпа."""
+    return int(kv_get("bank_from", 0) or 0)
+
+
 def promo():
     """Активная акция или None. Кэш на 5 с — функция зовётся в каждой ставке."""
     t = time.time()
     if t - _PROMO["ts"] < 5:
         return _PROMO["v"]
-    mode, lt = kv_get("promo", "auto"), time.localtime(t)
+    mode, lt = kv_get("promo", "off"), time.localtime(t)
     v = None
     if mode == "on" or (mode == "auto" and lt.tm_wday >= 5):
         midnight = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday + 1, 0, 0, 0, 0, 0, -1))
@@ -148,9 +232,9 @@ def edge(base, promo_edge=0.98):
 EVENTS = [
     {"id": "halloween", "title": "Хэллоуин", "from": (10, 24), "to": (11, 1), "case": "spooky", "sale": 0.15,   # больше нельзя: кейс отдаёт 90% цены, продажа подарка — 85% → при −30% был бы «станок» +9%
      "perks": ["Кейс «Хэллоуин» −15%", "Ивент-задания с повышенными наградами", "Тыквенное оформление игры"],
-     "quests": [("hw_cases", "gift", "🎃 Открой 5 кейсов", "case", 5, 3000),
-                ("hw_dogs", "paw", "🎃 Сыграй 15 раз в Пёсиков", "dogs", 15, 4000),
-                ("hw_chicken", "flame", "🎃 Сыграй 5 раз в Курицу", "chicken", 5, 3000)]},
+     "quests": [("hw_cases", "gift", "Открой 5 кейсов", "case", 5, 3000),
+                ("hw_dogs", "paw", "Сыграй 15 раз в Пёсиков", "dogs", 15, 4000),
+                ("hw_chicken", "flame", "Сыграй 5 раз в Курицу", "chicken", 5, 3000)]},
 ]
 
 
@@ -268,7 +352,7 @@ def level_info(xp):
 
 
 def level_bonus(L):
-    return 100 + 15 * (L - 1)
+    return int((100 + 15 * (L - 1)) * conf("economy.reward_scale", 1.0))
 
 
 try:
@@ -287,6 +371,7 @@ def add_xp(uid, amount):
         # больше преимущества казино в любой игре («станок» через Плинко). Сейчас ≈0,4% от оборота.
         bonus = sum(level_bonus(L) for L in range(old + 1, new + 1))
         db.execute("UPDATE users SET stars=stars+? WHERE id=?", (bonus, uid))
+        event(uid, "level", bonus)
         return {"level": new, "bonus": bonus}
     return None
 
@@ -297,11 +382,11 @@ except sqlite3.OperationalError:
     pass
 CLAN_TAX = {}   # uid → (id клана, ставка налога) — заполняет clans.py
 TAXABLE = {"crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
-           "chicken", "avia", "scratch", "claw", "pump", "drill", "darts", "fish", "keno", "penalty"}   # игры на звёзды; кейсы, апгрейды, битвы и т. п. дают подарки — их не облагаем
+           "chicken", "avia", "scratch", "claw", "pump", "drill", "darts", "fish", "keno", "penalty", "safe", "ladder", "carousel"}   # игры на звёзды; кейсы, апгрейды, битвы и т. п. дают подарки — их не облагаем
 
 
 BIGWIN_MIN = conf("economy.bigwin_min", 3000)   # выигрыш от этой суммы попадает в живую ленту крупных выигрышей (live.py)
-BIG_KINDS = {"crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
+BIG_KINDS = {"carousel", "safe", "ladder", "bankbet", "forecast", "crash", "mines", "wheel", "duel", "dice", "limbo", "plinko", "tower", "slots", "blackjack", "dogs", "roulette", "hilo",
              "chicken", "avia", "scratch", "battle", "starfall", "upgrade", "jroul", "cards", "craft", "claw", "pump", "drill", "darts", "fish", "keno", "penalty"}
 db.executescript("""
 CREATE TABLE IF NOT EXISTS bigwins(id INTEGER PRIMARY KEY, user INTEGER, kind TEXT, amount INTEGER, ts INTEGER);
@@ -311,8 +396,36 @@ LUCKY = ([200, 300, 500, 1000, 2500], [40, 30, 20, 8, 2])
 FLASH_LUCK = lambda: None   # flash.py: во время ивента «Удача ×N» → (N, начало ивента)
 
 
-def event(uid, kind, delta):
+VAULT_TAKE = None   # bank.py: подарок из хранилища банка для выигрыша в апгрейде
+FAUCET_K = lambda: 1.0   # bank.py: стабилизатор бонусов и пассивного дохода
+BIGWIN_FEE, BIGWIN_FEE_MIN = conf("economy.bigwin_fee", 0.01), conf("economy.bigwin_fee_min", 10_000)
+RECENT_WINS = {}   # share.py: последние выигрыши со ставкой, чтобы показать честный множитель на карточке
+FAIR_DONE = None   # fair.py: учёт оборота и фактического возврата по играм
+
+
+REC_WIN = None   # records.on_win, ставится при импорте records.py
+AWAY_HOOK = None   # away.on_return, ставится при импорте away.py
+ACH_PCT = {}   # achrare.py: доля игроков с каждым достижением, %
+SELF_GUARD = None   # limits.guard: лимиты, которые игрок поставил себе сам
+
+
+def event(uid, kind, delta, stake=None, pf=None, res=None):
+    """Движение звёзд в журнал. stake — размер ставки: нужен, чтобы считать фактический возврат игры.
+    pf/res — итог для проверки ставки в панели «Честность»."""
     db.execute("INSERT INTO events VALUES(?,?,?,?)", (uid, kind, delta, now()))
+    if stake is not None and FAIR_DONE:
+        FAIR_DONE(uid, kind, stake, delta + stake, pf, res)
+    if stake and delta > 0 and REC_WIN:   # личные рекорды (records.py)
+        REC_WIN(uid, kind, delta, stake)
+    if stake and delta > 0:
+        RECENT_WINS.setdefault(uid, []).append((kind, stake, delta, now()))
+        del RECENT_WINS[uid][:-5]
+        if len(RECENT_WINS) > 5000:
+            RECENT_WINS.clear()
+    if stake is not None and delta >= BIGWIN_FEE_MIN and BIGWIN_FEE > 0:   # сбор банка с крупного выигрыша, виден в журнале и в правилах
+        fee = int(delta * BIGWIN_FEE)
+        db.execute("UPDATE users SET stars=stars-? WHERE id=?", (fee, uid))
+        db.execute("INSERT INTO events VALUES(?,?,?,?)", (uid, "fee", -fee, now()))
     if delta >= BIGWIN_MIN and kind in BIG_KINDS:   # в живую ленту крупных выигрышей
         db.execute("INSERT INTO bigwins(user,kind,amount,ts) VALUES(?,?,?,?)", (uid, kind, delta, now()))
         db.execute("DELETE FROM bigwins WHERE id < (SELECT MAX(id) FROM bigwins) - 200")
@@ -359,6 +472,8 @@ def register(tg_user, start_param="", bid=0):
         if u and now() - (u["seen"] or 0) < 60:
             return uid, None
         if u:
+            if AWAY_HOOK:   # away.py: вернулся после перерыва — запомнить, с какого момента не было
+                AWAY_HOOK(uid, u["seen"])
             db.execute("UPDATE users SET name=?, username=?, photo=COALESCE(?,photo), seen=? WHERE id=?",
                        (name, tg_user.get("username"), tg_user.get("photo_url"), now(), uid))
             return uid, None
@@ -377,6 +492,7 @@ def register(tg_user, start_param="", bid=0):
         if ref:
             db.execute("UPDATE users SET stars=stars+?, refs=refs+1 WHERE id=?", (jb, ref))
             event(ref, "ref", jb)
+            refs.on_register(uid, ref)   # ключ от кейса «от друга» и цель на двоих
     if ref:
         L1, B1 = refs.cfg("l1_level"), refs.cfg("l1_bonus")
         notify(ref, f"🎉 По твоей ссылке пришёл <b>{esc(name)}</b>." + (f" Тебе +{jb:,} ⭐".replace(",", " ") if jb else "")
@@ -489,10 +605,16 @@ def notify(uid, text, url=None):
     asyncio.run_coroutine_threadsafe(send(), LOOP)
 
 
+async def bot_description(token=None):
+    await tg_call("setMyDescription", _token=token, description=(
+        "🎁 Кейс-симулятор подарков Telegram: 29 кейсов и 20+ игр — краш, Самолётик, Курица, Пёсики, слоты, плинко, мины, "
+        "битва кейсов, скретч-карты, дуэли с друзьями. Маркет, крипта, кланы, турниры каждые 3 дня и альбом коллекций.\n\n⚠️ " + disclaimer()))
+
+
 async def bot_setup(token=None):
     """token — бот франшизы (настраивается так же, без /franchise)."""
     for i in range(3):   # у только что созданного бота-франшизы Telegram иногда не принимает с первого раза
-        r = await tg_call("setChatMenuButton", _token=token, menu_button={"type": "web_app", "text": "Играть", "web_app": {"url": APP_URL}})
+        r = await tg_call("setChatMenuButton", _token=token, menu_button={"type": "web_app", "text": "Играть", "web_app": {"url": app_url_v()}})
         if r.get("ok"):
             break
         print("setChatMenuButton", "франшиза" if token else "главный", r.get("description"), flush=True)
@@ -500,9 +622,7 @@ async def bot_setup(token=None):
     await tg_call("setMyCommands", _token=token, commands=[{"command": "start", "description": "Играть"},
                                                            {"command": "ref", "description": "Моя реф-ссылка"}]
                   + ([] if token else [{"command": "franchise", "description": "Свой бот с этой игрой"}]))
-    await tg_call("setMyDescription", _token=token, description=(
-        "🎁 Кейс-симулятор подарков Telegram: 29 кейсов и 20+ игр — краш, Самолётик, Курица, Пёсики, слоты, плинко, мины, "
-        "битва кейсов, скретч-карты, дуэли с друзьями. Маркет, крипта, кланы, турниры каждые 3 дня и альбом коллекций.\n\n⚠️ " + DISCLAIMER))
+    await bot_description(token)
     await tg_call("setMyShortDescription", _token=token, short_description="Игра-симулятор подарков: кейсы, краш, слоты, маркет. Подарки и звёзды игровые 🎁")
 
 
@@ -544,7 +664,7 @@ async def bot_loop():
 async def on_command(m):
     uid, text = m["from"]["id"], m["text"]
     cmd, _, arg = text.partition(" ")
-    kb = {"inline_keyboard": [[{"text": "🎁 Играть", "web_app": {"url": APP_URL}}]]}
+    kb = {"inline_keyboard": [[{"text": "🎁 Играть", "web_app": {"url": app_url_v()}}]]}
     if CUR_TOKEN.get() is None and (cmd.startswith("/franchise") or (cmd.startswith("/start") and arg == "franchise")):
         await franchise.cmd(m)   # только в главном боте
         return
@@ -583,6 +703,12 @@ async def on_command(m):
         else:
             await tg_call("sendMessage", chat_id=uid, parse_mode="HTML", text="🧾 " + esc(r["err"]), reply_markup=kb)
         return
+    if cmd.startswith("/start") and arg.startswith("gw_") and arg[3:].isdigit():   # розыгрыш из канала (giveaway.py)
+        g = q1("SELECT title FROM gw WHERE id=?", int(arg[3:]))
+        if g:
+            await tg_call("sendMessage", chat_id=uid, parse_mode="HTML", text=f"Розыгрыш «{esc(g['title'])}». Жми кнопку, чтобы участвовать",
+                          reply_markup={"inline_keyboard": [[{"text": "Участвовать", "web_app": {"url": APP_URL + "?gw=" + arg[3:]}}]]})
+            return
     if cmd.startswith("/start") and arg == "wallet":   # из инлайн-подсказки «открой кошелёк»
         await tg_call("sendMessage", chat_id=uid, parse_mode="HTML",
                       text="💸 Открой кошелёк в игре — звёзды можно слать по адресу, QR или через @бот прямо в чате.", reply_markup=kb)
@@ -601,7 +727,8 @@ async def on_command(m):
         txt = ("🎁 <b>Кейс-симулятор подарков</b>\n\nОткрывай кейсы, лови редкие модели и фоны, играй в краш, плинко, башню и слоты, "
                "вызывай друзей на дуэли, торгуй на маркете и выполняй задания.\n\n"
                f"Старт: <b>{START_STARS} ⭐</b>" + (f" + <b>{refs.cfg('new_bonus')} ⭐</b> за приглашение" if arg.startswith("ref_") and refs.cfg("on") and refs.cfg("new_bonus") else "")
-               + f"\n\n<i>⚠️ {esc(DISCLAIMER)}</i>")
+               + ("\nИ ключ от кейса в подарок от друга, он уже ждёт в игре." if arg.startswith("ref_") and refs.cfg("on") and refs.cfg("gift_on") else "")
+               + f"\n\n<i>⚠️ {esc(disclaimer())}</i>")
         await tg_call("sendMessage", chat_id=uid, text=txt, parse_mode="HTML", reply_markup=kb)
     elif cmd.startswith("/ref"):
         link = f"https://t.me/{bot_name()}?start=ref_{uid}"
@@ -619,19 +746,28 @@ async def on_command(m):
 
 
 # ============================== краш ==============================
-CR = {"round": 0, "phase": "bet", "until": 0.0, "start": 0.0, "crash": 1.0, "bets": {}, "history": deque(maxlen=20)}
+CR = {"round": 0, "phase": "bet", "until": 0.0, "start": 0.0, "crash": 1.0, "bets": {}, "history": deque(maxlen=20),
+      "seed": "", "seed_hash": "", "chain": 0, "pos": 0, "edge": 0.97}
 CRASH_EDGE = conf("games.crash_edge", 0.97)   # возврат игроку в краше
 CRASH_K = 0.065  # множитель = e^(k·t): 2x ≈ 10.7 c
 BET_TIME, END_TIME = 8.0, 4.0
+# Защита от пинга: о взрыве сервер объявляет с задержкой CASHOUT_GRACE. Пока идёт задержка, никто не знает, что ракета
+# уже взорвалась, поэтому кэшаут с показанным ДО взрыва множителем можно честно оплатить. Объявлять сразу и платить
+# задним числом нельзя: бот, увидев взрыв, забирал бы ставку в каждом раунде.
+CASHOUT_GRACE = 0.8
 
 
 def crash_mult(t):
     return math.exp(CRASH_K * max(0.0, t))
 
 
-def gen_crash():
-    r = random.random()
-    return max(1.0, min(10000.0, math.floor(edge(tuned("games.crash_edge", CRASH_EDGE), 0.98) * 100 / (1 - r)) / 100))  # 3% преимущество казино (в акцию 2%)
+def gen_crash(r, e):
+    return max(1.0, min(10000.0, math.floor(e * 100 / (1 - r)) / 100))
+
+
+def _crash_uniform(seed):
+    """Точка краша раунда — из HMAC сида раунда (provably fair: хэш сида публикуем ДО раунда)."""
+    return int(hmac.new(seed.encode(), b"crash", hashlib.sha256).hexdigest()[:15], 16) / 16 ** 15
 
 
 def _cashout(uid, b, m):
@@ -642,13 +778,17 @@ def _cashout(uid, b, m):
     pay = int(b["amount"] * m)
     with tx():
         db.execute("UPDATE users SET stars=stars+?, best_crash=MAX(best_crash,?) WHERE id=?", (pay, round(m, 2), uid))
-        event(uid, "crash", pay - b["amount"])
+        event(uid, "crash", pay - b["amount"], stake=b["amount"])
     return pay
 
 
 async def crash_loop():
     while True:
-        CR.update(round=CR["round"] + 1, phase="bet", until=time.time() + BET_TIME, bets={}, crash=gen_crash())
+        link = await asyncio.to_thread(fair.crash_next)   # сид раунда — следующее звено опубликованной цепочки хэшей
+        seed = link["seed"]
+        e = edge(tuned("games.crash_edge", CRASH_EDGE), 0.98)   # возврат фиксируем СЕЙЧАС — верификатору он нужен будет после взрыва
+        CR.update(round=CR["round"] + 1, phase="bet", until=time.time() + BET_TIME, bets={}, seed=seed, edge=e, chain=link["chain"], pos=link["pos"],
+                  seed_hash=hashlib.sha256(seed.encode()).hexdigest(), crash=gen_crash(_crash_uniform(seed), e))
         await asyncio.sleep(BET_TIME)
         CR.update(phase="run", start=time.time())
         while True:
@@ -659,17 +799,20 @@ async def crash_loop():
             if m >= CR["crash"]:
                 break
             await asyncio.sleep(0.05)
+        await asyncio.sleep(CASHOUT_GRACE)   # окно для запросов, ушедших до взрыва; для всех раунд ещё в полёте
         CR.update(phase="end", until=time.time() + END_TIME)
         CR["history"].appendleft(CR["crash"])
         with tx():
+            fair.crash_log(CR["chain"], CR["pos"], CR["round"], CR["crash"], seed, CR["edge"])
             for uid, b in CR["bets"].items():
                 if b["cashed"] is None:
-                    event(uid, "crash", -b["amount"])
+                    event(uid, "crash", -b["amount"], stake=b["amount"])
         await asyncio.sleep(END_TIME)
 
 
 # ============================== приложение ==============================
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)   # бандл 1,4 МБ → 0,4 МБ: через туннель это секунды загрузки
 
 
 @app.exception_handler(ValueError)
@@ -761,7 +904,7 @@ def me(uid=Depends(auth)):
             "streakNext": u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1,   # какой день серии будет при следующем заборе
             "streak": u["streak"], "streakBest": u["best_streak"] if "best_streak" in u.keys() else 0, "streakMs": _next_ms(uid),
             "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": refs.cfg("new_bonus") if refs.cfg("on") else 0, "ref": refs.summary(uid),
-            "disclaimer": DISCLAIMER, "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "stealth": uid in STEALTH, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
+            "disclaimer": disclaimer(), "shopOn": shop.shop_on(), "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "stealth": uid in STEALTH, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
             "sparks": __import__("sparks").sparks_waiting(uid),
             "gamesOff": __import__("gates").games_state(),
@@ -770,7 +913,8 @@ def me(uid=Depends(auth)):
             "fees": fees.public(),
             "wipe": wipe.public(uid), "polls": polls.public(uid),
             "tickets": tickets.me_info(uid),
-            "edges": {"x": edge(tuned("games.edge", EDGE)), "mines": edge(tuned("games.mines_edge", MINES_EDGE)), "upg": edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)},   # фронт показывает иксы кубика/лимбо/мин по этим же коэффициентам
+            # фронт считает иксы по этим же коэффициентам и показывает возврат каждой игры в её шапке
+            "edges": {**fair.declared(), "x": edge(tuned("games.edge", EDGE)), "mines": edge(tuned("games.mines_edge", MINES_EDGE)), "upg": edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)},
             "inbox": q1("SELECT COUNT(*) n FROM inbox WHERE user=? AND id>?", uid, u["inbox_read"] if "inbox_read" in u.keys() else 0)["n"], **counters(uid), "clanChat": CLAN_UNREAD(uid) if CLAN_UNREAD else 0, "cashback": __import__("retain").cashback_preview(uid)}
 
 
@@ -781,6 +925,17 @@ def look_of(col, seed):
     b = rng.choice(d["backdrops"])
     s = rng.choice(d["symbols"])
     return {"c": b[2:6], "symbol": s[0]}
+
+
+db.execute("CREATE TABLE IF NOT EXISTS case_limit(cid TEXT PRIMARY KEY, n INTEGER)")
+for _cid, _n in E.LIMITED.items():
+    db.execute("INSERT OR IGNORE INTO case_limit VALUES(?,?)", (_cid, _n))
+
+
+def _case_limit(cid):
+    if cid not in E.LIMITED:
+        return {}
+    return {"limit": E.LIMITED[cid], "left": q1("SELECT n FROM case_limit WHERE cid=?", cid)["n"]}
 
 
 @app.get(R + "/cases")
@@ -794,7 +949,7 @@ def cases(uid=Depends(auth)):
             items.append({"col": k, "p": round(v * 100, 3), "base": E.base(k), "ev": round(c["evs"][k]), **look_of(k, "shop")})
         items.sort(key=lambda x: -x["ev"])
         out.append({"id": c["id"], "title": c["title"], "price": case_price(c), "full": c["price"], "keys": keys.get(c["id"], 0),
-                    "level": c["level"], "cover": c["cover"],
+                    "level": c["level"], "cover": c["cover"], **_case_limit(c["id"]),
                     "top": top, "pat": look_of(c["cover"], c["id"])["symbol"],
                     "previews": [x["col"] for x in items[:3]], "items": items})
     return out
@@ -806,12 +961,19 @@ def open_case(cid: str, n: int = 1, uid=Depends(auth)):
     n = 1 if cid == "free" else max(1, min(10, n))
     t = now()
     with tx():
+        if cid in E.LIMITED:   # лимитный тираж: остаток уменьшается в той же транзакции
+            left = q1("SELECT n FROM case_limit WHERE cid=?", cid)["n"]
+            if left < n:
+                err("Тираж закончился" if not left else f"Осталось только {left}")
+            db.execute("UPDATE case_limit SET n=n-? WHERE cid=?", (n, cid))
         u = q1("SELECT * FROM users WHERE id=?", uid)
         price = case_price(c)
         kr = q1("SELECT n FROM case_keys WHERE user=? AND cid=?", uid, cid)
         keys = min(n, kr["n"] if kr else 0)   # сначала тратим ключи (выданные админом), остальное — за звёзды
         if keys < n and level(u["xp"]) < c["level"]:   # ключом можно открыть и без нужного уровня
             err(f"Нужен {c['level']} уровень")
+        if SELF_GUARD and cid != "free" and n > keys:   # за звёзды — под лимиты игрока; бесплатный кейс и ключи нет
+            SELF_GUARD(uid, price * (n - keys))
         if keys:
             db.execute("UPDATE case_keys SET n=n-? WHERE user=? AND cid=?", (keys, uid, cid))
         elif cid == "free":
@@ -821,16 +983,23 @@ def open_case(cid: str, n: int = 1, uid=Depends(auth)):
         if u["stars"] < price * (n - keys):
             err("Не хватает звёзд")
         ids = []
+        rng = fair.stream(uid, "case", cid)
+        drops = []
         for i in range(n):
-            d = E.open_case(cid)
+            d = E.open_case(cid, rng)
+            drops.append(d["value"])
             cur = db.execute("INSERT INTO gifts(owner,col,model,backdrop,symbol,num,value,created) VALUES(?,?,?,?,?,?,?,?)",
                              (uid, d["col"], d["model"], d["backdrop"], d["symbol"], d["num"], d["value"], t))
             ids.append(cur.lastrowid)
             if i < keys:
                 event(uid, "gift", d["value"])
             else:
-                event(uid, "case", d["value"] - price)
+                event(uid, "case", d["value"] - price, stake=price)
+        fair.record(uid, "case", price * (n - keys), sum(drops), {"case": cid, "drops": drops}, fair.close_stream(rng))
+        if keys:
+            refs.on_key_open(uid, cid, q1("SELECT col FROM gifts WHERE id=?", ids[0])["col"])
         best = max(ids, key=lambda i: q1("SELECT value FROM gifts WHERE id=?", i)["value"])
+        __import__("records").on_gift(uid, best, q1("SELECT value FROM gifts WHERE id=?", best)["value"])
         db.execute("INSERT INTO feed(user,gift,cs,ts) VALUES(?,?,?,?)", (uid, best, cid, t))
         db.execute("UPDATE users SET stars=stars-?, opened=opened+? WHERE id=?", (price * (n - keys), n, uid))
         lvl = add_xp(uid, max(20, c["price"] // 10) * n)
@@ -856,7 +1025,7 @@ def daily(uid=Depends(auth)):
         if u["last_daily"] + DAILY_EVERY > t:
             err("Ещё рано")
         streak = u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1
-        bonus = (300 + 100 * min(streak, 7)) * (2 if promo() else 1) * (2 if is_vip(u) else 1)
+        bonus = int((300 + 100 * min(streak, 7)) * DAILY_SCALE * FAUCET_K()) * (2 if promo() else 1) * (2 if is_vip(u) else 1)
         db.execute("UPDATE users SET stars=stars+?, last_daily=?, streak=?, best_streak=MAX(best_streak,?) WHERE id=?", (bonus, t, streak, streak, uid))
         event(uid, "daily", bonus)
         key = STREAK_KEYS.get(streak) or (STREAK_KEYS[7] if streak > 7 and streak % 7 == 0 else None)
@@ -953,7 +1122,7 @@ def achievements(u, gifts, friends, worth):
     import eggs
     n = eggs.egg_count(u["id"])
     A.append(("🥚", "Охотник за пасхалками", f"Найди {eggs.EGG_NEED} секретов в игре · найдено {min(n, eggs.EGG_NEED)} из {eggs.EGG_NEED}", n >= eggs.EGG_NEED))
-    return [{"e": e, "t": t, "d": d, "got": bool(g)} for e, t, d, g in A]
+    return [{"e": e, "t": t, "d": d, "got": bool(g), "pct": ACH_PCT.get(t)} for e, t, d, g in A]
 
 
 @app.get(R + "/collections")
@@ -1215,6 +1384,9 @@ def crash_state(uid=Depends(auth)):
     my = CR["bets"].get(uid)
     return {"round": CR["round"], "phase": CR["phase"], "now": t, "until": CR["until"], "start": CR["start"], "k": CRASH_K,
             "crash": CR["crash"] if CR["phase"] == "end" else None, "history": list(CR["history"]),
+            "hash": CR["seed_hash"] if CR["phase"] in ("bet", "run") else None,
+            "seed": CR["seed"] if CR["phase"] == "end" else None,
+            "chain": {"id": CR["chain"], "pos": CR["pos"]},
             "bets": bets, "my": my and {"amount": my["amount"], "auto": my["auto"], "cashed": my["cashed"]},
             "stars": q1("SELECT stars FROM users WHERE id=?", uid)["stars"]}
 
@@ -1227,8 +1399,7 @@ async def crash_bet(req: Request, uid=Depends(auth)):
     auto = round(float(auto), 2) if auto else None
     if auto is not None and not 1.01 <= auto <= 10000:   # «not …» — чтобы NaN/Infinity из JSON тоже отсекались
         err("автовывод от 1.01x до 10000x")
-    if not 10 <= amount <= 1_000_000:
-        err("ставка от 10 до 1 000 000 ⭐")
+    check_bet(uid, amount)   # потолок в кризис банка, после просрочки кредита, лимиты игрока
     if CR["phase"] != "bet" or time.time() > CR["until"] - 0.2:
         err("приём ставок закрыт, жди раунд")
     with tx():   # проверка и запись ставки атомарно — двойной тап не спишет дважды
@@ -1239,18 +1410,28 @@ async def crash_bet(req: Request, uid=Depends(auth)):
             err("Не хватает звёзд")
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (amount, uid))
         lvl = add_xp(uid, max(1, amount // 20))
-        CR["bets"][uid] = {"amount": amount, "auto": auto, "cashed": None,
+        CR["bets"][uid] = {"amount": amount, "auto": auto, "cashed": None, "round": CR["round"],
                            "name": (u["nick"] if "nick" in u.keys() and u["nick"] else u["name"]),
                            "photo": (u["avatar"] if "avatar" in u.keys() and u["avatar"] else u["photo"])}
     return {"ok": True, "levelup": lvl}
 
 
 @app.post(R + "/crash/cashout")
-def crash_cashout(uid=Depends(auth)):
+async def crash_cashout(req: Request, uid=Depends(auth)):
+    """Кэшаут по множителю, который игрок видел при нажатии (m): платим min(показанный, текущий).
+    Выигрыш, только если этот множитель меньше точки взрыва. Запрос, доехавший в окне CASHOUT_GRACE, засчитывается так же:
+    в это окно игрок ещё не может знать о взрыве, а поздний запрос с множителем выше взрыва всё равно проигрывает."""
     b = CR["bets"].get(uid)
-    if CR["phase"] != "run" or not b or b["cashed"] is not None:
+    if not b or b["cashed"] is not None:
         err("нечего забирать")
-    m = crash_mult(time.time() - CR["start"])
+    try:
+        claimed = float((await req.json()).get("m") or 0)
+    except Exception:
+        claimed = 0
+    if CR["phase"] != "run":
+        err("не успел 💥")
+    cur = crash_mult(time.time() - CR["start"])
+    m = min(claimed, cur) if claimed >= 1.01 else cur
     if m >= CR["crash"]:
         err("не успел 💥")
     pay = _cashout(uid, b, m)
@@ -1276,14 +1457,20 @@ MAX_BET = conf("games.max_bet", 1_000_000)
 
 
 BET_CAP = None   # bank.py: в кризис банка — потолок ставки
+LOAN_BET_CAP = None   # loans.py: после просрочки кредита — потолок ставки
 VAULT_PUT = None  # bank.py: проигранные в апгрейде подарки → хранилище банка
 
 
 def check_bet(uid, amount, lo=10, hi=None):
     hi = hi or MAX_BET
+    if SELF_GUARD:
+        SELF_GUARD(uid, amount)
     cap = BET_CAP() if BET_CAP else None
     if cap and amount > cap:
         err(f"Банк в кризисе — ставка не больше {cap:,} ⭐".replace(",", " "))
+    lc = LOAN_BET_CAP(uid) if LOAN_BET_CAP else None
+    if lc and amount > lc:
+        err(f"После просрочки кредита ставка не больше {lc:,} ⭐".replace(",", " "))
     if not lo <= amount <= hi:
         err(f"ставка от {lo} до {hi:,} ⭐".replace(",", " "))
     if bal(uid) < amount:
@@ -1325,17 +1512,24 @@ def upgrade_targets(gid: str = "", col: str = "", qs: str = "", kmin: float = 1.
            and (not qs or qs in t[0].lower() or qs in t[1].lower())]
     cols = sorted({t[0] for t in upg_all() if t[3] >= 0.2 * v})
     items = [{**upg_card(*t), "chance": round(min(UPG_MAX, v / t[3] * edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93)) * 100, 2)} for t in res[:300]]
-    return {"items": items, "total": len(res), "cols": cols, "stake": v}
+    # edge — чтобы клиент показывал РЕАЛЬНЫЙ шанс (а не свой расчёт: админка/акция меняют возврат на лету)
+    return {"items": items, "total": len(res), "cols": cols, "stake": v,
+            "edge": round(edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93) * 100, 2)}
+
+
+UPG_MAX_TARGETS = 10   # целей в одном апгрейде: можно одну и ту же несколько раз (2 Пепе за 1 Пепе)
 
 
 @app.post(R + "/upgrade")
 async def upgrade(req: Request, uid=Depends(auth)):
     """Апгрейд: пачка подарков (до 10) → одна или несколько целей (до 5). Шанс от суммарных ценностей."""
+    if SELF_GUARD:
+        SELF_GUARD(uid, 0)
     b = await req.json()
     gids = [int(x) for x in (b.get("gids") or [b.get("gid", 0)])][:10]
     tgs = b.get("targets") or [{"col": b.get("col", ""), "model": b.get("model", "")}]
     targets = []
-    for t in tgs[:5]:
+    for t in tgs[:UPG_MAX_TARGETS]:
         x = next((y for y in upg_all() if y[0] == str(t.get("col")) and y[1] == str(t.get("model"))), None)
         if not x:
             err("нет такой цели")
@@ -1351,7 +1545,8 @@ async def upgrade(req: Request, uid=Depends(auth)):
         if tv < 1.2 * sv:
             err("цель должна быть дороже ставки хотя бы в 1.2 раза")
         chance = min(UPG_MAX, sv / tv * edge(tuned("games.upgrade_edge", UPG_EDGE), 0.93))
-        win = random.random() < chance
+        rr, pf = fair.rolls(uid, "upgrade", ref=",".join(map(str, gids)), n=4)   # честный бросок: выигрыш + вид выигрышного подарка
+        win = rr[0] < chance
         if not win and VAULT_PUT:   # проигранные подарки — в хранилище банка (bank.py), через 48 ч перерабатываются
             VAULT_PUT(uid, gifts)
         for g in gids:
@@ -1362,16 +1557,20 @@ async def upgrade(req: Request, uid=Depends(auth)):
         if win:
             for col, model, pm, value in targets:
                 d = E.CATALOG[col]
-                bd = random.choices(d["backdrops"], weights=[x[1] for x in d["backdrops"]])[0][0]
-                sy = random.choices(d["symbols"], weights=[max(x[1], .1) for x in d["symbols"]])[0][0]
+                old = VAULT_TAKE(col, model, value) if VAULT_TAKE else None   # есть такой подарок в хранилище банка — выдаём его, а не печатаем новый
+                bd = old["backdrop"] if old else d["backdrops"][fair.pick(rr[1], [x[1] for x in d["backdrops"]])][0]
+                sy = old["symbol"] if old else d["symbols"][fair.pick(rr[2], [max(x[1], .1) for x in d["symbols"]])][0]
+                num = old["num"] if old else 1 + fair.idx(rr[3], E.supply(col))
                 cur = db.execute("INSERT INTO gifts(owner,col,model,backdrop,symbol,num,value,created) VALUES(?,?,?,?,?,?,?,?)",
-                                 (uid, col, model, bd, sy, random.randint(1, E.supply(col)), value, now()))
+                                 (uid, col, model, bd, sy, num, value, now()))
+                if old:
+                    db.execute("INSERT OR REPLACE INTO gift_link(gift,prev) VALUES(?,?)", (cur.lastrowid, old["id"]))
                 new.append(gift_out(q1("SELECT * FROM gifts WHERE id=?", cur.lastrowid)))
             best = max(new, key=lambda g: g["value"])
             db.execute("INSERT INTO feed(user,gift,cs,ts) VALUES(?,?,?,?)", (uid, best["id"], "upgrade", now()))
-        event(uid, "upgrade", (tv if win else 0) - sv)
+        event(uid, "upgrade", (tv if win else 0) - sv, stake=sv, pf=pf, res={"p": round(chance, 6), "win": win})
         lvl = add_xp(uid, max(5, sv // 20))
-    return {"win": win, "chance": round(chance * 100, 2), "gifts": new, "gift": new[0] if new else None, "levelup": lvl}
+    return {"win": win, "chance": round(chance * 100, 2), "gifts": new, "gift": new[0] if new else None, "levelup": lvl, "pf": pf}
 
 
 # --- мины 5×5 ---
@@ -1414,11 +1613,12 @@ async def mines_start(req: Request, uid=Depends(auth)):
             err("игра уже идёт")
         check_bet(uid, bet)
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (bet, uid))
-        bombs = random.sample(range(25), n)
+        rr, pf = fair.rolls(uid, "mines", ref=str(n), n=n)
+        bombs = fair.sample(rr, range(25), n)
         db.execute("INSERT INTO mines VALUES(?,?,?,?,?,?)", (uid, bet, n, json.dumps(bombs), "[]", now()))
         lvl = add_xp(uid, max(1, bet // 20))
         r = q1("SELECT * FROM mines WHERE user=?", uid)
-    return {**mines_state(r), "stars": bal(uid), "levelup": lvl}
+    return {**mines_state(r), "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 @app.post(R + "/mines/reveal")
@@ -1433,7 +1633,7 @@ async def mines_reveal(req: Request, uid=Depends(auth)):
             return mines_state(r)
         if cell in bombs:
             db.execute("DELETE FROM mines WHERE user=?", (uid,))
-            event(uid, "mines", -r["bet"])
+            event(uid, "mines", -r["bet"], stake=r["bet"], res={"n": r["n"], "bombs": bombs, "open": opened})
             return {**mines_state(r, True), "active": False, "boom": cell}
         opened.append(cell)
         db.execute("UPDATE mines SET opened=? WHERE user=?", (json.dumps(opened), uid))
@@ -1448,7 +1648,7 @@ def _mines_cash(uid, r):
     pay = int(r["bet"] * m)
     db.execute("DELETE FROM mines WHERE user=?", (uid,))
     db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, uid))
-    event(uid, "mines", pay - r["bet"])
+    event(uid, "mines", pay - r["bet"], stake=r["bet"], res={"n": r["n"], "bombs": json.loads(r["bombs"]), "open": json.loads(r["opened"])})
     return {**mines_state(r, True), "active": False, "pay": pay, "stars": bal(uid)}
 
 
@@ -1485,12 +1685,13 @@ async def wheel_spin(req: Request, uid=Depends(auth)):
     with tx():
         check_bet(uid, bet)
         segs = wheel_segs()
-        idx = random.randrange(len(segs))
+        rr, pf = fair.rolls(uid, "wheel", n=1)
+        idx = fair.idx(rr[0], len(segs))
         pay = int(bet * segs[idx])
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
-        event(uid, "wheel", pay - bet)
+        event(uid, "wheel", pay - bet, stake=bet, pf=pf, res={"idx": idx, "segs": len(segs), "mult": segs[idx]})
         lvl = add_xp(uid, max(1, bet // 20))
-    return {"idx": idx, "mult": segs[idx], "pay": pay, "stars": bal(uid), "levelup": lvl}
+    return {"idx": idx, "mult": segs[idx], "pay": pay, "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 # --- обменник: подарок → другой подарок той же ценности (комиссия до 15%) ---
@@ -1586,6 +1787,8 @@ def _pvp_guard(uid):
     import loans
     if loans.stars_locked(uid):
         err("пока не закрыт кредит без залога или баланс в минусе, играть против других игроков нельзя")
+    if SELF_GUARD:   # перерыв или исчерпанный дневной лимит (limits.py)
+        SELF_GUARD(uid, 0)
 
 
 @app.post(R + "/duels")
@@ -1633,19 +1836,25 @@ def duel_action(did: int, action: str, uid=Depends(auth)):
             db.execute("UPDATE users SET stars=stars-? WHERE id=?", (d["stake"], uid))
             if d["game"] == "crash":
                 # краш-дуэль идёт вживую: точка взрыва известна только серверу, старт — когда оба нажмут «Готов»
-                cp = min(100.0, max(1.01, 1 / (1 - random.random())))
+                rng = fair.pub("duel", f"crash:{did}")
+                cp = min(100.0, max(1.01, 1 / (1 - rng.random())))
+                fair.close_pub(rng, {"cp": round(cp, 4)})
                 db.execute("UPDATE duels SET b=?, status='live', cp=?, ts=?, ready='{}' WHERE id=?", (uid, cp, now(), did))
                 nm = q1("SELECT name FROM users WHERE id=?", uid)["name"]
                 res = {"live": did, "stars": bal(uid)}
                 msg = (d["a"], f"🚀 <b>{esc(nm)}</b> принял краш-дуэль на {d['stake']} ⭐ — заходи и жми «Готов»!", APP_URL + f"?cduel={did}")
             elif d["game"] == "coin":
-                side = random.randint(0, 1)          # 0 — создатель, 1 — принявший
+                rng = fair.pub("duel", f"coin:{did}")
+                side = rng.randint(0, 1)             # 0 — создатель, 1 — принявший
+                fair.close_pub(rng, {"side": side})
                 ra, rb, win = [side], [side], (d["a"] if side == 0 else uid)
             else:
+                rng = fair.pub("duel", f"dice:{did}")
                 while True:
-                    ra, rb = [random.randint(1, 6), random.randint(1, 6)], [random.randint(1, 6), random.randint(1, 6)]
+                    ra, rb = [rng.randint(1, 6), rng.randint(1, 6)], [rng.randint(1, 6), rng.randint(1, 6)]
                     if sum(ra) != sum(rb):
                         break
+                fair.close_pub(rng, {"a": ra, "b": rb})
                 win = d["a"] if sum(ra) > sum(rb) else uid
             if d["game"] != "crash":
                 pay = int(d["stake"] * 2 * (1 - DUEL_FEE))
@@ -1653,8 +1862,8 @@ def duel_action(did: int, action: str, uid=Depends(auth)):
                 db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, win))
                 db.execute("UPDATE duels SET b=?, status='done', winner=?, ra=?, rb=?, done=? WHERE id=?",
                            (uid, win, json.dumps(ra), json.dumps(rb), now(), did))
-                event(win, "duel", pay - d["stake"])
-                event(lose, "duel", -d["stake"])
+                event(win, "duel", pay - d["stake"], stake=d["stake"])
+                event(lose, "duel", -d["stake"], stake=d["stake"])
                 res = duel_out(q1("SELECT * FROM duels WHERE id=?", did))
                 res["stars"] = bal(uid)
                 nm = q1("SELECT name FROM users WHERE id=?", uid)["name"]
@@ -1728,6 +1937,7 @@ QNEW = [   # «новинка дня» — из свежих игр
     ("n_penw", "trophy", "Забери выигрыш в «Пенальти» 3 раза", "penalty", ("penalty",), "w", 3, 0, 600, 0),
 ]
 QCHEST = 1000   # сундук: забрал все задания дня
+QWEEK = 7000    # сундук 7 дней подряд
 
 
 def day_start():
@@ -1784,7 +1994,22 @@ def quests_state(uid):
     done = sum(1 for x in items if x["claimed"])
     items.append({"id": "chest", "icon": "trophy", "t": "Сундук: выполни все задания", "need": len(items),
                   "have": done, "reward": prize_k(QCHEST), "claimed": "chest" in got, "tier": "chest"})
+    st7 = chest_streak(uid)
+    items.append({"id": "week", "icon": "crown", "t": "Неделя без пропусков: сундук 7 дней подряд", "need": 7,
+                  "have": min(7, st7), "reward": prize_k(QWEEK), "claimed": "week" in got, "tier": "week"})
     return items
+
+
+def chest_streak(uid):
+    """Сколько дней подряд (по сегодня или по вчера) открыт сундук, считая после последней недельной награды."""
+    d0 = day_start()
+    last = q1("SELECT MAX(day) d FROM quest_claims WHERE user=? AND qid='week'", uid)["d"] or 0
+    days = {r["day"] for r in q("SELECT day FROM quest_claims WHERE user=? AND qid='chest' AND day>? AND day>=?", uid, last, d0 - 8 * 86400)}
+    d, s = (d0 if d0 in days else d0 - 86400), 0
+    while d in days:
+        s += 1
+        d -= 86400
+    return s
 
 
 @app.get(R + "/quests")
@@ -1801,9 +2026,10 @@ def quest_claim(qid: str, uid=Depends(auth)):
         if st["have"] < st["need"]:
             err("задание ещё не выполнено")
         db.execute("INSERT INTO quest_claims VALUES(?,?,?)", (uid, qid, day_start()))
-        db.execute("UPDATE users SET stars=stars+? WHERE id=?", (st["reward"], uid))
-        event(uid, "quest", st["reward"])
-    return {"reward": st["reward"], "stars": bal(uid)}
+        got = max(1, int(st["reward"] * conf("economy.reward_scale", 1.0)))
+        db.execute("UPDATE users SET stars=stars+? WHERE id=?", (got, uid))
+        event(uid, "quest", got)
+    return {"reward": got, "stars": bal(uid)}
 
 
 # ---------------- ещё мини-игры: кубик, лимбо, плинко, башня, слоты ----------------
@@ -1833,10 +2059,16 @@ async def dice(req: Request, uid=Depends(auth)):
     mult = round(edge(tuned("games.edge", EDGE)) * 100 / chance, 4)
     if mult < 1.01:   # при низком возврате высокий шанс давал бы выплату меньше ставки
         err(f"шанс не больше {int(edge(tuned('games.edge', EDGE)) * 100 / 1.01)}%")
-    roll = random.randrange(10000) / 100
-    win = roll > target if over else roll < target
-    pay = int(bet * mult) if win else 0
-    return {"roll": roll, "win": win, "mult": round(mult, 2), **_bet_tx(uid, bet, "dice", pay)}
+    with tx():
+        check_bet(uid, bet)
+        rr, pf = fair.rolls(uid, "dice", ref=f"{target}:{'o' if over else 'u'}")
+        roll = fair.idx(rr[0], 10000) / 100
+        win = roll > target if over else roll < target
+        pay = int(bet * mult) if win else 0
+        db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
+        event(uid, "dice", pay - bet, stake=bet, pf=pf, res={"roll": roll, "target": target, "over": over, "mult": mult})
+        lvl = add_xp(uid, max(1, bet // 20))
+    return {"roll": roll, "win": win, "mult": round(mult, 2), "pay": pay, "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 # --- лимбо: случайный множитель, выигрыш если не меньше цели ---
@@ -1846,10 +2078,16 @@ async def limbo(req: Request, uid=Depends(auth)):
     bet, target = int(b.get("bet", 0)), round(float(b.get("target", 2)), 2)
     if not 1.01 <= target <= 1000:
         err("цель от 1.01x до 1000x")
-    r = max(1.0, min(10000.0, math.floor(edge(tuned("games.edge", EDGE)) * 100 / (1 - random.random())) / 100))
-    win = r >= target
-    pay = int(bet * target) if win else 0
-    return {"result": r, "win": win, **_bet_tx(uid, bet, "limbo", pay)}
+    with tx():
+        check_bet(uid, bet)
+        rr, pf = fair.rolls(uid, "limbo", ref=str(target))
+        r = max(1.0, min(10000.0, math.floor(edge(tuned("games.edge", EDGE)) * 100 / (1 - rr[0])) / 100))
+        win = r >= target
+        pay = int(bet * target) if win else 0
+        db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
+        event(uid, "limbo", pay - bet, stake=bet, pf=pf, res={"result": r, "target": target, "edge": edge(tuned("games.edge", EDGE))})
+        lvl = add_xp(uid, max(1, bet // 20))
+    return {"result": r, "win": win, "pay": pay, "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 # --- плинко: 12 рядов, 13 лунок, три уровня риска ---
@@ -1900,23 +2138,25 @@ async def plinko(req: Request, uid=Depends(auth)):
         err("Не так быстро")
     _PLAST[uid] = t
     balls = []
-    for _ in range(n):
-        path = [random.randint(0, 1) for _ in range(PLINKO_ROWS)]
-        slot = sum(path)
-        mult = tables[risk][slot]
-        balls.append({"path": path, "slot": slot, "mult": mult, "pay": int(bet * mult)})
     with tx():
         if not 10 <= bet:
             err("ставка от 10 ⭐ за шарик")
         if bet * n > MAX_BET:
             err(f"за один бросок не больше ⭐ {MAX_BET:,} — уменьши ставку или число шариков".replace(",", " "))
         check_bet(uid, bet * n, 10 * n)   # лимит, баланс и кризисный потолок — на всю сумму
+        rr, pf = fair.rolls(uid, "plinko", ref=risk, n=n * PLINKO_ROWS)
+        for bi in range(n):
+            path = [fair.idx(rr[bi * PLINKO_ROWS + j], 2) for j in range(PLINKO_ROWS)]
+            slot = sum(path)
+            mult = tables[risk][slot]
+            balls.append({"path": path, "slot": slot, "mult": mult, "pay": int(bet * mult)})
         pay = sum(x["pay"] for x in balls)
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet * n, pay, uid))
         for x in balls:
-            event(uid, "plinko", x["pay"] - bet)
+            event(uid, "plinko", x["pay"] - bet, stake=bet)
+        fair.record(uid, "plinko", bet * n, pay, {"rows": PLINKO_ROWS, "slots": [x["slot"] for x in balls]}, pf)
         lvl = add_xp(uid, max(1, bet * n // 20))
-    return {"balls": balls, "bet": bet, "pay": pay, "stars": bal(uid), "levelup": lvl}
+    return {"balls": balls, "bet": bet, "pay": pay, "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 # --- башня: 8 этажей, на каждом одна мина среди плиток ---
@@ -1957,18 +2197,19 @@ async def tower_start(req: Request, uid=Depends(auth)):
             err("игра уже идёт")
         check_bet(uid, bet)
         db.execute("UPDATE users SET stars=stars-? WHERE id=?", (bet, uid))
-        bombs = [random.randrange(TOWER_MODES[mode]) for _ in range(TOWER_FLOORS)]
+        rr, pf = fair.rolls(uid, "tower", ref=mode, n=TOWER_FLOORS)
+        bombs = [fair.idx(r, TOWER_MODES[mode]) for r in rr]
         db.execute("INSERT INTO tower VALUES(?,?,?,?,?,?)", (uid, bet, mode, json.dumps(bombs), "[]", now()))
         lvl = add_xp(uid, max(1, bet // 20))
         r = q1("SELECT * FROM tower WHERE user=?", uid)
-    return {**tower_state(r), "stars": bal(uid), "levelup": lvl}
+    return {**tower_state(r), "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 def _tower_cash(uid, r):
     pay = int(r["bet"] * tower_mult(r["mode"], len(json.loads(r["picks"]))))
     db.execute("DELETE FROM tower WHERE user=?", (uid,))
     db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, uid))
-    event(uid, "tower", pay - r["bet"])
+    event(uid, "tower", pay - r["bet"], stake=r["bet"], res={"tiles": TOWER_MODES[r["mode"]], "bombs": json.loads(r["bombs"])})
     return {**tower_state(r, True), "active": False, "pay": pay, "stars": bal(uid)}
 
 
@@ -1982,7 +2223,7 @@ async def tower_step(req: Request, uid=Depends(auth)):
         picks, bombs = json.loads(r["picks"]), json.loads(r["bombs"])
         if bombs[len(picks)] == tile:
             db.execute("DELETE FROM tower WHERE user=?", (uid,))
-            event(uid, "tower", -r["bet"])
+            event(uid, "tower", -r["bet"], stake=r["bet"], res={"tiles": TOWER_MODES[r["mode"]], "bombs": json.loads(r["bombs"])})
             return {**tower_state(r, True), "active": False, "boom": [len(picks), tile]}
         picks.append(tile)
         db.execute("UPDATE tower SET picks=? WHERE user=?", (json.dumps(picks), uid))
@@ -2039,25 +2280,27 @@ async def slots(req: Request, uid=Depends(auth)):
     bet, n = int(body.get("bet", 0)), max(1, min(5, int(body.get("n", 1))))
     spins, total = [], 0
     SLOT3, SLOT2 = slot_tables()
-    for _ in range(n):   # n автоматов крутятся одновременно, ставка на каждый
-        reels = random.choices(range(len(SLOT_SYMS)), weights=SLOT_W, k=3)
-        cnt = {x: reels.count(x) for x in reels}
-        sym, k = max(cnt.items(), key=lambda kv: (kv[1], kv[0]))
-        mult = SLOT3[sym] if k == 3 else SLOT2[sym] if k == 2 else 0
-        pay = int(bet * mult)
-        total += pay
-        spins.append({"reels": reels, "mult": mult, "pay": pay})
     with tx():
         check_bet(uid, bet)
         if bal(uid) < bet * n:
             err("Не хватает звёзд")
+        rr, pf = fair.rolls(uid, "slots", n=n * 3)
+        for si in range(n):   # n автоматов крутятся одновременно, ставка на каждый
+            reels = [fair.pick(rr[si * 3 + j], SLOT_W) for j in range(3)]
+            cnt = {x: reels.count(x) for x in reels}
+            sym, k = max(cnt.items(), key=lambda kv: (kv[1], kv[0]))
+            mult = SLOT3[sym] if k == 3 else SLOT2[sym] if k == 2 else 0
+            pay = int(bet * mult)
+            total += pay
+            spins.append({"reels": reels, "mult": mult, "pay": pay})
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet * n, total, uid))
         for sp in spins:
-            event(uid, "slots", sp["pay"] - bet)
+            event(uid, "slots", sp["pay"] - bet, stake=bet)
+        fair.record(uid, "slots", bet * n, total, {"reels": [sp["reels"] for sp in spins], "w": SLOT_W}, pf)
         lvl = add_xp(uid, max(1, bet * n // 20))
     first = spins[0]
     return {"spins": spins, "reels": first["reels"], "mult": first["mult"], "win": total > 0, "pay": total,
-            "stars": bal(uid), "levelup": lvl}
+            "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 # --- банк казино: стартовый резерв + всё, что проиграли игроки, − всё, что они выиграли ---
@@ -2089,15 +2332,17 @@ async def dogs_spin(req: Request, uid=Depends(auth)):
     bet, n = int(b.get("bet", 0)), int(b.get("n", 1))
     if n not in (1, 2, 4):
         err("автоматов: 1, 2 или 4")
-    rounds = [DOGS.spin(bet) for _ in range(n)]
-    total = sum(r["pay"] for r in rounds)
     with tx():
         check_bet(uid, bet)
         if bal(uid) < bet * n:
             err("Не хватает звёзд")
+        rng = fair.stream(uid, "dogs", f"spin:{n}")
+        rounds = [DOGS.spin(bet, rng) for _ in range(n)]
+        total = sum(r["pay"] for r in rounds)
+        fair.record(uid, "dogs", bet * n, total, {"pays": [r["pay"] for r in rounds]}, fair.close_stream(rng))
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet * n, total, uid))
         for r in rounds:
-            event(uid, "dogs", r["pay"] - bet)
+            event(uid, "dogs", r["pay"] - bet, stake=bet)
         lvl = add_xp(uid, max(1, bet * n // 20))
     return {**rounds[0], "rounds": rounds, "total": total, "stars": bal(uid), "levelup": lvl}
 
@@ -2110,13 +2355,15 @@ async def dogs_buy(req: Request, uid=Depends(auth)):
     if scat not in DOGS.BUY_PRICE:
         err("нет такого бонуса")
     cost = bet * DOGS.BUY_PRICE[scat]
-    r = DOGS.bonus_round(bet, scat)
     with tx():
         check_bet(uid, bet, 10, 100_000)
         if bal(uid) < cost:
             err(f"Нужно ⭐ {cost}")
+        rng = fair.stream(uid, "dogs", f"buy:{scat}")
+        r = DOGS.bonus_round(bet, scat, rng)
+        fair.record(uid, "dogs", cost, r["pay"], {"pays": [r["pay"]]}, fair.close_stream(rng))
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (cost, r["pay"], uid))
-        event(uid, "dogs", r["pay"] - cost)
+        event(uid, "dogs", r["pay"] - cost, stake=cost)
         lvl = add_xp(uid, max(1, cost // 20))
     return {**r, "rounds": [r], "total": r["pay"], "cost": cost, "stars": bal(uid), "levelup": lvl}
 
@@ -2164,9 +2411,16 @@ async def roulette(req: Request, uid=Depends(auth)):
         total += a
     if not clean or total < 10:
         err("ставка от 10 ⭐")
-    n = random.randrange(37)
-    pay = sum(a * _rl_win(t, v, n) for t, v, a in clean)
-    return {"n": n, "red": n in RL_RED, "win": [i for i, (t, v, a) in enumerate(clean) if _rl_win(t, v, n)], **_bet_tx(uid, total, "roulette", pay)}
+    with tx():
+        check_bet(uid, total)
+        rr, pf = fair.rolls(uid, "rlt", ref=str(len(clean)), n=1)
+        n = fair.idx(rr[0], 37)
+        pay = sum(a * _rl_win(t, v, n) for t, v, a in clean)
+        db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (total, pay, uid))
+        event(uid, "roulette", pay - total, stake=total, pf=pf, res={"n": n})
+        lvl = add_xp(uid, max(1, total // 20))
+    return {"n": n, "red": n in RL_RED, "win": [i for i, (t, v, a) in enumerate(clean) if _rl_win(t, v, n)],
+            "pay": pay, "stars": bal(uid), "levelup": lvl, "pf": pf}
 
 
 # --- сеты: собери N разных моделей коллекции — получи награду ---
@@ -2284,7 +2538,7 @@ def week_start():
     return t - t % 86400 - time.gmtime(t).tm_wday * 86400
 
 
-GAME_KINDS = "('case','crash','upgrade','mines','wheel','duel','dice','limbo','plinko','tower','slots','blackjack','cards','dogs','roulette','jroul','hilo','craft','chicken','starfall','avia','battle','scratch','claw','pump','drill','darts','fish','keno','penalty')"
+GAME_KINDS = "('carousel','safe','ladder','bankbet','forecast','case','crash','upgrade','mines','wheel','duel','dice','limbo','plinko','tower','slots','blackjack','cards','dogs','roulette','jroul','hilo','craft','chicken','starfall','avia','battle','scratch','claw','pump','drill','darts','fish','keno','penalty')"
 
 
 def pnl(uids, since=0):
@@ -2299,7 +2553,7 @@ def pnl(uids, since=0):
 
 @app.get(R + "/leaders")
 def leaders(kind: str = "rich", uid=Depends(auth)):
-    since = week_start() if kind == "week" else 0
+    since = max(week_start(), season_from()) if kind == "week" else season_from()
     if kind == "level":
         rows = q("SELECT *, xp score FROM users ORDER BY xp DESC LIMIT 50")
         fmt = lambda r: {"score": level(r["xp"])}
@@ -2527,6 +2781,21 @@ import tickets  # noqa: E402 — тикеты поддержки: игрок ↔
 import polls  # noqa: E402 — опросы в боте с кнопками «Да»/«Нет», итоги админам
 import fees  # noqa: E402 — все комиссии и налоги из админки (переписывает ставки модулей)
 import wipe  # noqa: E402 — вайпы: сброс звёзд, подарков, бизнесов (уровень остаётся), настройки в админке
+import fair  # noqa: E402,F401 — provably fair: сид-хэш ДО ставки, раскрытие после; панель «Честность»
+import games5  # noqa: E402,F401 — сейф, ставка на банк, аукцион, бизнесы клана
+import carousel  # noqa: E402,F401 — общее колесо с бонусами
+import forecast  # noqa: E402,F401 — прогноз дня: тотализатор на итоги суток
+import gameday  # noqa: E402,F401 — игра дня: рейтинг редкой игры на сутки
+import nudge  # noqa: E402,F401 — письма новичкам и про Игру дня
+import giveaway  # noqa: E402,F401 — розыгрыши в канале игры
+import records  # noqa: E402,F401 — личные рекорды
+import recruit  # noqa: E402,F401 — набор недели у кланов
+import limits  # noqa: E402,F401 — лимиты игрока и итоги недели
+import away  # noqa: E402,F401 — сводка «пока тебя не было»
+import achrare  # noqa: E402,F401 — редкость достижений
+import idletax  # noqa: E402,F401 — сбор с брошенных больших балансов
+import legacy  # noqa: E402,F401 — наследие: итоги прошлых сезонов в профиле
+import share  # noqa: E402,F401 — карточка большого выигрыша
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------
@@ -2544,32 +2813,77 @@ def _to_webp(data):
     return out.getvalue()
 
 
+def _cache_write(path, data):
+    """Запись в кэш ассетов: если папка недоступна (нет прав) — просто отдаём файл без кэша."""
+    try:
+        with open(path, "wb") as fh:
+            fh.write(data)
+    except OSError as e:
+        print("asset cache:", path, e, flush=True)
+
+
 @app.get("/np/a/{path:path}")
 async def asset(path: str, request: Request):
-    raw = request.scope["raw_path"].decode()[len("/np/a/"):]  # без раскодирования: в именах бывает %2F (AC/DC)
+    raw = request.scope["raw_path"].decode()[
+        len("/np/a/") :
+    ]  # без раскодирования: в именах бывает %2F (AC/DC)
     if not raw.startswith(("model/", "pattern/", "symbol/", "original/")):
         return Response(status_code=404)
-    url = "https://api.changes.tg/" + raw + ("?" + request.url.query if request.url.query else "")
+    url = (
+        "https://api.changes.tg/"
+        + raw
+        + ("?" + request.url.query if request.url.query else "")
+    )
     ct = "application/json" if raw.endswith(".json") else "image/png"
+    # Браузер шлёт Accept: image/webp — отдаём webp (в 3–5 раз легче). Заголовок x-webp ставил nginx,
+    # которого тут нет (фронт отдаёт сам uvicorn), поэтому смотрим и на Accept: иначе телефон
+    # тянет десятки мегабайт PNG через медленный туннель.
+    want_webp = ct == "image/png" and (
+        request.headers.get("x-webp") == "1"
+        or "image/webp" in request.headers.get("accept", "").lower()
+    )
+    hdrs = {"Cache-Control": "public, max-age=2592000"}
     if DEV or SERVE_WEB:  # без nginx кэшируем на диск, на проде кэширует nginx
-        os.makedirs(ASSET_CACHE, exist_ok=True)
+        try:
+            os.makedirs(ASSET_CACHE, exist_ok=True)
+        except OSError as e:
+            print("asset cache dir:", e, flush=True)
         f = os.path.join(ASSET_CACHE, hashlib.md5(url.encode()).hexdigest())
-        if os.path.exists(f):
-            return FileResponse(f, media_type=ct)
-    r = await http.get(url, headers={"User-Agent": f"NePridymal/1.0 (+t.me/{BOT_NAME})"}, timeout=30)
+        fw = f + ".webp"
+        if want_webp and os.path.exists(fw):
+            return FileResponse(fw, media_type="image/webp", headers=hdrs)
+        if not want_webp and os.path.exists(f):
+            return FileResponse(f, media_type=ct, headers=hdrs)
+    r = await http.get(
+        url, headers={"User-Agent": f"NePridymal/1.0 (+t.me/{BOT_NAME})"}, timeout=30
+    )
     if r.status_code != 200:
         return Response(status_code=r.status_code)
     if DEV or SERVE_WEB:
-        open(f, "wb").write(r.content)
-    if ct == "image/png" and request.headers.get("x-webp") == "1":   # nginx ставит, если браузер шлёт Accept: image/webp
+        _cache_write(f, r.content)
+    if want_webp:
         try:
             async with _WEBP_SEM:
                 body = await asyncio.to_thread(_to_webp, r.content)
-            return Response(body, media_type="image/webp", headers={"Cache-Control": "public, max-age=2592000"})
-        except Exception as e:   # не вышло — отдаём PNG как раньше
+            if DEV or SERVE_WEB:
+                _cache_write(f + ".webp", body)
+            return Response(body, media_type="image/webp", headers=hdrs)
+        except Exception as e:  # не вышло — отдаём PNG как раньше
             print("webp:", raw[:80], e, flush=True)
-    return Response(r.content, media_type=ct, headers={"Cache-Control": "public, max-age=2592000"})
+    return Response(r.content, media_type=ct, headers=hdrs)
+
+
+class CachedStatic(StaticFiles):
+    """Статика с Cache-Control: без него Cloudflare не держит бандл на краю и каждый заход тянет его через туннель."""
+
+    async def get_response(self, path: str, scope):
+        resp = await super().get_response(path, scope)
+        if "text/html" in resp.headers.get("content-type", ""):
+            resp.headers["Cache-Control"] = "no-cache"   # страница всегда свежая: внутри неё версия бандла
+        elif resp.status_code == 200:
+            resp.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable" if "bundle." in path else "public, max-age=604800")
+        return resp
 
 
 if (DEV or SERVE_WEB) and os.path.isdir(WEB_DIR):
-    app.mount("/np", StaticFiles(directory=WEB_DIR, html=True), name="web")
+    app.mount("/np", CachedStatic(directory=WEB_DIR, html=True), name="web")

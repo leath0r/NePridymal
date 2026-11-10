@@ -69,7 +69,7 @@ def _cash(uid, r):
     pay = int(r["bet"] * mult(r["mode"], r["step"]))
     db.execute("DELETE FROM penalty WHERE user=?", (uid,))
     db.execute("UPDATE users SET stars=stars+? WHERE id=?", (pay, uid))
-    event(uid, "penalty", pay - r["bet"])
+    event(uid, "penalty", pay - r["bet"], stake=r["bet"])
     return {**state(r), "active": False, "pay": pay, "stars": bal(uid)}
 
 
@@ -82,20 +82,24 @@ async def penalty_kick(req: Request, uid=Depends(auth)):
         zone = -1
     if not 0 <= zone < ZONES:
         err("выбери, куда бить")
+    import fair
     with tx():
         r = q1("SELECT * FROM penalty WHERE user=?", uid) or err("серия не начата")
-        cover = sorted(RND.sample(range(ZONES), MODES[r["mode"]]))
+        mc = MODES[r["mode"]]
+        rr, pf = fair.rolls(uid, "penalty", ref=f"{r['mode']}:{r['step']}", n=mc + 1)
+        cover = sorted(fair.sample(rr[:mc], range(ZONES), mc))
         # куда прыгнул вратарь (для анимации): в зону удара, если угадал, иначе в одну из своих
-        dive = zone if zone in cover else RND.choice(cover)
+        dive = zone if zone in cover else cover[fair.idx(rr[mc], len(cover))]
+        fair.record(uid, "penalty", 0, 0, {"cover": cover, "zone": zone, "goal": zone not in cover}, pf)
         if zone in cover:   # сейв
             db.execute("DELETE FROM penalty WHERE user=?", (uid,))
-            event(uid, "penalty", -r["bet"])
-            return {**state(r), "active": False, "goal": False, "zone": zone, "cover": cover, "dive": dive, "stars": bal(uid)}
+            event(uid, "penalty", -r["bet"], stake=r["bet"])
+            return {**state(r), "active": False, "goal": False, "zone": zone, "cover": cover, "dive": dive, "stars": bal(uid), "pf": pf}
         db.execute("UPDATE penalty SET step=step+1 WHERE user=?", (uid,))
         r = q1("SELECT * FROM penalty WHERE user=?", uid)
         if r["step"] >= KICKS:   # забил все 10 — выплата сама
-            return {**_cash(uid, r), "goal": True, "zone": zone, "cover": cover, "dive": dive, "auto": True}
-        return {**state(r), "goal": True, "zone": zone, "cover": cover, "dive": dive}
+            return {**_cash(uid, r), "goal": True, "zone": zone, "cover": cover, "dive": dive, "auto": True, "pf": pf}
+        return {**state(r), "goal": True, "zone": zone, "cover": cover, "dive": dive, "pf": pf}
 
 
 @app.post(R + "/penalty/cashout")

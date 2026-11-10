@@ -54,7 +54,7 @@ function sfPaint(first) {
 }
 async function sfWinner(x, stake) {
   const me = x.user.id === ME.id;
-  if (me && x.gift) { H.ok(); await bigWin(x.gift.value, x.gift.value / Math.max(1, stake), 75); }
+  if (me && x.gift) { H.ok(); await bigWin(x.gift.value, x.gift.value / Math.max(1, stake), 75, { gift: x.gift.id }); }
   else modal(`<h3>🌠 Шкала заполнена!</h3><p class="hint" style="margin:0 0 12px"><b>${esc(x.user.name)}</b> забирает ${x.gift ? esc(x.gift.col) + " · ⭐ " + fmt(x.gift.value) : "подарок"}. Новый раунд уже идёт.</p><button class="btn gold" data-m="ok">Ещё раз</button>`);
 }
 async function sfBet() {

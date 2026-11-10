@@ -5,6 +5,7 @@ import random
 from fastapi import Depends, Request
 
 import economy as E
+import app as A
 from app import (R, app, auth, bal, db, err, esc, event, add_xp, gift_out, notify, now, q, q1, tx, upg_all, user_brief)
 
 db.executescript("""
@@ -39,13 +40,16 @@ def _draw(r):
     """Шкала полна: выбираем победителя по доле вклада и создаём подарок."""
     st = _stakes(r["id"])
     users, w = list(st), list(st.values())
-    win = random.choices(users, weights=w)[0]
-    col, model, pm, value = random.choice(prizes())
+    import fair
+    rng = fair.pub("starfall", str(r["id"]))
+    win = rng.choices(users, weights=w)[0]
+    col, model, pm, value = rng.choice(prizes())
     d = E.CATALOG[col]
-    bd = random.choices(d["backdrops"], weights=[x[1] for x in d["backdrops"]])[0][0]
-    sy = random.choices(d["symbols"], weights=[max(x[1], .1) for x in d["symbols"]])[0][0]
+    bd = rng.choices(d["backdrops"], weights=[x[1] for x in d["backdrops"]])[0][0]
+    sy = rng.choices(d["symbols"], weights=[max(x[1], .1) for x in d["symbols"]])[0][0]
     cur = db.execute("INSERT INTO gifts(owner,col,model,backdrop,symbol,num,value,created) VALUES(?,?,?,?,?,?,?,?)",
-                     (win, col, model, bd, sy, random.randint(1, E.supply(col)), value, now()))
+                     (win, col, model, bd, sy, rng.randint(1, E.supply(col)), value, now()))
+    fair.close_pub(rng, {"col": col, "value": value})
     db.execute("UPDATE sf_rounds SET status='done', winner=?, gift=?, done=? WHERE id=?", (win, cur.lastrowid, now(), r["id"]))
     event(win, "starfall", value)
     db.execute("INSERT INTO feed(user,gift,cs,ts) VALUES(?,?,?,?)", (win, cur.lastrowid, "starfall", now()))
@@ -84,6 +88,8 @@ async def starfall_bet(req: Request, uid=Depends(auth)):
     amount = int((await req.json()).get("amount", 0))
     if amount < MIN_BET:
         err(f"минимум ⭐ {MIN_BET}")
+    if A.SELF_GUARD:
+        A.SELF_GUARD(uid, amount)
     won = None
     with tx():
         r = _cur()

@@ -11,7 +11,7 @@ const SEG_COL = ["#4aa8ff", "#ff6fb5", "#ffc53d", "#35d07f", "#a77bff", "#ff8a3d
 // ============================================================ ДЖЕКПОТ НА ПОДАРКИ
 let JR = null, jrPoll = null, jrAnimated = 0, jrAngle = 0, jrRevealed = 0, jrRound = 0;   // jrRevealed — раунд, победитель которого уже показан
 async function openJR() {
-  const el = openSheet(`${gameHead("Heart Locket", "Джекпот", "Кидай подарки в банк — колесо решит, кто заберёт всё")}
+  const el = openSheet(`${gameHead("Heart Locket", "Джекпот", "Кидай подарки в банк — колесо решит, кто заберёт всё", "jroul")}
     <div class="jrw"><canvas id="jr-cv" width="600" height="600"></canvas><div class="jrptr"></div>
       <div class="jrc" id="jr-c"></div></div>
     <div class="jrhist" id="jr-h"></div>
@@ -108,7 +108,7 @@ const RL = { chip: 50, bets: {}, busy: false, angle: 0, hist: [] };
 const rlCol = n => n === 0 ? "g" : RL_RED.has(n) ? "r" : "b";
 function openRL() {
   RL.busy = false; RL.bets = {};
-  openSheet(`${gameHead("Crystal Ball", "Рулетка", "Красное, чёрное, числа и дюжины")}
+  openSheet(`${gameHead("Crystal Ball", "Рулетка", "Красное, чёрное, числа и дюжины", "rlt")}
     <div class="rlw"><canvas id="rl-cv" width="600" height="600"></canvas><div class="rlptr"></div><div class="rlc" id="rl-c"><b>?</b></div></div>
     <div class="rlhist" id="rl-h"></div>
     <div class="rlchips">${[10, 50, 100, 500, 1000].map(v => `<button data-act="rl-chip" data-v="${v}" class="${RL.chip === v ? "on" : ""}">${short(v)}</button>`).join("")}</div>
@@ -245,7 +245,7 @@ drawInventory = function () {
 
 // ------------------------------------------------------------ действия
 Object.assign(ACT, {
-  "jr-gifts": () => pickGifts("Подарки в джекпот", { max: 10 }, async gs => {
+  "jr-gifts": () => pickGifts("В джекпот", { max: 10 }, async gs => {
     const r = await post("jroul/bet", { gifts: gs.map(g => g.id) }); setStars(r.stars); H.ok(); toast("Подарки в банке", "ok"); JR = { ...r, history: JR && JR.history }; JR.off = JR.now - Date.now() / 1000; jrDraw(); MYP = null;
   }),
   "jr-stars": async () => {

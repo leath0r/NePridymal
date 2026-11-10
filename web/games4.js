@@ -112,7 +112,7 @@ let HL = null, hlBusy = false;
 const SUITS = ["♠", "♥", "♦", "♣"], RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
 const hlCard = (c, s, cls = "") => `<div class="hl-card ${s === 1 || s === 2 ? "red" : ""} ${cls}"><b>${RANKS[c - 1]}</b><i>${SUITS[s]}</i><b class="br">${RANKS[c - 1]}</b></div>`;
 async function openHL() {
-  const el = openSheet(`${gameHead("Clover Pin", "Больше/меньше", "Угадай следующую карту — иксы копятся")}<div id="hl-body">${emptyHTML("hourglass", "Загружаем…")}</div>`, "hl-s");
+  const el = openSheet(`${gameHead("Clover Pin", "Больше/меньше", "Угадай следующую карту — иксы копятся", "hilo")}<div id="hl-body">${emptyHTML("hourglass", "Загружаем…")}</div>`, "hl-s");
   el._hl = true;
   HL = await api("hilo").catch(() => ({ active: false }));
   fillHL(el);
@@ -122,7 +122,7 @@ function fillHL(el, last) {
   const b = el.querySelector("#hl-body");
   if (!HL.active) {
     b.innerHTML = `${last ? `<div class="hl-table">${hlCard(last.card, last.suit, last.res === "lose" ? "lose" : "win")}</div>
-        <div class="dres ${last.res === "lose" ? "lose" : "win"}">${last.res === "lose" ? `Мимо — −⭐ ${fmt(last.bet)}` : `Забрал ⭐ ${fmt(last.pay)} · x${(+last.mult).toFixed(2)}`}</div>` :
+        <div class="dres ${last.res === "lose" ? "lose" : "win"}">${last.res === "lose" ? `Мимо: −⭐ ${fmt(last.bet)}` : `Забрал ⭐ ${fmt(last.pay)} · x${(+last.mult).toFixed(2)}`}</div>` :
       `<div class="hl-table">${hlCard(13, 0, "back")}</div>`}
       <div class="betp">${betHTML("hl-amt", 100)}<button class="btn cta gold" data-act="hl-start">${ic("play")}Начать</button>
 </div>`;
@@ -146,7 +146,7 @@ function fillHL(el, last) {
 let CR = { gifts: [], col: null, busy: false };
 function openCraft() {
   CR = { gifts: [], col: null, busy: false };
-  const el = openSheet(`${gameHead("Magic Potion", "Крафт", "3–10 подарков → 1 подарок выбранной коллекции")}<div id="cr-body"></div>`, "cr-s");
+  const el = openSheet(`${gameHead("Magic Potion", "Крафт", "3–10 подарков → 1 подарок выбранной коллекции", "craft")}<div id="cr-body"></div>`, "cr-s");
   el._cr = true;
   fillCraft(el);
 }
@@ -205,7 +205,7 @@ Object.assign(ACT, {
       fillHL(null, { res: "cash", card: HL.card, suit: HL.suit, pay: r.pay, mult: r.mult }); burstAt($("#hl-body")); HL = { active: false }; if (r.mult >= 5) bigWin(r.pay, r.mult);
     } finally { hlBusy = false; }
   },
-  "cr-pick": () => pickGifts("Подарки для крафта", { max: 10, pre: CR.gifts }, list => { CR.gifts = list; fillCraft(); }),
+  "cr-pick": () => pickGifts("Для крафта", { max: 10, pre: CR.gifts }, list => { CR.gifts = list; fillCraft(); }),
   "cr-col": el => { CR.col = el.dataset.v; H.sel(); fillCraft(); },
   "cr-go": async el => {
     if (CR.busy || CR.gifts.length < 3) return;

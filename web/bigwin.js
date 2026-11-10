@@ -103,14 +103,14 @@ function coinShower(el, n = 40) {
 
 // уровни большого выигрыша (в иксах от ставки)
 const BW_TIERS = [[5, "БОЛЬШОЙ ВЫИГРЫШ", "big"], [20, "МЕГА ВЫИГРЫШ", "mega"], [75, "ЭПИЧЕСКИЙ ВЫИГРЫШ", "epic"]];
-function bigWin(pay, x, tierX = x) {   // tierX — от чего считать уровень (ALL IN празднуем сильнее)
+function bigWin(pay, x, tierX = x, o = {}) {   // tierX — от чего считать уровень (ALL IN празднуем сильнее); o.gift — id выпавшего подарка для карточки
   return new Promise(resolve => {
     const top = BW_TIERS.filter(t => tierX >= t[0]).length;
     if (!top) { resolve(); return; }
     const dur = [0, 2600, 4200, 6000][top];
     const ov = document.createElement("div");
     ov.className = "bw-ov";
-    ov.innerHTML = `<div class="bw-rays"></div><div class="bw-box"><div class="bw-t" id="bw-t"></div><div class="bw-n"><span class="xtr-big">⭐</span><b id="bw-n">0</b></div><div class="bw-x">x${x >= 100 ? Math.round(x) : x.toFixed(1).replace(".", ",")}</div><div class="bw-tap">нажми, чтобы продолжить</div></div>`;
+    ov.innerHTML = `<div class="bw-rays"></div><div class="bw-box"><div class="bw-t" id="bw-t"></div><div class="bw-n"><span class="xtr-big">⭐</span><b id="bw-n">0</b></div><div class="bw-x">x${x >= 100 ? Math.round(x) : x.toFixed(1).replace(".", ",")}</div>${typeof shareBtns === "function" ? shareBtns() : ""}<div class="bw-tap">нажми, чтобы продолжить</div></div>`;
     document.body.appendChild(ov);
     requestAnimationFrame(() => ov.classList.add("on"));
     BW.rain(dur + 600, [0, 1.2, 2, 3.2][top] / (window.LITE ? 3 : 1));
@@ -125,10 +125,17 @@ function bigWin(pay, x, tierX = x) {   // tierX — от чего считать
     const finish = () => {
       if (done) return; done = true;
       nEl.textContent = fmt(pay); setTier(top - 1); ov.classList.add("end");
-      setTimeout(close, 2200);
+      arm(ov.querySelector(".bw-share") ? 7000 : 2200);
     };
+    let closeT = 0;
+    const arm = ms => { clearTimeout(closeT); closeT = setTimeout(close, ms); };
     const close = () => { if (!ov.isConnected) return; BW.stop(); ov.classList.remove("on"); setTimeout(() => ov.remove(), 400); document.body.classList.remove("bw-shake"); resolve(); };
-    ov.addEventListener("click", () => done ? close() : finish());
+    ov.addEventListener("click", e => {
+      const b = e.target.closest(".bw-share button");
+      if (!b) return done ? close() : finish();
+      clearTimeout(closeT);   // игрок делится: экран не закрываем у него из-под пальца
+      shareWin(b.dataset.to, { pay, gift: o.gift }, b).finally(() => arm(5000));
+    });
     (function step(t) {
       if (done || !ov.isConnected) return;
       const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 2.2), cur = pay * e;

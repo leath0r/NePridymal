@@ -9,7 +9,7 @@ import time
 
 from fastapi import Depends, Request
 
-from app import GAME_KINDS, R, STEALTH, app, bal, db, err, esc, event, kv_get, notify, now, q, q1, tx, user_brief, day_start
+from app import GAME_KINDS, R, STEALTH, app, bal, db, err, esc, event, kv_get, notify, now, q, q1, qr, tx, user_brief, day_start
 from admin import ADMINS, BANNED, DB_PATH, OWNERS, admin, log
 
 db.executescript("""
@@ -170,7 +170,7 @@ def pulse(aid=Depends(admin)):
     t, d0 = now(), day_start()
     import hub
     games = [{"kind": r["kind"], "name": hub.HIST.get(r["kind"], r["kind"]), "rounds": r["n"], "players": r["p"], "house": r["h"]}
-             for r in q(f"SELECT kind, COUNT(*) n, COUNT(DISTINCT user) p, -SUM(delta) h FROM events WHERE kind IN {GAME_KINDS} AND ts>=? GROUP BY kind ORDER BY n DESC", d0)]
+             for r in qr(f"SELECT kind, COUNT(*) n, COUNT(DISTINCT user) p, -SUM(delta) h FROM events WHERE kind IN {GAME_KINDS} AND ts>=? GROUP BY kind ORDER BY n DESC", d0)]
     wins = []
     for w in q("SELECT * FROM bigwins WHERE ts>=? ORDER BY amount DESC LIMIT 5", d0):
         u = q1("SELECT * FROM users WHERE id=?", w["user"])

@@ -18,7 +18,7 @@ async function tkList(el) {
   const d = await api("tickets").catch(() => null); if (!d || !el.isConnected) return;
   const open = d.items.filter(t => t.status !== "closed").length;
   replaceSheet(el, `<div class="inv-hero"><span class="tk-ic">${ic("support")}</span><h2>Поддержка</h2>
-      <p>Проблема с оплатой, баг, пропали звёзды или подарок — напиши, ответим здесь и в боте.</p></div>
+      <p>${ME.shopOn ? "Проблема с оплатой, баг" : "Баг"}, пропали звёзды или подарок — напиши, ответим здесь и в боте.</p></div>
     <button class="btn gold" data-act="tk-new"${open >= d.maxOpen ? " disabled" : ""}>${ic("plus")}Новое обращение</button>
     ${open >= d.maxOpen ? `<div class="hint" style="font-size:12px;text-align:center;margin-top:6px">Открыто ${open} — дождись ответа или закрой старое</div>` : ""}
     ${d.items.length ? `<div class="sec-t">Мои обращения</div><div class="box">${d.items.map(t => `<div class="row tap" data-act="tk-open" data-id="${t.id}">
@@ -30,10 +30,10 @@ async function tkList(el) {
 }
 function tkNew() {
   const topics = (topSheet()._topics) || { other: "Другое" };
-  const el = openSheet(`<h2 class="gtitle">Новое обращение</h2>
+  const el = openSheet(`<h2 class="gtitle">Обращение</h2>
     <div class="sec-t">Тема</div><div class="tk-topics">${Object.entries(topics).map(([k, t], i) => `<button data-act="tk-topic" data-v="${k}" class="${i ? "" : "on"}">${esc(t)}</button>`).join("")}</div>
     <div class="sec-t">Что случилось</div>
-    <textarea id="tk-t" rows="6" maxlength="2000" placeholder="Опиши подробно: что делал, что ожидал, что получилось. Если про оплату — когда и на сколько."></textarea>
+    <textarea id="tk-t" rows="6" maxlength="2000" placeholder="Опиши подробно: что делал, что ожидал, что получилось."></textarea>
     <button class="btn gold" data-act="tk-send" style="margin-top:10px">${ic("send")}Отправить</button>`);
   el._topic = Object.keys(topics)[0];
   setTimeout(() => { const t = el.querySelector("#tk-t"); if (t) t.focus(); }, 400);

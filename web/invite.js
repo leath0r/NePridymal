@@ -46,17 +46,32 @@ invite = async function () {
   box.innerHTML = `<div class="inv-stats inv-s3"><div><b>${fmt(d.invited)}</b><span>${plural(d.invited, ["друг пришёл", "друга пришли", "друзей пришли"])}</span></div>
       <div><b>${fmt(d.active)}</b><span>активных (${d.l1[0]}+ ур.)</span></div>
       <div><b class="tw">+${short(d.earned)} ⭐</b><span>заработано</span></div></div>
+    <div class="sec-t">Подарок по ссылке</div>
+    <div class="box"><div class="row"><span class="pic y">${ic("gift")}</span><div class="grow"><div class="t">Подари подарок тому, кто ещё не играет</div>
+      <div class="s" style="white-space:normal">В сумке открой подарок, нажми «Подарить другу» и выбери «Подарок по ссылке». Кто придёт по нему, станет твоим другом</div></div></div>
+      <div class="row kv"><div class="grow"><div class="t">Пришли по твоим подаркам</div><div class="s">Отправлено ссылок: ${fmt(d.giftLinks)}</div></div><b>${fmt(d.giftFriends)}</b></div>
+      <div class="row"><button class="btn sm ghost" style="width:100%" data-act="inv-bag">${ic("gift")}Выбрать подарок в сумке</button></div></div>
+    ${d.duoOn ? `<div class="sec-t">Цель на двоих</div>
+      <div class="hint" style="font-size:12px;margin:-4px 0 8px;white-space:normal"><span>Друг за ${d.duoDays} дней доходит до ${d.duoLevel} уровня и набирает оборот ⭐ ${short(d.duoFriend)}, ты ⭐ ${short(d.duoRef)}.</span> <span>Оборот: выигрыши и проигрыши вместе.</span> <span>Награда каждому ⭐ ${short(d.duoPrize)}</span></div>
+      ${d.duos.length ? `<div class="box">${d.duos.map(x => { const f = x.me === "friend", my = f ? [x.fTurn, x.fNeed] : [x.rTurn, x.rNeed], ot = f ? [x.rTurn, x.rNeed] : [x.fTurn, x.fNeed];
+        const bar = (a, b) => `<div class="inv-bar"><i style="width:${Math.min(100, a / Math.max(1, b) * 100)}%"></i></div>`;
+        return `<div class="row duo-row">${x.other ? avaHTML(x.other, 32) : ""}<div class="grow" style="min-width:0"><div class="t">${esc(x.other ? x.other.name : "Друг")}${f ? `<span class="duo-tag">тебя пригласили</span>` : ""}</div>
+          <div class="s">ты ${kk(Math.min(my[0], my[1]))} из ${kk(my[1])}</div>${bar(my[0], my[1])}
+          <div class="s">друг: ${kk(Math.min(ot[0], ot[1]))} из ${kk(ot[1])}${f ? "" : ` · ${x.level} из ${x.levelNeed} ур.`}</div>${bar(ot[0], ot[1])}</div>
+          <em class="duo-left">${gwLeft(x.left)}</em></div>`; }).join("")}</div>`
+        : `<div class="hint" style="font-size:13px;padding:0 4px">Позови друга, и цель начнётся сама</div>`}` : ""}
     ${d.on ? `<div class="sec-t">Что ты получаешь</div><div class="box">
       ${d.join ? step("userPlus", "b", `+${fmt(d.join)} ⭐ сразу`, "когда друг зайдёт по ссылке") : ""}
+      ${d.giftOn ? step("gift", "y", "Ключ от кейса другу", "скажем, когда друг откроет") : ""}
       ${d.l1[1] ? step("medal", "g", `+${fmt(d.l1[1])} ⭐`, `когда друг дойдёт до ${d.l1[0]} уровня`) : ""}
       ${d.l2[1] ? step("crown", "y", `+${fmt(d.l2[1])} ⭐`, `когда друг дойдёт до ${d.l2[0]} уровня`) : ""}
-      ${d.buyPct ? step("gift", "b", `${d.buyPct}% с покупок друга`, "от звёзд, которые он купит в магазине") : ""}</div>` : ""}
+      ${d.buyPct && ME.shopOn ? step("gift", "b", `${d.buyPct}% с покупок друга`, "от звёзд, которые он купит в магазине") : ""}</div>` : ""}
     ${d.on && d.milestones.length ? `<div class="sec-t">Награды за активных друзей</div><div class="box">${d.milestones.map(m => `<div class="row kv inv-ms${m.done ? " done" : ""}">
         <div class="grow"><div class="t">${m.n} ${plural(m.n, ["друг", "друга", "друзей"])}</div>
         <div class="inv-bar"><i style="width:${Math.min(100, d.active / m.n * 100)}%"></i></div></div>
         <b>${m.done ? "✓ " : ""}+${short(m.amount)} ⭐</b></div>`).join("")}</div>
       ${next ? `<div class="hint" style="font-size:12px;text-align:center;margin-top:6px">До награды +${fmt(next.amount)} ⭐ — ещё ${next.n - d.active} ${plural(next.n - d.active, ["активный друг", "активных друга", "активных друзей"])}</div>` : ""}` : ""}
-    ${d.on && d.topOn ? `<div class="sec-t">Топ недели · до ${new Date(d.weekEnds * 1000).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}</div>
+    ${d.on && d.topOn ? `<div class="sec-t">Топ недели · до ${new Date(d.weekEnds * 1000).toLocaleDateString(LANG === "en" ? "en-US" : "ru-RU", { day: "numeric", month: "long" })}</div>
       <div class="hint" style="font-size:12px;margin:-4px 0 8px">Кто приведёт больше активных друзей за неделю. Призы: ${d.prizes.map((p, i) => `${i + 1} место — ${short(p)} ⭐`).join(", ")} (от ${d.topMin} друзей). У тебя за неделю: <b>${d.myWeek}</b></div>
       <div class="box">${d.top.map((u, i) => `<div class="row tap" data-act="profile" data-id="${u.id}"><span class="inv-pl">${i + 1}</span>${avaHTML(u, 32)}<div class="grow" style="min-width:0"><div class="t">${esc(u.name)}</div></div><b>${u.n}</b></div>`).join("")
         || `<div class="hint" style="padding:14px">На этой неделе пока никого — стань первым</div>`}</div>` : ""}
@@ -66,6 +81,7 @@ invite = async function () {
 };
 Object.assign(ACT, {
   "inv-copy": () => copyText(ME.refLink),
+  "inv-bag": () => { closeSheet(); setTab("inv"); setTimeout(() => toast("Открой подарок: «Подарить другу», затем «Подарок по ссылке»"), 400); },
   "inv-share": () => {
     const text = ME.refBonus ? `Залетай в кейс-симулятор подарков 🎁 По моей ссылке получишь +${ME.refBonus} ⭐ на старт (игровых)` : "Залетай в кейс-симулятор подарков 🎁";
     const url = `https://t.me/share/url?url=${enc(ME.refLink)}&text=${enc(text)}`;

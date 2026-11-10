@@ -24,13 +24,27 @@ renderTop = async function () {
     : `<div class="clnone"><span class="pic b">${ic("users")}</span><div class="grow"><b>Ты пока без клана</b><span>Вступи в клан или создай свой — бонус к доходу и призы битвы</span></div>
       <button class="btn sm gold" data-act="clan-new">Создать</button></div>`;
   h += `<div class="timer">${ic("flame")}Битва кланов: оборот в играх за неделю · итоги через ${clanHours(left)} · призы ⭐ ${CL.prizes.map(short).join(" / ")}</div>`;
+  h += `<div id="cl-rec"></div>`;
   h += CL.list.length ? `<div class="box">${CL.list.map(c => `<div class="row tap" data-act="clan" data-id="${c.id}"><span class="place${c.place <= 3 ? " p" + c.place : ""}">${c.place}</span>${clanBadge(c)}
       <div class="grow"><div class="t">${esc(c.name)}${c.open ? "" : ` <span class="cllock">${ic("lock")}</span>`}</div><div class="s">${c.members}/${c.slots} · ур. ${c.level}</div></div>${c.emblem ? `<img class="spi" style="width:30px;height:30px;margin:0" src="${A.orig(c.emblem, 64)}" alt="">` : ""}<b class="num">⭐ ${short(c.score)}</b></div>`).join("")}</div>`
     : emptyHTML("users", "Кланов пока нет — создай первый");
   if (CL.last && CL.last.length) h += `<div class="disc">Прошлая неделя: ${CL.last.map(x => `${x.place}. [${esc(x.tag)}] ${esc(x.name)}`).join(" · ")}</div>`;
   h += `<button class="ideabtn" data-act="idea">${ic("megaphone")}<span><b>Идеи и предложения</b>напиши, что добавить или исправить в игре</span>${ic("chev")}</button>`;
   $("#cl-body").innerHTML = h;
+  clRecFill();
 };
+// набор недели (recruit.py): кланы соревнуются, кто приведёт больше новичков
+async function clRecFill() {
+  const box = $("#cl-rec"); if (!box) return;
+  const d = await api("clans-recruit").catch(() => null);
+  if (!d || !box.isConnected) return;
+  box.innerHTML = `<div class="clrec"><div class="clrec-h"><span class="pic g">${ic("userPlus")}</span><div class="grow"><b>Набор недели</b>
+      <span>Новичок вступил в клан и дорос до ${d.level} ур. Итоги через ${clanHours(d.left)}</span></div></div>
+    <div class="clrec-pz">${d.prizes.map((p, i) => `<div><span>${i + 1} место</span><b>⭐ ${short(p)}</b></div>`).join("")}</div>
+    ${d.top.length ? `<div class="clrec-top">${d.top.map((c, i) => `<div class="row tap" data-act="clan" data-id="${c.id}"><span class="place${i < 3 ? " p" + (i + 1) : ""}">${i + 1}</span>${clanBadge(c)}<div class="grow"><div class="t">${esc(c.name)}</div></div><b>${c.n}</b></div>`).join("")}</div>`
+      : `<div class="hint" style="font-size:12.5px;margin-top:8px">На этой неделе пока никто. Призы в казну клана, от ${d.min} новичков</div>`}
+    ${d.inClan ? `<div class="hint" style="font-size:12.5px;margin-top:8px">У твоего клана: <b>${d.mine}</b>. Зови друзей ссылкой из карточки клана</div>` : ""}</div>`;
+}
 
 // казна клана: баланс, налог, буст; у главы — управление
 function clanBankHTML(c) {
@@ -88,7 +102,7 @@ function clanLevelsHTML(c) {
       return `<div class="cllv-r${done ? " done" : ""}${L === c.level ? " cur" : ""}"><span class="cllv-n">${done ? ic("check") : L}</span>
         <div class="grow"><b>${L > 1 ? `+${2 * (L - 1)}% к доходу` : "Основание клана"}${CL.perks[L] ? ` · ${esc(CL.perks[L])}` : ""}</b><span>${need ? `казна ⭐ ${short(need)}` : "сразу"}</span></div></div>`; }).join("")}</div></details>`;
 }
-const ROLE_T = { owner: "глава", officer: "офицер" };
+const ROLE_T = { owner: "глава", officer: "офицер", treasurer: "казначей", captain: "капитан" };
 const clanAgo = ts => { const s = Date.now() / 1000 - ts; return s < 3600 ? Math.max(1, Math.floor(s / 60)) + " мин" : s < 86400 ? Math.floor(s / 3600) + " ч" : Math.floor(s / 86400) + " д"; };
 function clanFeedTxt(f) {
   const n = f.user ? `<b>${esc(f.user.name)}</b>` : "";
@@ -124,6 +138,7 @@ async function openClan(id) {
         <i style="--p:${Math.min(100, c.score / g.need * 100)}%"></i></div>`).join("")}</div>
       <div class="hint" style="font-size:12px;margin:6px 4px 0">${nextGoal ? `Оборот в играх всех участников (не больше ⭐ 10K с одной ставки). До цели — ⭐ ${short(Math.max(0, nextGoal.need - c.score))}. Ключ получат все, кто сыграл за неделю от 20 раундов.` : "Все цели недели выполнены!"}</div>
       ${clanBankHTML(c)}
+      ${c.mine ? `<button class="btn ghost fwide" style="margin-bottom:8px" data-act="clan-biz">${ic("store")}Бизнесы клана</button>` : ""}
       ${c.mine ? `<div class="btns"><button class="btn gold" style="flex:2" data-act="clan-donate">${ic("coins")}В казну</button><button class="btn ghost" style="flex:2" data-act="clan-invite" data-link="${esc(c.invite)}" data-n="${esc(c.name)}">${ic("send")}Позвать</button>
           <button class="btn ghost" style="flex:1" data-act="clan-leave">${ic("x")}</button></div>
         ${staff ? `<button class="btn ghost sm" style="width:100%;margin-top:8px" data-act="clan-set" data-id="${c.id}">${ic("edit")}Настройки клана</button>` : ""}`
@@ -209,7 +224,7 @@ Object.assign(ACT, {
   "clan-slots": async el => { if (!await confirmM("Расширить клан?", `+5 мест за ⭐ ${fmt(+el.dataset.p)} из казны.`, "Расширить")) return; await post("clans/spend", { kind: "slots" }); H.ok(); toast("Клан расширен", "ok"); await clanRefresh(); },
   "clan-set": el => {
     const c = topSheet()._clan; if (!c) return;
-    const s = openSheet(`<h2 class="gtitle">Настройки клана</h2>
+    const s = openSheet(`<h2 class="gtitle">Настройки</h2>
       ${c.role === "owner" ? `<div class="adm-f"><span>Тег [${esc(c.tag)}]</span><input id="cs-tag" maxlength="4" value="${esc(c.tag)}" placeholder="ТЕГ" style="text-transform:uppercase;max-width:120px"></div>
       <div class="hint" style="margin:-4px 2px 8px;font-size:12px">2–4 заглавные буквы или цифры. Сменится у всех участников.</div>` : ""}
       <div class="adm-f"><span>Описание</span><input id="cs-d" maxlength="140" value="${esc(c.descr)}" placeholder="Кто мы и куда идём"></div>

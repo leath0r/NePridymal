@@ -99,15 +99,17 @@ async def claw_play(req: Request, uid=Depends(auth)):
         check_bet(uid, bet, c["min_bet"], c["max_bet"])
         m = lineup[idx]["m"]
         p = chance(m)
-        win = random.random() < p
+        import fair
+        rr, pf = fair.rolls(uid, "claw", ref=str(m))
+        win = rr[0] < p
         pay = int(bet * m) if win else 0
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
-        event(uid, "claw", pay - bet)
+        event(uid, "claw", pay - bet, stake=bet, pf=pf, res={"p": round(p, 6), "win": win})
         lvl = add_xp(uid, max(1, bet // 20))
         # клешня «срывается» на разной высоте — для анимации (0 — сразу, 1 — у самого лотка)
         slip = None if win else round(random.uniform(.15, .9), 2)
         nxt = _get(uid, fresh=True)
-    return {"win": win, "pay": pay, "m": m, "idx": idx, "slip": slip, "stars": bal(uid), "levelup": lvl, **_view(nxt)}
+    return {"win": win, "pay": pay, "m": m, "idx": idx, "slip": slip, "stars": bal(uid), "levelup": lvl, "pf": pf, **_view(nxt)}
 
 
 @app.post(R + "/claw/shuffle")

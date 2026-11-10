@@ -24,7 +24,7 @@ const dgBoard = m => `<div class="dgb" id="dg-b${m}"><div class="dg-lights"></di
 
 async function openDogs() {
   dgBusy = false;
-  openSheet(`${gameHead("Jack-in-the-Box", "Пёсики", "Будки-вайлды и фриспины")}
+  openSheet(`${gameHead("Jack-in-the-Box", "Пёсики", "Будки-вайлды и фриспины", "dogs")}
     <div class="dgwrap" id="dg-wrap"></div>
     <div class="dginfo"><div><span>Выигрыш</span><b id="dg-win">—</b></div><div><span>Фриспины</span><b id="dg-fs">—</b></div></div>
     <div class="betp">
@@ -51,7 +51,7 @@ function dgBuild() {
   dgBtnText();
 }
 function dgBtnText() {
-  const b = $("#dg-btn"); if (b && !dgBusy) b.textContent = dgN > 1 ? `Крутить x${dgN} · ⭐ ${fmt(betVal("dg-amt") * dgN)}` : "Крутить";
+  const b = $("#dg-btn"); if (b && !dgBusy) b.textContent = dgN > 1 ? `Крутить x${dgN} · ⭐ ${short(betVal("dg-amt") * dgN)}` : "Крутить";
   const y = $("#dg-buy"); if (!y || !DG || !DG.buy) return;
   const bet = betVal("dg-amt");
   y.innerHTML = Object.entries(DG.buy).map(([sc, k]) => `<button data-act="dg-buy" data-v="${sc}" ${dgBusy ? "disabled" : ""}><span>${ic("paw")}Купить ${DG.freeBy[sc]} фриспинов</span><b>⭐ ${fmt(bet * k)}</b></button>`).join("");

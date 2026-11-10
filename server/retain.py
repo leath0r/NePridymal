@@ -35,7 +35,7 @@ TIERS = [(2 * 86400, 7 * 86400, conf("comeback.case", "starter"), 0, 7 * 86400),
 
 def week_net(uid, since=None):
     """Чистый итог игрока в играх с начала недели (минус — проигрыш)."""
-    return q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind IN {GAME_KINDS} AND ts>=?", uid, since or week_start())["s"]
+    return q1(f"SELECT COALESCE(SUM(delta),0) s FROM events WHERE user=? AND kind IN {GAME_KINDS} AND ts>=?", uid, max(since or week_start(), __import__("app").season_from()))["s"]
 
 
 def cashback_preview(uid):
@@ -53,7 +53,7 @@ def _cashback():
         if q1("SELECT 1 FROM cashback WHERE week=? AND user=0", week):
             return
         for r in q(f"SELECT user, SUM(delta) s FROM events WHERE kind IN {GAME_KINDS} AND ts>=? AND ts<? GROUP BY user HAVING s<=?",
-                   week, week + 7 * 86400, -CB_MIN_LOSS):
+                   max(week, __import__("app").season_from()), week + 7 * 86400, -CB_MIN_LOSS):
             amt = min(CB_MAX, int(-r["s"] * CB_RATE))
             if amt <= 0 or not q1("SELECT 1 FROM users WHERE id=?", r["user"]):
                 continue

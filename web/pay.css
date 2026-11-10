@@ -3,42 +3,43 @@
 .pay-btn .ic{width:22px;height:22px}
 .pay-s,.pay-x,.pay-r{--pg1:#ffe9a6;--pg2:#ffc53d;--pg3:#ff9f1c}
 
-/* ---- главный экран: «карта» с балансом ---- */
-.pay-hero{position:relative;isolation:isolate;margin:36px 0 14px;padding:16px 16px 14px;border-radius:26px;overflow:hidden;color:#fff;
-  background:radial-gradient(110% 80% at 100% 0%,#ffc53d38,transparent 55%),radial-gradient(90% 70% at 0% 100%,#8a5cff2e,transparent 60%),
-    linear-gradient(155deg,#2c2244,#16132a 72%);
-  box-shadow:0 22px 44px -24px #000,inset 0 0 0 1px #ffd76a26,inset 0 1px 0 #ffffff1a}
-.pay-hero::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
-  background:linear-gradient(105deg,transparent 35%,#ffffff12 45%,transparent 55%);background-size:250% 100%;animation:pay-sheen 5s ease-in-out infinite}
-.pay-hero::after{content:"";position:absolute;z-index:-1;right:-46px;top:-46px;width:160px;height:160px;border-radius:50%;
-  border:20px solid #ffd76a0d;box-shadow:0 0 0 26px #ffd76a07}
-html.lite .pay-hero::before{animation:none;display:none}
-@keyframes pay-sheen{0%,30%{background-position:120% 0}70%,100%{background-position:-60% 0}}
-.pay-hl{display:flex;align-items:center;gap:7px;font-size:14px;font-weight:800;color:#ffd76a;letter-spacing:.01em}
-.pay-hl .ic{width:19px;height:19px}
-.pay-hl em{margin-left:auto;font-style:normal;font-size:11px;font-weight:600;color:#ffffff73;padding:3px 8px;border-radius:8px;background:#ffffff0d}
-.pay-bal{display:flex;align-items:center;justify-content:center;gap:8px;margin:18px 0 0;min-width:0}
-.pay-st{display:inline-flex;font-size:30px;line-height:1;flex:none}
-.pay-bal .pay-st .xtr{width:36px;height:36px;filter:drop-shadow(0 3px 10px #ffb02e66)}
-.pay-num{min-width:0;font-size:clamp(34px,11.5vw,54px);font-weight:900;letter-spacing:-.025em;line-height:1.08;font-variant-numeric:tabular-nums;white-space:nowrap;
-  background:linear-gradient(180deg,#fffaf0 0%,var(--pg1) 30%,var(--pg2) 65%,var(--pg3));-webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 4px 16px #ffb02e40)}
-.pay-sub{text-align:center;font-size:12px;color:#ffffff80;margin-top:2px}
-.pay-wk{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 12px}
-.pay-wk span{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 4px;border-radius:12px;background:#ffffff0a;font-size:14px;font-weight:800;
-  font-variant-numeric:tabular-nums;color:#ffffffd9}
-.pay-wk span.in{color:#5ff0a8}
-.pay-wk small{font-size:10.5px;font-weight:600;color:#ffffff66}
-.pay-wk .xtr{width:13px;height:13px;vertical-align:-1px}
-.pay-acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.pay-acts button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:14px 8px 11px;border-radius:18px;color:#fff;
-  background:linear-gradient(180deg,#ffffff14,#ffffff08);box-shadow:inset 0 0 0 1px #ffffff17;transition:transform .12s}
-.pay-acts button:active{transform:scale(.95)}
-.pay-acts b{font-size:14px;margin-top:5px}
-.pay-acts small{font-size:11px;color:#ffffff70}
-.pay-ic{width:50px;height:50px;border-radius:16px;display:grid;place-items:center;color:#3a2300;
+/* ---- главный экран кошелька: стопка стеклянных карт с глубиной ---- */
+.pay-hero{position:relative;margin:42px 0 22px;perspective:900px}
+.pay-orbs{position:absolute;inset:-34px -12px -30px;pointer-events:none;overflow:hidden}
+.pay-orbs i{position:absolute;border-radius:50%}
+.pay-orbs i:first-child{left:-22%;top:-18%;width:92%;aspect-ratio:1;background:radial-gradient(closest-side,color-mix(in srgb,var(--ac) 70%,transparent),transparent)}
+.pay-orbs i:last-child{right:-24%;bottom:-24%;width:84%;aspect-ratio:1;background:radial-gradient(closest-side,color-mix(in srgb,var(--ac) 40%,#ff5f9e80),transparent)}
+.pay-stack{position:relative;padding-top:18px;transform-style:preserve-3d}
+.pay-stack>i{position:absolute;left:0;right:0;top:18px;height:100%;max-height:186px;border-radius:26px;border:1px solid #ffffff2b;background:linear-gradient(150deg,#ffffff24,#ffffff0a)}
+.pay-stack>i:nth-child(1){transform:translateY(-18px) scale(.86);opacity:.5}
+.pay-stack>i:nth-child(2){transform:translateY(-9px) scale(.93);opacity:.8}
+.pay-card{position:relative;display:flex;flex-direction:column;min-height:186px;padding:18px 20px;border-radius:26px;overflow:hidden;color:#fff;--gx:30%;--gy:0%;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--ac) 58%,#ffffff24),color-mix(in srgb,var(--ac) 28%,#0a0a1499) 70%);
+  backdrop-filter:blur(22px) saturate(1.7);-webkit-backdrop-filter:blur(22px) saturate(1.7);
+  border:1px solid #ffffff47;box-shadow:inset 0 1.5px 0 #ffffff66,inset 0 -18px 30px -18px #0000005c,0 26px 44px -18px #000000b8,0 14px 34px -14px var(--ac);
+  transition:transform .35s cubic-bezier(.2,.8,.2,1);animation:pay-in .55s cubic-bezier(.2,.9,.25,1.1) both}
+@keyframes pay-in{from{transform:translateY(22px) rotateX(16deg) scale(.95);opacity:0}}
+.pay-gloss{position:absolute;inset:0;pointer-events:none;background:radial-gradient(70% 90% at var(--gx) var(--gy),#ffffff47,transparent 62%)}
+.pay-hl{position:relative;display:flex;align-items:center;justify-content:space-between;font-size:14px}
+.pay-hl b{font-weight:700;color:#ffffffe6}
+.pay-chip{width:36px;height:26px;border-radius:7px;background:linear-gradient(135deg,#ffffffc7,#ffffff4d 55%,#ffffff94);box-shadow:inset 0 0 0 1px #ffffff66,0 2px 5px #0000004d}
+.pay-bal{position:relative;display:flex;align-items:center;gap:9px;margin:auto 0 8px;padding-top:16px;min-width:0}
+.pay-st{display:inline-flex;line-height:1;flex:none;filter:drop-shadow(0 4px 8px #00000059)}
+.pay-bal .pay-st .xtr{width:32px;height:32px}
+.pay-num{min-width:0;font-size:clamp(36px,11.5vw,48px);font-weight:800;letter-spacing:-.03em;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 3px 14px #0000005c}
+.pay-addr{position:relative;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:14px;color:#ffffffe0;background:#00000033;border:1px solid #ffffff2e;font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+.pay-addr .ic{width:13px;height:13px;flex:none}
+.pay-addr:active,.pay-raddr:active{opacity:.6}
+html.lite .pay-orbs{display:none}
+html.lite .pay-card{animation:none;backdrop-filter:none;-webkit-backdrop-filter:none;background:linear-gradient(145deg,var(--ac),var(--ac-d))}
+.pay-acts{display:flex;justify-content:center;gap:26px;margin:0 0 24px}
+.pay-acts button{display:flex;flex-direction:column;align-items:center;gap:7px;width:68px;color:var(--text)}
+.pay-acts button:active{transform:scale(.94)}
+.pay-ic{display:grid;place-items:center;width:56px;height:56px;border-radius:50%;color:var(--text);background:linear-gradient(160deg,color-mix(in srgb,var(--text) 22%,transparent),color-mix(in srgb,var(--text) 6%,transparent));border:1px solid color-mix(in srgb,var(--text) 22%,transparent);box-shadow:inset 0 1.5px 0 color-mix(in srgb,var(--text) 30%,transparent),0 12px 20px -10px #000000b0}
+.pay-acts button:first-child .pay-ic{color:#fff;background:linear-gradient(160deg,var(--ac-l),var(--ac) 55%,var(--ac-d));border-color:#ffffff4d;box-shadow:inset 0 1.5px 0 #ffffff80,0 12px 22px -8px var(--ac)}
+.pay-ic .ic{width:23px;height:23px}
+.pay-acts b{font-size:12.5px;font-weight:600;white-space:nowrap}
   background:linear-gradient(135deg,var(--pg1),var(--pg2) 55%,var(--pg3));box-shadow:0 10px 20px -10px var(--pg3),inset 0 1px 0 #ffffff80}
-.pay-ic .ic{width:25px;height:25px;stroke-width:2.2}
 .pay-s .adm-warn{margin:0 0 12px}
 
 .pay-find{display:flex;align-items:center;gap:8px;padding:0 14px;border-radius:15px;background:var(--card);color:var(--hint)}
@@ -152,10 +153,6 @@ html.lite .pay-ok .ic path{stroke-dashoffset:0;animation:none}
 .pin-kb button:active{transform:scale(.94);background:var(--card)}
 .pin-kb button .ic{width:24px;height:24px}
 .pin-kb .pin-f{font-size:13px;font-weight:600;color:var(--hint);background:none}
-.pay-addr{display:flex;align-items:center;justify-content:center;gap:6px;margin:8px auto 0;padding:5px 10px;border-radius:10px;background:#ffffff0d;color:#ffffffb3;font:600 12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em;max-width:100%}
-.pay-addr span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pay-addr .ic{width:14px;height:14px;flex:none;color:#ffd76a}
-.pay-addr:active,.pay-raddr:active{opacity:.6}
 .pay-raddr{align-self:stretch;display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 8px;margin-top:10px;padding:8px 10px;border-radius:12px;background:#14112a0a;text-align:left;color:#14112a}
 .pay-raddr small{grid-column:1/-1;font-size:11px;color:#14112a80}
 .pay-raddr span{font:700 13px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em;overflow-wrap:anywhere}
@@ -175,3 +172,18 @@ html.lite .pay-ok .ic path{stroke-dashoffset:0;animation:none}
 .fr-btn.pay-pill:active{transform:scale(.95)}
 .fr-btn.pay-pill.tight{padding:0 11px}
 .fr-btn.pay-pill.tight span{display:none}
+
+/* ---- «Получить»: QR на стеклянной карте ---- */
+.pay-rc{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;margin:46px 0 16px;padding:22px 20px 18px;border-radius:28px;overflow:visible;color:var(--text);
+  background:linear-gradient(160deg,color-mix(in srgb,var(--ac) 34%,transparent),color-mix(in srgb,var(--text) 6%,transparent) 70%);border:1px solid color-mix(in srgb,var(--text) 18%,transparent);
+  box-shadow:inset 0 1.5px 0 color-mix(in srgb,var(--text) 26%,transparent),0 26px 46px -22px #000,0 18px 44px -22px var(--ac)}
+.pay-qrwrap{padding:14px;border-radius:24px;background:#fff;box-shadow:0 16px 30px -14px #000000b0}
+.pay-qrwrap .pay-code{position:relative;display:block;width:min(58vw,224px);aspect-ratio:1;margin:0;padding:0;background:none;box-shadow:none;border:0}
+.pay-qrwrap .pay-code svg{display:block;width:100%;height:100%}
+.pay-qrwrap .inv-logo{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:3px;border-radius:50%;background:#fff}
+.pay-rname{margin-top:4px;font-size:18px;font-weight:800;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pay-ramt{display:flex;align-items:center;gap:6px;font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+.pay-rc .pay-addr{align-self:center;color:var(--text);background:color-mix(in srgb,var(--text) 10%,transparent);border-color:var(--line)}
+.pay-racts{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+.pay-racts .pay-link{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px}
+.pay-racts .pay-link .ic{width:15px;height:15px}

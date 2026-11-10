@@ -6,6 +6,7 @@ import random
 
 from fastapi import Depends, Request
 
+import app as A
 from app import R, app, auth, bal, db, err, esc, event, notify, now, q, q1, tx, user_brief, day_start, GAME_KINDS, BANK_START
 
 db.executescript("""
@@ -42,12 +43,14 @@ def _draw(day):
         if q1("SELECT 1 FROM jp_draws WHERE day=?", day):
             return None
         t, pool = _tickets(day), _pool(day)
+        import fair
+        _rng = fair.pub("jackpot", str(now() // 86400))
         winners, left = [], dict(t)
         for share in SPLIT:
             if not left:
                 break
             users = list(left)
-            u = random.choices(users, weights=[left[x] for x in users])[0]
+            u = _rng.choices(users, weights=[left[x] for x in users])[0]
             left.pop(u)
             amount = int(pool * share)
             db.execute("UPDATE users SET stars=stars+? WHERE id=?", (amount, u))
@@ -95,6 +98,8 @@ def jackpot(uid=Depends(auth)):
 @app.post(R + "/jackpot/buy")
 async def jackpot_buy(req: Request, uid=Depends(auth)):
     n = max(1, min(100, int((await req.json()).get("n", 1))))
+    if A.SELF_GUARD:
+        A.SELF_GUARD(uid, n * TICKET)
     d = day_start()
     with tx():
         if bal(uid) < n * TICKET:

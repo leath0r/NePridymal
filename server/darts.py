@@ -50,9 +50,11 @@ async def darts_throw(req: Request, uid=Depends(auth)):
     if risk not in SHAPES:
         err("нет такого риска")
     t = table(risk)
+    import fair
     with tx():
         check_bet(uid, bet)
-        x = random.random()
+        rr, pf = fair.rolls(uid, "darts", ref=risk, n=4)
+        x = rr[0]
         for z, p, (r0, r1) in ZONES:
             x -= p
             if x < 0:
@@ -60,12 +62,12 @@ async def darts_throw(req: Request, uid=Depends(auth)):
         m = t[z]
         pay = int(bet * m)
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
-        event(uid, "darts", pay - bet)
+        event(uid, "darts", pay - bet, stake=bet, pf=pf, res={"pay": pay})
         lvl = add_xp(uid, max(1, bet // 20))
-    # точка попадания внутри зоны: радиус равномерно по площади, угол — середина сектора ± чуть-чуть
-    r = math.sqrt(random.uniform(r0 * r0, r1 * r1))
-    seg = random.randrange(20)
-    ang = seg * 18 + random.uniform(-7, 7)
+    # точка попадания внутри зоны: радиус равномерно по площади, угол — середина сектора ± чуть-чуть (те же честные броски)
+    r = math.sqrt(rr[1] * (r1 * r1 - r0 * r0) + r0 * r0)
+    seg = fair.idx(rr[2], 20)
+    ang = seg * 18 + rr[3] * 14 - 7
     num = 25 if z == "obull" else 50 if z == "bull" else ORDER[seg] * (2 if z == "double" else 3 if z == "treble" else 1) if z != "miss" else 0
     return {"zone": z, "name": NAMES[z], "mult": m, "pay": pay, "bet": bet, "r": round(r, 4), "a": round(ang, 2), "score": num,
-            "stars": bal(uid), "levelup": lvl}
+            "stars": bal(uid), "levelup": lvl, "pf": pf}

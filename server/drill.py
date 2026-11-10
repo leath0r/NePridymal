@@ -47,10 +47,10 @@ def mults():
     return [0] + [max(1.0, round(SHAPE[k] * c, 2)) for k in range(1, LAYERS + 1)]   # победа никогда не меньше ставки
 
 
-def _depth(surv=None):
+def _depth(surv=None, rr=None):
     surv = surv or SURVIVE
     k = 0
-    while k < LAYERS and random.random() < surv[k]:
+    while k < LAYERS and (rr[k] if rr is not None else random.random()) < surv[k]:
         k += 1
     return k
 
@@ -91,30 +91,34 @@ async def drill_play(req: Request, uid=Depends(auth)):
         if not 1 <= target <= LAYERS:
             err("выбери пласт-цель")
         dm = depth_mults()
+        import fair
         with tx():
             check_bet(uid, bet)
-            d = _depth(SURVIVE_D)
+            rr, pf = fair.rolls(uid, "drill", ref=f"depth:{target}", n=LAYERS)
+            d = _depth(SURVIVE_D, rr)
             won = d >= target
             m = dm[target] if won else 0
             pay = int(bet * m)
             db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
-            event(uid, "drill", pay - bet)
+            event(uid, "drill", pay - bet, stake=bet, pf=pf, res={"pay": pay})
             lvl = add_xp(uid, max(1, bet // 20))
         depths = [0, 0, 0]
         depths[pick] = d
         return {"mode": "depth", "depths": depths, "pick": pick, "target": target, "won": won, "tie": 0, "mult": m, "pay": pay, "bet": bet,
-                "stars": bal(uid), "levelup": lvl, "mults": mults(), "depthMults": dm}
+                "stars": bal(uid), "levelup": lvl, "mults": mults(), "depthMults": dm, "pf": pf}
     ms = mults()
+    import fair
     with tx():
         check_bet(uid, bet)
-        depths = [_depth() for _ in range(3)]
+        rr, pf = fair.rolls(uid, "drill", ref="classic", n=3 * LAYERS)
+        depths = [_depth(None, rr[i * LAYERS:(i + 1) * LAYERS]) for i in range(3)]
         d, top = depths[pick], max(depths)
         lead = depths.count(top)
         won = d == top and d > 0
         m = round(ms[d] / lead, 2) if won else 0
         pay = int(bet * m)
         db.execute("UPDATE users SET stars=stars-?+? WHERE id=?", (bet, pay, uid))
-        event(uid, "drill", pay - bet)
+        event(uid, "drill", pay - bet, stake=bet, pf=pf, res={"pay": pay})
         lvl = add_xp(uid, max(1, bet // 20))
     return {"depths": depths, "pick": pick, "won": won, "tie": lead if won and lead > 1 else 0, "mult": m, "pay": pay, "bet": bet,
-            "stars": bal(uid), "levelup": lvl, "mults": ms}
+            "stars": bal(uid), "levelup": lvl, "mults": ms, "pf": pf}
