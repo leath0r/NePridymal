@@ -302,6 +302,17 @@ const CASE_COL = {
 };
 
 let BAL_HOLD = 0;   // >0 — идёт анимация игры: фоновое обновление не показывает итоговый баланс раньше времени
+// Telegram кэширует страницу игры до 30 дней: если сервер собрал новую версию, уходим на новый адрес (?v=…) — он всегда свежий.
+function checkBuild() {
+  try {
+    const sc = document.querySelector('script[src*="bundle.js?v="]'), mine = sc && (sc.getAttribute("src").match(/v=([0-9a-f]+)/) || [])[1];
+    if (!mine || !ME || !ME.build || ME.build === mine) return;
+    if (sessionStorage.getItem("np_upd") === ME.build) return;   // уже пробовали — не крутимся в цикле
+    sessionStorage.setItem("np_upd", ME.build);
+    toast("Есть обновление игры — перезагружаем…", "ok");
+    setTimeout(() => location.replace(location.pathname + "?v=" + ME.build + location.hash), 900);
+  } catch (e) {}
+}
 async function loadMe() {
   const prevKeys = ME ? ME.keys : null;
   let fresh = null;
@@ -311,6 +322,7 @@ async function loadMe() {
   if (BAL_HOLD > 0 && ME) fresh.stars = ME.stars;
   ME = fresh;
   renderHeader();
+  checkBuild();
   if (prevKeys !== null && prevKeys !== ME.keys) {   // выдали ключи от кейсов — перезагружаем витрину, чтобы кнопка «Открыть ключом» появилась сразу
     CASES = [];
     if (TAB === "cases" && !SHEETS.length) renderCases();

@@ -21,7 +21,18 @@ CUSTOM = {
     "AK-47 Asiimov": _WEAR,
     "CS Gloves": [["Pandora's Box", 2], ["Vice", 3], ["Crimson Kimono", 4], ["Spearmint", 5], ["King Snake", 6], ["Cobalt Skulls", 10]],
     "Karambit": [["Fade", 3], ["Doppler", 5], ["Gamma Doppler", 4], ["Marble Fade", 4], ["Tiger Tooth", 6], ["Lore", 5], ["Slaughter", 7], ["Crimson Web", 10]],
+    # кейс «CS:GO Легенды» (2026-11-11): у части скинов в игре нет всех степеней износа — берём те, что есть
+    "AWP Asiimov": [["Field-Tested", 20], ["Well-Worn", 10], ["Battle-Scarred", 9]],
+    "Desert Eagle Blaze": [["Factory New", 3], ["Minimal Wear", 8]],
+    "Glock-18 Fade": [["Factory New", 3], ["Minimal Wear", 8]],
+    "USP-S Kill Confirmed": _WEAR,
+    "AK-47 Fire Serpent": _WEAR,
+    "M4A4 Howl": [["Factory New", 3], ["Minimal Wear", 8], ["Field-Tested", 20], ["Well-Worn", 10]],
+    "AWP Dragon Lore": _WEAR,
+    "Butterfly Knife": [["Fade", 3], ["Doppler", 5], ["Gamma Doppler", 4], ["Marble Fade", 4], ["Tiger Tooth", 6], ["Lore", 5], ["Slaughter", 7], ["Crimson Web", 10]],
+    "Sport Gloves": [["Omega", 3], ["Amphibious", 3], ["Hedge Maze", 4], ["Nocts", 5], ["Slingshot", 5], ["Scarlet Shamagh", 6], ["Bronze Morph", 7], ["Superconductor", 8]],
 }
+CUSTOM_COVERS = {"CS Case": "_cover", "CS Case 2": "CS Case 2"}   # обложки своих кейсов → ключ в map.json (не коллекции)
 for _c, _m in CUSTOM.items():
     CATALOG[_c] = {"released": 1794355200, "models": [list(x) for x in _m],
                    "backdrops": CATALOG[CUSTOM_DONOR]["backdrops"], "symbols": CATALOG[CUSTOM_DONOR]["symbols"]}
@@ -32,7 +43,7 @@ def custom_file(col, model=None):
     if col.startswith("~"):   # загруженная в админке обложка кейса (admin.py → «Кейсы»): covers/<имя>_<размер>.png
         name = col[1:]
         return os.path.join(COVER_DIR, name) if re.fullmatch(r"[A-Za-z0-9_]{1,80}", name) else None
-    m = CUSTOM_MAP.get("_cover" if col == "CS Case" else col)
+    m = CUSTOM_MAP.get(CUSTOM_COVERS.get(col, col))
     if not m:
         return None
     name = m.get(model) if model else next(iter(m.values()))
@@ -67,6 +78,8 @@ BASE = {
 }
 DEFAULT_BASE = 600
 BASE.update({"P90 Asiimov": 3660, "AK-47 Asiimov": 9150, "CS Gloves": 29280, "Karambit": 73200})   # кейс CS:GO: при цене 11 111 возврат ≈ 90% (проверено симуляцией)
+BASE.update({"AWP Asiimov": 11500, "Desert Eagle Blaze": 18450, "Glock-18 Fade": 27700, "USP-S Kill Confirmed": 13850, "AK-47 Fire Serpent": 57700,
+             "M4A4 Howl": 138400, "Sport Gloves": 115300, "Butterfly Knife": 207600, "AWP Dragon Lore": 461300})   # кейс «CS:GO Легенды»: при цене 33 333 возврат ≈ 90% (симуляция 200к открытий, 2026-11-11)
 
 
 def base(col):
@@ -209,10 +222,11 @@ CASES_DEF = [
     ("sport", "Спорт", "UFC Strike", 4, ["UFC Strike", "Khabib's Papakha", "Victory Medal", "Surge Board", "Heroic Helmet", "Bling Binky"]),
     ("royal", "Королевский", "Heart Locket", 18, ["Plush Pepe", "Heart Locket"]),
     ("csgo", "CS:GO", "CS Case", 3, ["P90 Asiimov", "AK-47 Asiimov", "CS Gloves", "Karambit"]),
+    ("csgo2", "CS:GO Легенды", "CS Case 2", 5, ["AWP Asiimov", "Desert Eagle Blaze", "Glock-18 Fade", "USP-S Kill Confirmed", "AK-47 Fire Serpent", "M4A4 Howl", "Sport Gloves", "Butterfly Knife", "AWP Dragon Lore"]),
     ("mega", "МЕГА", "Plush Pepe", 15, ["Plush Pepe", "Heart Locket", "Durov's Cap", "Precious Peach", "Mighty Arm", "Ion Gem", "Loot Bag"]),
 ]
 RTP = conf("economy.case_rtp", 0.9)  # возврат игроку
-FIXED_PRICE = {"csgo": 11111}   # цена ровно такая (базовые цены коллекций подобраны под RTP)
+FIXED_PRICE = {"csgo": 11111, "csgo2": 33333}   # цена ровно такая (базовые цены коллекций подобраны под RTP)
 CASES = {}
 
 

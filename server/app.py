@@ -35,13 +35,27 @@ CUR_TOKEN = ContextVar("cur_token", default=None)  # франшиза: отве�
 DEV = os.environ.get("DEV") == "1"
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "game.db"))
 WEB_DIR = os.environ.get("WEB_DIR", os.path.join(os.path.dirname(__file__), "..", "web"))
+_BUILD = {"mtime": 0, "v": ""}
+
+
+def build_v():
+    """Номер текущей сборки фронта (хэш bundle.js из index.html). Клиент сравнивает со своим и перезагружается, если устарел."""
+    try:
+        # на проде фронт лежит в /var/www/nepridymal (nginx), а WEB_DIR указывает на ../web — берём первый существующий index.html
+        p = next((x for x in (os.path.join(WEB_DIR, "index.html"), "/var/www/nepridymal/index.html") if os.path.exists(x)), "")
+        mt = os.stat(p).st_mtime
+        if mt != _BUILD["mtime"]:
+            m = re.search(r"bundle\.js\?v=([0-9a-f]+)", open(p, encoding="utf-8").read())
+            _BUILD.update(mtime=mt, v=m.group(1) if m else "")
+    except OSError:
+        pass
+    return _BUILD["v"]
+
+
 def app_url_v():
     """Адрес игры с номером сборки: Telegram кэширует страницу, а новый адрес всегда открывается свежим."""
-    try:
-        m = re.search(r"bundle\.js\?v=([0-9a-f]+)", open(os.path.join(WEB_DIR, "index.html"), encoding="utf-8").read())
-        return APP_URL + ("&" if "?" in APP_URL else "?") + "v=" + m.group(1)
-    except (OSError, AttributeError):
-        return APP_URL
+    v = build_v()
+    return APP_URL + ("&" if "?" in APP_URL else "?") + "v=" + v if v else APP_URL
 
 
 SERVE_WEB = os.environ.get("SERVE_WEB") == "1"   # отдавать фронт самим (запуск без nginx — run.py)
@@ -906,7 +920,7 @@ def me(uid=Depends(auth)):
             "streakNext": u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1,   # какой день серии будет при следующем заборе
             "streak": u["streak"], "streakBest": u["best_streak"] if "best_streak" in u.keys() else 0, "streakMs": _next_ms(uid),
             "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": refs.cfg("new_bonus") if refs.cfg("on") else 0, "ref": refs.summary(uid),
-            "disclaimer": disclaimer(), "shopOn": shop.shop_on(), "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "stealth": uid in STEALTH, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
+            "disclaimer": disclaimer(), "build": build_v(), "shopOn": shop.shop_on(), "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "stealth": uid in STEALTH, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
             "sparks": __import__("sparks").sparks_waiting(uid),
             "gamesOff": __import__("gates").games_state(),
@@ -2828,7 +2842,7 @@ def _custom_asset(raw, request):
     """Картинка своего подарка → Response; узор своего подарка → путь у донора; обычный подарок → None."""
     parts = [urllib.parse.unquote(x) for x in raw.split("/")]
     kind, col = parts[0], parts[1].removesuffix(".png").removesuffix(".json") if len(parts) > 1 else ""
-    if col not in E.CUSTOM and col != "CS Case" and not col.startswith("~"):
+    if col not in E.CUSTOM and col not in E.CUSTOM_COVERS and not col.startswith("~"):
         return None
     if kind == "pattern":
         return "pattern/" + urllib.parse.quote(E.CUSTOM_DONOR) + "/" + "/".join(raw.split("/")[2:])

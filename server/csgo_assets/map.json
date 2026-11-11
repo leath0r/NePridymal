@@ -33,5 +33,68 @@
  },
  "_cover": {
   "CS Case": "cover__cs_case"
+ },
+ "AWP Asiimov": {
+  "Field-Tested": "awp_asiimov__field_tested",
+  "Well-Worn": "awp_asiimov__well_worn",
+  "Battle-Scarred": "awp_asiimov__battle_scarred"
+ },
+ "AWP Dragon Lore": {
+  "Factory New": "awp_dragon_lore__factory_new",
+  "Minimal Wear": "awp_dragon_lore__minimal_wear",
+  "Field-Tested": "awp_dragon_lore__field_tested",
+  "Well-Worn": "awp_dragon_lore__well_worn",
+  "Battle-Scarred": "awp_dragon_lore__battle_scarred"
+ },
+ "M4A4 Howl": {
+  "Factory New": "m4a4_howl__factory_new",
+  "Minimal Wear": "m4a4_howl__minimal_wear",
+  "Field-Tested": "m4a4_howl__field_tested",
+  "Well-Worn": "m4a4_howl__well_worn"
+ },
+ "Desert Eagle Blaze": {
+  "Factory New": "desert_eagle_blaze__factory_new",
+  "Minimal Wear": "desert_eagle_blaze__minimal_wear"
+ },
+ "Glock-18 Fade": {
+  "Factory New": "glock_18_fade__factory_new",
+  "Minimal Wear": "glock_18_fade__minimal_wear"
+ },
+ "USP-S Kill Confirmed": {
+  "Factory New": "usp_s_kill_confirmed__factory_new",
+  "Minimal Wear": "usp_s_kill_confirmed__minimal_wear",
+  "Field-Tested": "usp_s_kill_confirmed__field_tested",
+  "Well-Worn": "usp_s_kill_confirmed__well_worn",
+  "Battle-Scarred": "usp_s_kill_confirmed__battle_scarred"
+ },
+ "AK-47 Fire Serpent": {
+  "Factory New": "ak_47_fire_serpent__factory_new",
+  "Minimal Wear": "ak_47_fire_serpent__minimal_wear",
+  "Field-Tested": "ak_47_fire_serpent__field_tested",
+  "Well-Worn": "ak_47_fire_serpent__well_worn",
+  "Battle-Scarred": "ak_47_fire_serpent__battle_scarred"
+ },
+ "Butterfly Knife": {
+  "Fade": "butterfly_knife__fade",
+  "Doppler": "butterfly_knife__doppler",
+  "Gamma Doppler": "butterfly_knife__gamma_doppler",
+  "Marble Fade": "butterfly_knife__marble_fade",
+  "Tiger Tooth": "butterfly_knife__tiger_tooth",
+  "Lore": "butterfly_knife__lore",
+  "Slaughter": "butterfly_knife__slaughter",
+  "Crimson Web": "butterfly_knife__crimson_web"
+ },
+ "Sport Gloves": {
+  "Omega": "sport_gloves__omega",
+  "Amphibious": "sport_gloves__amphibious",
+  "Hedge Maze": "sport_gloves__hedge_maze",
+  "Nocts": "sport_gloves__nocts",
+  "Slingshot": "sport_gloves__slingshot",
+  "Scarlet Shamagh": "sport_gloves__scarlet_shamagh",
+  "Bronze Morph": "sport_gloves__bronze_morph",
+  "Superconductor": "sport_gloves__superconductor"
+ },
+ "CS Case 2": {
+  "CS Case 2": "cover__cs_case_2"
  }
 }
