@@ -22,7 +22,13 @@ ITEMS = {
     "n-neon":    ("nick", "Неоновый ник", 80_000),
     "n-fire":    ("nick", "Огненный ник", 120_000),
     "n-rainbow": ("nick", "Радужный ник", 200_000),
+    "ny27":      ("frame", "2027", 0),     # награда, не продаётся (см. AWARD)
+    "loyal":     ("frame", "Постоянный клиент", 0),   # за очки лояльности (loyal.py)
+    "bday":      ("frame", "Именинник", 0),           # на день рождения (bday.py)
 }
+# награды: не продаются и не показываются в магазине, пока не получены; текст — откуда берутся
+AWARD = {"ny27": "Рамку «2027» дают за все 31 дверцу адвент-календаря", "loyal": "Рамку «Постоянный клиент» дают за очки лояльности",
+         "bday": "Рамку «Именинник» дают на день рождения"}
 ACCENTS = ["", "#ff5a6e", "#ff8a3d", "#ffc93d", "#4fd67a", "#2bd4c4", "#3fa8ff", "#7d6cff", "#c86bff", "#ff6fb5", "#e6e9f0"]
 STATUS_MAX = 40
 
@@ -78,9 +84,11 @@ def my_badges(uid):
 def style_get(uid=Depends(auth)):
     u = q1("SELECT * FROM users WHERE id=?", uid)
     import clans
-    return {"items": [{"id": i, "kind": k, "name": n, "price": price_for(uid, p), "full": p} for i, (k, n, p) in ITEMS.items()], "days": DAYS,
+    own = owned(uid)
+    return {"items": [{"id": i, "kind": k, "name": n, "price": price_for(uid, p), "full": p, **({"award": AWARD[i]} if i in AWARD else {})}
+                      for i, (k, n, p) in ITEMS.items() if i not in AWARD or i in own], "days": DAYS,
             "discount": round(clans.style_discount(uid) * 100),
-            "owned": owned(uid), "accents": ACCENTS, "statusMax": STATUS_MAX, "vip": A.is_vip(u),
+            "owned": own, "accents": ACCENTS, "statusMax": STATUS_MAX, "vip": A.is_vip(u),
             "cur": {"accent": u["p_accent"], "status": u["p_status"], "badges": json.loads(u["p_badges"] or "[]"), "cover": u["p_cover"],
                     "frame": u["p_frame"], "nick": u["p_nick"]}}
 
@@ -114,6 +122,8 @@ async def style_set(req: Request, uid=Depends(auth)):
 def style_buy(item: str, uid=Depends(auth)):
     if item not in ITEMS:
         err("нет такого товара")
+    if item in AWARD:
+        err(AWARD[item])
     kind, name, price = ITEMS[item]
     with tx():
         price = price_for(uid, price)
@@ -130,3 +140,16 @@ def style_buy(item: str, uid=Depends(auth)):
         db.execute(f"UPDATE users SET {col}=?, {col}_until=? WHERE id=?", (item, until, uid))
         stars = q1("SELECT stars FROM users WHERE id=?", uid)["stars"]
     return {"ok": True, "until": until, "stars": stars}
+
+
+def grant(uid, item, until):
+    """Выдать оформление-награду (вызывать внутри tx): срок — не короче until. Надевается, если сейчас не надето купленное."""
+    kind = ITEMS[item][0]
+    cur = q1("SELECT until FROM cosm WHERE user=? AND item=?", uid, item)
+    until = max(until, cur["until"] if cur else 0)
+    db.execute("INSERT INTO cosm(user,item,until) VALUES(?,?,?) ON CONFLICT(user,item) DO UPDATE SET until=excluded.until", (uid, item, until))
+    col = "p_frame" if kind == "frame" else "p_nick"
+    u = q1(f"SELECT {col} c, {col}_until cu FROM users WHERE id=?", uid)
+    if not u["c"] or (u["cu"] or 0) <= now() or u["c"] == item:
+        db.execute(f"UPDATE users SET {col}=?, {col}_until=? WHERE id=?", (item, until, uid))
+    return until

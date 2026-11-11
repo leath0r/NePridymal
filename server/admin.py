@@ -150,7 +150,17 @@ def user(tid: int, aid=Depends(admin)):
             "events": [dict(r) for r in q("SELECT kind, delta, ts FROM events WHERE user=? ORDER BY ts DESC LIMIT 40", tid)],
             "giftList": [gift_out(g) for g in q("SELECT * FROM gifts WHERE owner=? ORDER BY value DESC LIMIT 100", tid)],
             "log": [dict(r) for r in q("SELECT action, detail, ts FROM admin_log WHERE target=? ORDER BY id DESC LIMIT 10", tid)],
-            "isAdmin": tid in ADMINS, "isOwner": tid in OWNERS, "canGrant": aid in OWNERS, **_ref_info(u)}
+            "isAdmin": tid in ADMINS, "isOwner": tid in OWNERS, "canGrant": aid in OWNERS, **_ref_info(u), **_extra_info(u)}
+
+
+def _extra_info(u):
+    """VIP, подписка, день рождения — для карточки игрока."""
+    import premium
+    out = {"vipUntil": u["vip_until"] if "vip_until" in u.keys() else 0, "sub": premium.sub_info(u["id"])}
+    if "bday" in u.keys() and u["bday"]:
+        import bday
+        out["bday"] = {"date": bday.fmt_code(u["bday"]), "set": u["bday_set"], "year": u["bday_year"]}
+    return out
 
 
 def _ref_info(u):
@@ -712,8 +722,11 @@ def sales(aid=Depends(admin)):
         u = q1("SELECT * FROM users WHERE id=?", r["user"])
         last.append({"user": user_brief(u) if u else {"id": r["user"], "name": "?"}, "xtr": r["xtr"], "stars": r["stars"], "ts": r["ts"]})
     import shop
+    import premium
+    sub = dict(q1("SELECT COUNT(*) active, COALESCE(SUM(cancelled),0) cancelled, COALESCE(SUM(renewals),0) renewals FROM vip_sub WHERE expires>?", t))
+    sub["xtr"] = (sub["active"] - sub["cancelled"]) * premium.VIP_SUB_XTR   # ожидаемые списания в месяц
     return {"today": per(t - t % 86400), "week": per(t - 7 * 86400), "all": per(0), "days": days, "top": top, "last": last,
-            "sale": {k: shop.sale_on(k) for k in shop.SALE_KEYS}, "canEdit": aid in OWNERS}
+            "sale": {k: shop.sale_on(k) for k in shop.SALE_KEYS}, "canEdit": aid in OWNERS, "sub": sub}
 
 
 @app.post(R + "/admin/shop")

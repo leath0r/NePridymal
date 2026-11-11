@@ -1,0 +1,197 @@
+/* ================= гарантия в кейсах, Новый год, адвент, Тайный Санта, итоги года, воронка ================= */
+
+/* --- шкала гарантии редкого (кейсы) --- */
+.pity{margin:12px 0 4px;padding:12px 14px;border-radius:var(--r);background:var(--card)}
+.pity-h{display:flex;align-items:center;gap:8px;font-size:14px}
+.pity-h svg{width:18px;height:18px;flex:none;color:#c86bff}
+.pity-h b{flex:1;min-width:0}
+.pity-n{color:var(--hint);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.pity-bar{height:8px;border-radius:6px;background:var(--card2);margin:10px 0 9px;overflow:hidden}
+.pity-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#7d6cff,#c86bff);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.pity.full .pity-h svg{color:#ffc53d}
+.pity.full .pity-bar i{background:linear-gradient(90deg,#ffe58a,#ff9f1c);box-shadow:0 0 12px #ffab2e88}
+.pity-s{display:flex;align-items:center;gap:10px;font-size:12.5px;line-height:1.35;color:var(--hint)}
+.pity-tops{display:flex;flex:none;padding-right:6px}
+.pity-tops img{width:24px;height:24px;object-fit:contain;margin-right:-6px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.45))}
+.won-pity{display:inline-flex;align-items:center;gap:5px;margin:12px 0 0 6px;padding:4px 10px;border-radius:10px;font-size:12px;font-weight:800;
+  color:#3a2300;background:linear-gradient(135deg,#ffe58a,#ffab2e);vertical-align:top}
+.won-pity svg{width:14px;height:14px}
+.gcell.pz{box-shadow:inset 0 0 0 2px #ffc53d}
+.gcell.pz::after{content:"";position:absolute;top:6px;left:6px;width:18px;height:18px;border-radius:6px;background:#ffc53d center/12px no-repeat
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233a2300' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3 4.5 6v5.5c0 4.6 3.1 8.1 7.5 9.5 4.4-1.4 7.5-4.9 7.5-9.5V6Z'/%3E%3C/svg%3E")}
+
+/* --- ивент «Новый год»: тема, снег (за содержимым, только без режима оптимизации) --- */
+html.ev-newyear::before{background:radial-gradient(60% 40% at 0% 0%,rgba(80,170,255,.2),transparent 70%),radial-gradient(55% 35% at 100% 30%,rgba(255,70,90,.14),transparent 70%),radial-gradient(70% 40% at 50% 100%,rgba(120,220,255,.12),transparent 70%)!important}
+html.ev-newyear header{box-shadow:0 1px 0 rgba(140,210,255,.35)}
+html.ev-newyear nav.tabs button.on i{color:#8fd8ff;filter:drop-shadow(0 0 6px rgba(120,200,255,.7))}
+html.ev-newyear .evrib{background:linear-gradient(90deg,rgba(70,160,255,.28),rgba(255,70,90,.16) 60%,var(--card));box-shadow:inset 0 0 0 1px rgba(140,210,255,.45)}
+html.ev-newyear .case.ev{box-shadow:0 0 0 2px #8fd8ff,0 12px 30px -10px rgba(80,170,255,.8)}
+html.ev-newyear .evtag{background:linear-gradient(135deg,#3fa8ff,#ff4d6d)}
+.ev-snow{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.ev-snow i{position:absolute;left:0;right:0;top:-240px;bottom:0;will-change:transform;opacity:.55;background-size:240px 240px;animation:evSnow1 18s linear infinite;
+  background-image:radial-gradient(circle 2px at 26px 34px,#fff 55%,transparent),radial-gradient(circle 1.5px at 118px 92px,#fff 55%,transparent),
+    radial-gradient(circle 2.5px at 196px 40px,#fff 55%,transparent),radial-gradient(circle 1.5px at 70px 168px,#fff 55%,transparent),
+    radial-gradient(circle 2px at 168px 206px,#fff 55%,transparent),radial-gradient(circle 1px at 222px 140px,#fff 55%,transparent)}
+.ev-snow i+i{top:-360px;opacity:.32;background-size:360px 360px;animation:evSnow2 34s linear infinite}
+@keyframes evSnow1{to{transform:translate3d(0,240px,0)}}
+@keyframes evSnow2{to{transform:translate3d(0,360px,0)}}
+html.lite .ev-snow{display:none}
+@media (prefers-reduced-motion:reduce){.ev-snow i{animation:none}}
+
+/* --- рамка «2027» (и следующих годов): гирлянда; подпись года на больших аватарах --- */
+.ava[class*=" fr-ny"]{--frw:calc(2px + max(2px,var(--s)*.075));isolation:isolate;box-shadow:0 0 0 2px var(--bg),0 0 12px 2px #ffd76a44}
+.ava[class*=" fr-ny"]::after{content:"";position:absolute;inset:calc(-2px - var(--frw));border-radius:50%;z-index:-1;pointer-events:none;
+  background:repeating-conic-gradient(from var(--fra,0deg),#ff4d5e 0 20deg,#ffe08a 20deg 40deg,#2fbf6a 40deg 60deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - var(--frw)),#000 calc(100% - var(--frw) + .5px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - var(--frw)),#000 calc(100% - var(--frw) + .5px));
+  animation:frSpin 12s linear infinite}
+.lite .ava[class*=" fr-ny"]::after{animation:none}
+.ny-tag{position:absolute;left:50%;bottom:calc(-6px - var(--s)*.05);transform:translateX(-50%);z-index:2;padding:1px 6px;border-radius:7px;white-space:nowrap;
+  font-style:normal;font-weight:900;font-size:calc(8px + var(--s)*.07);line-height:1.25;letter-spacing:.04em;color:#3a2300;
+  background:linear-gradient(135deg,#ffe58a,#ffab2e);box-shadow:0 0 0 2px var(--bg)}
+
+/* --- карточки в листалке главной --- */
+.stc.st-adv{background:radial-gradient(120% 140% at 100% 0,#5ab8ff33,transparent 60%),linear-gradient(135deg,#132a46,#0f1a2c);border-color:#8fd8ff33}
+.st-adv .stc-i{position:relative;background:linear-gradient(145deg,#ff6b7d,#d6283f);color:#fff;box-shadow:0 6px 16px -8px #ff4d5e}
+.st-adv .stc-i em{position:absolute;right:-5px;bottom:-5px;min-width:19px;height:19px;padding:0 4px;border-radius:10px;box-sizing:border-box;
+  font-style:normal;font-weight:900;font-size:10.5px;line-height:19px;text-align:center;background:#fff;color:#c2142c;box-shadow:0 0 0 2px #0f1a2c}
+.st-adv.hot .stc-i{animation:advPulse 1.8s ease-in-out infinite}
+@keyframes advPulse{50%{box-shadow:0 0 0 4px #ff4d5e33,0 6px 18px -6px #ff4d5e}}
+.stc.st-santa{background:radial-gradient(120% 140% at 100% 0,#ff4d5e33,transparent 60%),linear-gradient(135deg,#3a1018,#1c0d12);border-color:#ff6b7d33}
+.st-santa .stc-i{background:radial-gradient(circle,#ff6b7d44,transparent 70%)}
+.st-santa .stc-i img{width:36px;height:36px;object-fit:contain}
+.st-santa.hot .stc-i img{animation:evbob 2.4s ease-in-out infinite}
+html.lite .st-adv.hot .stc-i,html.lite .st-santa.hot .stc-i img{animation:none}
+
+/* --- окно адвент-календаря --- */
+.adv-hero{padding:0 0 2px}   /* заголовок слева, как у остальных окон: справа сверху баланс и крестик */
+.adv-hero h2{margin:4px 0 0}
+/* «Адвент-календарь» длиннее места до баланса на узких экранах: переносим после дефиса, а не обрезаем многоточием */
+.sheet>.adv-hero>.gtitle{font-size:20px;line-height:1.15;white-space:normal;overflow:visible;text-overflow:clip}
+.adv-hero p{margin:4px 0 0;color:var(--hint);font-size:13px}
+.adv-fr{display:flex;align-items:center;gap:16px;margin:16px 0 10px;padding:14px 16px 16px;border-radius:var(--r);background:linear-gradient(135deg,#2a1a0a,#17120b);box-shadow:inset 0 0 0 1px #ffd76a33}
+.adv-fr>.ava{margin:2px 4px 6px}
+.adv-fr .grow{min-width:0;display:flex;flex-direction:column;gap:3px}
+.adv-fr b{font-size:15px}
+.adv-fr span{font-size:12.5px;color:var(--hint);line-height:1.35}
+.adv-fr.got{box-shadow:inset 0 0 0 1.5px #ffd76a}
+.adv-fr.off>.ava{filter:grayscale(.85);opacity:.7}
+.adv-pr{margin:12px 2px;font-size:13px;color:var(--hint)}
+.adv-pr b{color:var(--text)}
+.adv-bar{height:6px;border-radius:4px;background:var(--card2);margin-top:6px;overflow:hidden}
+.adv-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#ff4d5e,#ffd76a,#3fcf7a);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.adv-g{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.adv-d{position:relative;aspect-ratio:1/1.12;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:var(--card);overflow:hidden;min-width:0}
+.adv-d b{font-size:15px;font-weight:900;line-height:1}
+.adv-d small{font-size:9px;font-weight:700;color:var(--hint);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;padding:0 2px;box-sizing:border-box}
+.adv-d small .xtr{width:9px;height:9px}
+.adv-d.open{background:linear-gradient(160deg,#16402a,#0f2a1c);box-shadow:inset 0 0 0 1px #3fcf7a55}
+.adv-d.open small{color:#7fe3a5}
+.adv-d.today{background:linear-gradient(160deg,#5a1622,#2a0c12);box-shadow:inset 0 0 0 1.5px #ff6b7d,0 0 14px -2px #ff4d5e88;animation:advPulse 1.8s ease-in-out infinite}
+.adv-d.today small{color:#ffb3bd}
+.adv-d.missed{opacity:.42}
+.adv-d.missed b{text-decoration:line-through}
+.adv-d.locked{opacity:.7}
+.adv-d .adv-k,.adv-d .adv-f{position:absolute;top:3px;right:3px;display:flex;align-items:center;font-style:normal;font-size:8.5px;font-weight:900;color:#ffd76a}
+.adv-d .adv-k svg{width:11px;height:11px}
+.adv-d .adv-f svg{width:12px;height:12px}
+.adv-d.pop{animation:advPop .6s cubic-bezier(.2,1.4,.4,1)}
+@keyframes advPop{from{transform:scale(.6) rotateY(90deg)}to{transform:none}}
+.adv-cta{margin:16px 0 4px}
+.adv-cta .btn{width:100%}
+.adv-h{margin-top:8px;font-size:12px;line-height:1.4;color:var(--hint);text-align:center}
+.adv-wait{display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:var(--r);background:var(--card);font-size:13.5px;color:var(--hint)}
+.adv-wait b{color:var(--text)}
+.adv-wait svg{width:18px;height:18px;flex:none}
+.adv-rules{margin:12px 2px 4px;font-size:11.5px;line-height:1.45;color:var(--hint)}
+.adv-won{text-align:center}
+.adv-won-d{width:64px;height:64px;margin:0 auto 6px;border-radius:18px;display:grid;place-items:center;font-size:28px;font-weight:900;color:#fff;
+  background:linear-gradient(145deg,#ff6b7d,#c2142c);box-shadow:0 10px 26px -10px #ff4d5e}
+html.lite .adv-d.today,html.lite .adv-d.pop{animation:none}
+
+/* --- окно Тайного Санты --- */
+.sn-hero{text-align:center;padding:2px 0 4px}
+.sn-hero img{width:96px;height:96px;object-fit:contain;filter:drop-shadow(0 10px 20px rgba(255,60,80,.35))}
+.sn-hero h2{margin:4px 0 0;font-size:22px}
+.sn-hero p{margin:4px 0 0;font-size:13px;color:var(--hint);line-height:1.4}
+.sn-cnt{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:5px 12px;border-radius:12px;background:var(--card);font-size:12.5px;font-weight:700}
+.sn-cnt svg{width:15px;height:15px}
+.sn-steps{display:flex;flex-direction:column;gap:8px;margin:14px 0 4px}
+.sn-steps>div{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:14px;background:var(--card);font-size:13px;line-height:1.4}
+.sn-steps i{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:900;font-size:12px;color:#fff;background:linear-gradient(145deg,#ff6b7d,#c2142c)}
+.sn-gift{display:flex;align-items:center;gap:12px;padding:10px;border-radius:var(--r);background:var(--card)}
+.sn-gift>.gift{width:64px;height:64px;flex:none;border-radius:14px}
+.sn-gift>div:last-child{min-width:0;display:flex;flex-direction:column;gap:3px}
+.sn-gift b{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sn-gift span{font-size:12.5px;color:var(--hint)}
+.sn-card{margin-top:8px;padding:12px 14px;border-radius:var(--r);background:linear-gradient(135deg,#fff7e8,#ffe6c2);color:#3a2300}
+.sn-card span{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;opacity:.6}
+.sn-card p{margin:4px 0 0;font-size:14px;line-height:1.45;font-style:italic;overflow-wrap:anywhere}
+.sn-empty{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:18px;border-radius:var(--r);border:1.5px dashed color-mix(in srgb,var(--hint) 45%,transparent);
+  background:transparent;color:var(--hint);font:inherit;font-weight:700}
+.sn-empty svg{width:18px;height:18px}
+.sn-pick{margin-top:8px}
+.sn-n{font-weight:600;text-transform:none;letter-spacing:0}
+.ny-s textarea{resize:none;line-height:1.4}
+.ny-s .btn.cta{margin-top:14px;width:100%}
+.sn-to{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r);background:var(--card);margin-bottom:8px}
+.sn-to b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sn-to>.ic{width:16px;height:16px;color:var(--hint)}
+.sn-note{display:flex;gap:10px;align-items:flex-start;margin-top:14px;padding:12px 14px;border-radius:var(--r);background:var(--card);font-size:13px;line-height:1.4;color:var(--hint)}
+.sn-note svg{flex:none;width:18px;height:18px}
+.sn-cancel{width:100%;margin-top:10px}
+
+/* --- итоги года: карточка на главной и слайды как в сторис --- */
+.stc.st-recap{background:radial-gradient(120% 140% at 100% 0,#c86bff33,transparent 60%),linear-gradient(135deg,#2a1450,#150c2c);border-color:#c86bff33}
+.st-recap .stc-i{background:linear-gradient(145deg,#ffe58a,#ff6fb5 55%,#7d6cff);color:#1c0a33}
+.st-recap .stc-i b{font-size:17px;font-weight:900}
+.sheet.rc-sheet{padding-bottom:calc(16px + var(--bot))}
+.sheet.rc-sheet .sbal{display:none}
+.rc-box{display:flex;flex-direction:column;height:calc(100vh - var(--top) - 32px - var(--bot));height:calc(100dvh - var(--top) - 32px - var(--bot));min-height:460px}
+.rc-bars{display:flex;gap:4px;padding:4px 44px 10px 2px}
+.no-tg .rc-bars{padding-right:48px}
+.rc-bars i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.18);overflow:hidden}
+.rc-bars i b{display:block;height:100%;width:0;background:#fff;border-radius:inherit}
+.rc-bars i.done b{width:100%}
+.rc-bars i.on b{animation:rcBar var(--d,6.5s) linear forwards}
+@keyframes rcBar{to{width:100%}}
+.rc-body{flex:1;min-height:0;display:flex;-webkit-user-select:none;user-select:none}
+.rc-sl{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:8px;padding:26px 20px;border-radius:24px;overflow:hidden;
+  animation:rcIn .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes rcIn{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+.rc-a{background:radial-gradient(90% 60% at 20% 10%,#ff6fb555,transparent 60%),radial-gradient(90% 60% at 90% 90%,#7d6cff66,transparent 60%),linear-gradient(160deg,#2a1450,#0f0a24)}
+.rc-b{background:radial-gradient(80% 60% at 80% 0,#3fa8ff55,transparent 60%),linear-gradient(160deg,#0f2a4a,#091526)}
+.rc-c{background:radial-gradient(80% 60% at 0 100%,#4fd67a44,transparent 60%),linear-gradient(160deg,#0f3a2a,#081a14)}
+.rc-d{background:radial-gradient(80% 60% at 50% 30%,#ffc53d44,transparent 60%),linear-gradient(160deg,#3a2a0c,#1a1206)}
+.rc-e{background:radial-gradient(80% 60% at 50% 20%,#c86bff44,transparent 60%),linear-gradient(160deg,#2a1450,#120a24)}
+.rc-f{background:radial-gradient(90% 60% at 50% 0,#ff6fb555,transparent 60%),radial-gradient(90% 60% at 50% 100%,#ffc53d33,transparent 60%),linear-gradient(160deg,#3a1030,#140a1c)}
+.rc-k{font-size:12.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+.rc-sl h1{margin:6px 0;font-size:64px;line-height:1;font-weight:900;letter-spacing:-.02em;background:linear-gradient(180deg,#fff,#ffd76a);-webkit-background-clip:text;background-clip:text;color:transparent}
+.rc-sl h2{margin:4px 0;font-size:36px;line-height:1.08;font-weight:900;overflow-wrap:anywhere}
+.rc-sl h3{margin:6px 0 0;font-size:18px}
+.rc-sl p{margin:0;font-size:15px;line-height:1.45;color:rgba(255,255,255,.78);max-width:330px}
+.rc-sl p.rc-s{font-size:12.5px;color:rgba(255,255,255,.55);margin-top:8px}
+.rc-big{font-size:74px;line-height:1;font-weight:900;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.rc-big .gold{background:linear-gradient(180deg,#fff6d0,#ffc53d 60%,#ff9f1c);-webkit-background-clip:text;background-clip:text;color:transparent}
+.rc-d .rc-big{font-size:56px}
+.rc-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%;max-width:360px;margin-top:14px}
+.rc-row>div{display:flex;flex-direction:column;gap:3px;padding:12px 6px;border-radius:16px;background:rgba(255,255,255,.08);min-width:0}
+.rc-row b{font-size:22px;font-weight:900}
+.rc-row span{font-size:11px;line-height:1.3;color:rgba(255,255,255,.65)}
+.rc-top{display:flex;flex-direction:column;gap:8px;width:100%;max-width:340px;margin-top:12px}
+.rc-top>div{position:relative;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.08);overflow:hidden;text-align:left}
+.rc-top em{position:absolute;left:0;top:0;bottom:0;width:var(--w);background:rgba(79,214,122,.22)}
+.rc-top i,.rc-top span,.rc-top b{position:relative}
+.rc-top i{font-style:normal;font-weight:900;width:18px;color:#7fe3a5}
+.rc-top span{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-top b{font-size:13px}
+.rc-gift{width:150px;height:150px;margin:6px 0}
+.rc-gift>.gift{width:100%;height:100%;border-radius:28px;box-shadow:0 18px 40px -12px rgba(0,0,0,.6)}
+.rc-p{background:linear-gradient(90deg,#ffe58a,#ff6fb5,#c86bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.rc-badge{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 14px;border-radius:14px;background:rgba(255,197,61,.16);color:#ffd76a;font-size:13px;font-weight:800}
+.rc-badge svg{width:16px;height:16px;flex:none}
+.rc-share{display:flex;flex-direction:column;gap:8px;width:100%;max-width:320px;margin-top:16px}
+.rc-share .btn{width:100%}
+.rc-tap{margin-top:18px;font-size:12px;color:rgba(255,255,255,.5);animation:rcTap 1.6s ease-in-out infinite}
+@keyframes rcTap{50%{opacity:.4}}
+html.lite .rc-sl,html.lite .rc-tap{animation:none}

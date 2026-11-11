@@ -31,8 +31,19 @@ TAB_RENDER.crypto = async function () {
 // ------------------------------------------------------------ стейкинг
 function stEarned(a) {   // накоплено прямо сейчас (между запросами досчитываем по ставке)
   if (!a.staked && !a.earned) return 0;
-  return (a.earned || 0) + (a.staked || 0) * a.apy * Math.min(Date.now() / 1000 - CX._t, a.stakeLeft ?? 1e9) / YEAR;   // копится максимум сутки
+  const dt = Date.now() / 1000 - CX._t, left = a.stakeLeft;                                   // left < 0 — лимита нет, капает всегда
+  if (a.locked) return (a.earned || 0) + (a.staked || 0) * (stRate(a) * Math.min(dt, left) + a.apy * Math.max(0, dt - left)) / YEAR;   // после срока — по обычной ставке
+  return (a.earned || 0) + (a.staked || 0) * a.apy * (left >= 0 ? Math.min(dt, left) : dt) / YEAR;
 }
+const stRate = a => a.apy * (a.locked ? a.mult || 1 : 1);          // годовая ставка с учётом вклада
+const stPct = (a, m = 1) => String(+(a.apy * m * 100 / 365).toFixed(1)).replace(".", ",");   // «% в день»
+const stPlans = () => (CX && CX.plans) || (CA && CA.plans) || [{ id: "flex", days: 0, mult: 1 }];
+const stT = (ru, en) => LANG === "en" ? en : ru;
+const stPlanNm = p => p.days ? (LANG === "en" ? `${p.days} ${p.days === 1 ? "day" : "days"}` : `${p.days} ${plural(p.days, ["день", "дня", "дней"])}`) : stT("Гибкий", "Flexible");
+const stDate = ts => new Date(ts * 1000).toLocaleDateString(LANG === "en" ? "en-GB" : "ru-RU", { day: "numeric", month: "long" });
+const stLeft = s => { s = Math.max(0, s); const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d} д ${h} ч` : h ? `${h} ч ${String(m).padStart(2, "0")} мин` : `${m} мин`; };
+const stMax = () => Math.max(...stPlans().map(p => p.mult));
+let stPlan = "flex";
 function fillStake(v) {
   CX._t = CX._t || Date.now() / 1000;
   const list = CX.assets, staked = list.filter(a => a.staked > 0 || a.earned > 0);
@@ -47,12 +58,13 @@ function fillStake(v) {
     </div>
     <div class="sec-t">${ic("lock2")}Ставки на монеты</div>
     <div class="box">${list.map(a => `<div class="row tap cxrow" data-act="cx-open" data-id="${a.id}" data-to="stake">${coinBadge(a)}
-      <div class="grow"><div class="t">${esc(a.name)} <span class="apy">${String(+(a.apy * 100 / 365).toFixed(1)).replace(".", ",")}% в день</span></div>
-        <div class="s">${a.staked ? `застейкано ${qtyFmt(a.staked)} ${a.id}` : a.qty ? `в кошельке ${qtyFmt(a.qty)} — можно застейкать` : "в день · копится до суток"}</div></div>
+      <div class="grow"><div class="t">${esc(a.name)} <span class="apy${a.locked ? " lk" : ""}">${a.locked ? `${stPct(a, a.mult)}% ${stT("в день", "a day")} · ×${a.mult}` : `${stT("до", "up to")} ${stPct(a, stMax())}% ${stT("в день", "a day")}`}</span></div>
+        <div class="s">${a.locked ? `${stT("вклад до", "locked until")} ${stDate(a.lockUntil)} · ${qtyFmt(a.staked)} ${a.id}` : a.staked ? `${stT("застейкано", "staked")} ${qtyFmt(a.staked)} ${a.id} · ${stT("гибко", "flexible")} ${stPct(a)}%` : a.qty ? stT(`в кошельке ${qtyFmt(a.qty)} — можно застейкать`, `${qtyFmt(a.qty)} in the wallet, ready to stake`) : stT(`гибко ${stPct(a)}% · вклад до ×${stMax()} · капает каждую секунду`, `flexible ${stPct(a)}% · deposits up to ×${stMax()} · accrues every second`)}</div></div>
       <div class="st-act">${a.staked || a.earned ? `<b class="tw" data-st="${a.id}">+${qtyFmt(stEarned(a))}</b><span class="hint">${a.id} накоплено</span>` : ""}
         ${a.qty ? `<button class="btn sm green" data-act="st-quick" data-id="${a.id}">${ic("lock2")}Застейкать</button>` : a.staked ? `<button class="btn sm ghost" data-act="st-qout" data-id="${a.id}">Вывести</button>` : `<button class="btn sm ghost" data-act="cx-open" data-id="${a.id}">Купить</button>`}</div></div>`).join("")}</div>
     ${list.some(a => a.qty) ? `<div class="hint st-tip">${ic("info")}Монеты в кошельке ещё не работают — жми «Застейкать», и они начнут приносить проценты</div>` : ""}
-    <div class="disc">Застейканные монеты лежат в стейкинге и каждую секунду приносят ещё монет — от 0,7% (USDT) до 6% в день. Награда копится до суток: забирай её каждый день, иначе начисление встанет. Цена монеты при этом продолжает меняться вместе с рынком. Вывести можно в любой момент, без штрафа. Монеты и звёзды игровые.</div>`;
+    <div class="disc">${stT(`Монеты в стейкинге каждую секунду приносят ещё монет — чем больше вложено, тем больше капает. Награду можно забирать хоть каждый день, она не сгорает. Гибкий стейкинг выводится в любой момент. Вклад на ${stPlans().filter(p => p.days).map(p => `${p.days}`).join(" / ")} дней: ставка выше в ${stPlans().filter(p => p.days).map(p => `×${p.mult}`).join(" / ")}, монеты заперты до конца срока; досрочный вывод возвращает монеты, а незабранная награда сгорает. Цена монеты при этом продолжает меняться вместе с рынком. Монеты и звёзды игровые.`,
+      `Staked coins earn more coins every second: the more you put in, the more drips in. Claim the reward whenever you like, even daily, it never expires. Flexible staking can be withdrawn any time. Deposits for ${stPlans().filter(p => p.days).map(p => `${p.days}`).join(" / ")} days: the rate is ${stPlans().filter(p => p.days).map(p => `×${p.mult}`).join(" / ")} higher and the coins stay locked until the end of the term; an early withdrawal returns the coins, but the unclaimed reward is lost. The coin price keeps moving with the market. Coins and stars are in-game.`)}</div>`;
   stPaint();
 }
 function stPaint() {
@@ -160,12 +172,26 @@ fillCA = function (el) {
   if (el._to === "stake") { el._to = null; setTimeout(() => el.querySelector(".ca-stake")?.scrollIntoView({ behavior: "smooth", block: "center" }), 250); }
 };
 function stakeCardHTML() {
-  const a = CA, e = a.earned || 0;
-  return `<div class="cas-h"><span class="pic g">${ic("lock2")}</span><div class="grow"><b>Стейкинг ${a.id}</b><span>${String(+(a.apy * 100 / 365).toFixed(1)).replace(".", ",")}% в день · копится до суток — забирай каждый день</span></div></div>
-    ${a.staked || e ? `<div class="bks-top"><div><span>Застейкано</span><b>${qtyFmt(a.staked)}</b></div><div><span>Накоплено</span><b class="tw">+${qtyFmt(e)}</b></div><div><span>В день</span><b>+${qtyFmt(a.staked * a.apy / 365)}</b></div></div>` : ""}
-    ${a.qty ? `<div class="ca-sell">${[50, 100].map(p => `<button class="btn ghost" data-act="st-put" data-v="${p}"><b>${p === 100 ? "Всё" : p + "%"}</b><span>${qtyFmt(a.qty * p / 100)} ${a.id}</span></button>`).join("")}
-      <button class="btn ghost" data-act="st-out" ${a.staked || e ? "" : "disabled"}><b>Вывести</b><span>всё + награда</span></button></div>`
-      : a.staked || e ? `<button class="btn ghost" style="width:100%" data-act="st-out"><b>Вывести всё + награду</b></button>` : `<div class="hint" style="font-size:13px">Купи ${a.id}, и монеты можно будет положить в стейкинг</div>`}`;
+  const a = CA, e = a.earned || 0, plans = stPlans();
+  if (a.locked) stPlan = a.plan;                                   // на действующем вкладе добавить можно только в него же
+  else if (!plans.some(p => p.id === stPlan)) stPlan = "flex";
+  const cur = plans.find(p => p.id === stPlan) || plans[0];
+  const head = a.locked ? stT(`вклад ×${a.mult} до ${stDate(a.lockUntil)} · ${stPct(a, a.mult)}% в день, капает каждую секунду`, `deposit ×${a.mult} until ${stDate(a.lockUntil)} · ${stPct(a, a.mult)}% a day, accrues every second`)
+    : stT(`гибко ${stPct(a)}% в день · вклад до ×${stMax()} · капает каждую секунду`, `flexible ${stPct(a)}% a day · deposits up to ×${stMax()} · accrues every second`);
+  return `<div class="cas-h"><span class="pic g">${ic("lock2")}</span><div class="grow"><b>Стейкинг ${a.id}</b><span>${head}</span></div></div>
+    ${a.staked || e ? `<div class="bks-top"><div><span>${a.locked ? "На вкладе" : "Застейкано"}</span><b>${qtyFmt(a.staked)}</b></div><div><span>Накоплено</span><b class="tw">+${qtyFmt(e)}</b></div>
+      <div><span>${a.locked ? "До конца" : "В день"}</span><b>${a.locked ? stLeft(a.stakeLeft) : "+" + qtyFmt(a.staked * a.apy / 365)}</b></div></div>` : ""}
+    ${a.qty ? `<div class="seg st-plans">${plans.map(p => `<button data-act="st-plan" data-v="${p.id}" class="${p.id === stPlan ? "on" : ""}"${a.locked && p.id !== a.plan ? " disabled" : ""}><b>${stPlanNm(p)}</b><span>${stPct(a, p.mult)}%</span></button>`).join("")}</div>
+      <div class="hint st-plan-hint">${cur.days ? stT(`Ставка ×${cur.mult}: ${stPct(a, cur.mult)}% в день, за срок ≈ +${String(+(a.apy * cur.mult * cur.days * 100 / 365).toFixed(0))}%. Монеты заперты на ${stPlanNm(cur)}, награду забирай когда хочешь${a.locked ? "; срок начнётся заново" : ""}`,
+        `Rate ×${cur.mult}: ${stPct(a, cur.mult)}% a day, ≈ +${String(+(a.apy * cur.mult * cur.days * 100 / 365).toFixed(0))}% over the term. Coins are locked for ${stPlanNm(cur)}, claim the reward whenever you like${a.locked ? "; the term restarts" : ""}`)
+        : stT(`Гибко: ${stPct(a)}% в день, капает каждую секунду, вывод в любой момент`, `Flexible: ${stPct(a)}% a day, accrues every second, withdraw any time`)}</div>
+      <div class="ca-sell">${[50, 100].map(p => `<button class="btn ${cur.days ? "gold" : "ghost"}" data-act="st-put" data-v="${p}"><b>${p === 100 ? "Всё" : p + "%"}</b><span>${qtyFmt(a.qty * p / 100)} ${a.id}</span></button>`).join("")}
+      <button class="btn ghost" data-act="st-out" ${a.staked || e ? "" : "disabled"}><b>${a.locked ? "Досрочно" : "Вывести"}</b><span>${a.locked ? "награда сгорит" : "всё + награда"}</span></button></div>`
+      : a.staked || e ? `<button class="btn ghost" style="width:100%" data-act="st-out"><b>${a.locked ? "Вывести досрочно — незабранная награда сгорит" : "Вывести всё + награду"}</b></button>` : `<div class="hint" style="font-size:13px">Купи ${a.id}, и монеты можно будет положить в стейкинг или на вклад до ×${stMax()}</div>`}`;
+}
+async function stOut(id, a) {
+  if (a && a.locked && !await confirmM(stT("Вывести досрочно?", "Withdraw early?"), stT(`Вклад идёт до ${stDate(a.lockUntil)}. Монеты вернутся в кошелёк, а незабранная награда +${qtyFmt(a.earned || 0)} ${id} сгорит. Сначала можно нажать «Забрать награды».`, `The deposit runs until ${stDate(a.lockUntil)}. The coins return to your wallet and the unclaimed reward +${qtyFmt(a.earned || 0)} ${id} is lost. You can claim the reward first.`), stT("Вывести", "Withdraw"))) return null;
+  return post(`crypto/${id}/unstake`, { early: !!(a && a.locked) });
 }
 const _paintCALive = paintCALive;
 paintCALive = function (el) { _paintCALive(el); const s = el.querySelector(".ca-stake"); if (s) s.innerHTML = stakeCardHTML(); };
@@ -179,10 +205,19 @@ Object.assign(ACT, {
     try { const r = await post("crypto/stake/claim"); H.ok(); toast(`Награды в кошельке · ≈ ⭐ ${fmt1(r.value)}`, "ok"); burstAt(el); } finally { el.disabled = false; }
     loadCX();
   },
-  "st-quick": async el => { el.disabled = true; try { const r = await post(`crypto/${el.dataset.id}/stake`, { pct: 100 }); H.ok(); toast(`${qtyFmt(r.qty)} ${el.dataset.id} в стейкинге`, "ok"); burstAt(el); } finally { el.disabled = false; } loadCX(); },
-  "st-qout": async el => { el.disabled = true; try { const r = await post(`crypto/${el.dataset.id}/unstake`); H.ok(); toast(`Выведено ${qtyFmt(r.qty)} ${el.dataset.id}`, "ok"); } finally { el.disabled = false; } loadCX(); },
-  "st-put": async el => { const r = await post(`crypto/${CA.id}/stake`, { pct: +el.dataset.v }); H.ok(); toast(`${qtyFmt(r.qty)} ${CA.id} в стейкинге`, "ok"); refreshAll(); },
-  "st-out": async () => { const r = await post(`crypto/${CA.id}/unstake`); H.ok(); toast(`Выведено ${qtyFmt(r.qty)} ${CA.id}`, "ok"); refreshAll(); },
+  "st-quick": async el => { el.disabled = true; try { const r = await post(`crypto/${el.dataset.id}/stake`, { pct: 100, plan: "flex" }); H.ok(); toast(`${qtyFmt(r.qty)} ${el.dataset.id} в стейкинге`, "ok"); burstAt(el); } finally { el.disabled = false; } loadCX(); },
+  "st-qout": async el => {
+    const a = CX && CX.assets.find(x => x.id === el.dataset.id);
+    el.disabled = true;
+    try { const r = await stOut(el.dataset.id, a); if (r) { H.ok(); toast(`Выведено ${qtyFmt(r.qty)} ${el.dataset.id}`, "ok"); } } finally { el.disabled = false; }
+    loadCX();
+  },
+  "st-plan": el => { stPlan = el.dataset.v; H.sel(); const s = el.closest(".ca-stake"); if (s) s.innerHTML = stakeCardHTML(); },
+  "st-put": async el => {
+    const r = await post(`crypto/${CA.id}/stake`, { pct: +el.dataset.v, plan: stPlan });
+    H.ok(); toast(r.lockUntil ? `${qtyFmt(r.qty)} ${CA.id} на вкладе до ${stDate(r.lockUntil)}` : `${qtyFmt(r.qty)} ${CA.id} в стейкинге`, "ok"); refreshAll();
+  },
+  "st-out": async () => { const r = await stOut(CA.id, CA); if (!r) return; H.ok(); toast(`Выведено ${qtyFmt(r.qty)} ${CA.id}`, "ok"); refreshAll(); },
   "sw-to": el => { CA._to = el.dataset.v; H.sel(); caForm(topSheet()); },
   "sw-go": async el => { el.disabled = true; try { const r = await post(`crypto/${CA.id}/swap`, { to: CA._to, pct: +el.dataset.v }); H.ok(); toast(`Получено ${qtyFmt(r.got)} ${r.to}`, "ok"); } finally { el.disabled = false; } refreshAll(); },
   "fx-coin": el => { fxAsset = el.dataset.v; H.sel(); fillFut($("#v-crypto")); },
@@ -208,4 +243,12 @@ Object.assign(ACT, {
     } finally { el.disabled = false; }
     loadFX();
   },
+});
+
+if (LANG === "en") i18nAdd({
+  "На вкладе": "Locked", "До конца": "Until the end", "Застейкано": "Staked", "Накоплено": "Accrued", "В день": "Per day",
+  "Досрочно": "Early", "награда сгорит": "reward is lost", "всё + награда": "all + reward", "Вывести досрочно — незабранная награда сгорит": "Withdraw early, the unclaimed reward is lost", "Вывести всё + награду": "Withdraw all + reward",
+  "Купи": "Buy", "и монеты можно будет положить в стейкинг или на вклад до": "and the coins can be staked or locked for up to",
+  "Нет такого вклада": "No such deposit", "уже на вкладе до": "is already locked until", "добавить можно только в этот же вклад или дождаться окончания": "you can only add to the same deposit or wait for it to end",
+  "Вклад до": "Deposit until", "досрочный вывод — без незабранной награды": "early withdrawal forfeits the unclaimed reward",
 });

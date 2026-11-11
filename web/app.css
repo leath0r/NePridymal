@@ -574,3 +574,37 @@ html{background:var(--bg)}body{background:transparent}
 /* длинные сетки подарков (инвентарь, маркет, профиль): ячейки за краем экрана браузер не рисует и не анимирует.
    Не для .item/.mw — у них свечение выходит за ячейку и обрезалось бы. Высота-заглушка ≈ ячейка с подписью. */
 .ggrid>.gcell:not(.item):not(.mw){content-visibility:auto;contain-intrinsic-size:auto 150px}
+/* свои подарки по ссылке (presents.js) */
+.gl-it{padding:12px;border-radius:16px;background:var(--card);margin-bottom:10px}
+.gl-h{display:flex;align-items:center;gap:12px}.gl-g{width:56px;height:56px;flex:none}.gl-g .gift{width:100%;height:100%}
+.gl-h b{display:block}.gl-h small{color:var(--hint);font-size:12.5px}
+.gl-it>.btn{width:100%;margin-top:8px}
+.gl-ban{display:flex;align-items:center;gap:10px;width:100%;padding:12px;margin:0 0 12px;border-radius:16px;background:var(--card);color:var(--text);text-align:left;border:0;font:inherit}
+.gl-ban>.ic:first-child{width:24px;height:24px;color:#3aa3ff;flex:none}.gl-ban>span{flex:1;min-width:0}.gl-ban b{display:block}.gl-ban small{color:var(--hint);font-size:12.5px}
+
+/* админка → «Воронка» (funnel.js): тонкие полосы, скругление только на конце значения, подписи цветом текста */
+.fn{--fn-bar:#3987e5;transition:opacity .2s}.fn.fn-light{--fn-bar:#2a78d6}.fn.busy{opacity:.55;pointer-events:none}
+.fn-per{margin-bottom:10px}
+.fn-kpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.fn-kpi>div{background:var(--card);border-radius:14px;padding:10px 12px;min-width:0}
+.fn-kpi span{display:block;font-size:11.5px;color:var(--hint);font-weight:700}
+.fn-kpi b{display:block;font-size:22px;font-weight:800;margin:2px 0}
+.fn-kpi small{display:block;font-size:11.5px;color:var(--hint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fn-box{background:var(--card);border-radius:14px;padding:2px 12px}
+.fn-row{padding:10px 0}.fn-row+.fn-row{border-top:1px solid color-mix(in srgb,var(--hint) 16%,transparent)}
+.fn-l{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}.fn-l span{flex:1;min-width:0;font-size:13.5px;font-weight:600}
+.fn-l b{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+.fn-bar{height:10px;border-radius:0 4px 4px 0;background:color-mix(in srgb,var(--fn-bar) 16%,transparent)}
+.fn-bar i{display:block;height:100%;max-width:100%;background:var(--fn-bar);border-radius:0 4px 4px 0}
+.fn-row small{display:block;margin-top:5px;font-size:11.5px;color:var(--hint)}
+.fn-mix{display:flex;gap:2px;height:8px;border-radius:99px;overflow:hidden;margin:2px 0 8px}
+.fn-mix i{display:block;min-width:3px}
+.fn-tw{overflow-x:auto;background:var(--card);border-radius:14px;padding:4px 10px}
+.fn-t{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.fn-t th{color:var(--hint);font-weight:700;text-align:right;padding:7px 2px;white-space:nowrap}
+.fn-t td{text-align:right;padding:8px 2px;white-space:nowrap}
+.fn-t th:first-child,.fn-t td:first-child{text-align:left;white-space:normal;padding-left:0}
+.fn-t tr+tr td{border-top:1px solid color-mix(in srgb,var(--hint) 14%,transparent)}
+.fn-src{display:flex;align-items:flex-start;gap:6px}.fn-sw{flex:none;width:8px;height:8px;border-radius:2px;margin-top:4px}
+.fn-t td small{display:block;font-size:10.5px;color:var(--hint);margin-top:1px}
+.fn-note{font-size:12px;color:var(--hint);margin:6px 2px 8px;line-height:1.45}

@@ -207,6 +207,7 @@ def _do_wipe(by):
             db.execute("DELETE FROM vault")
             db.execute("DELETE FROM bank_vault")   # проигранные в апгрейде подарки: иначе они вернутся в новый сезон через аукцион и апгрейд
             db.execute("UPDATE gift_links SET status='cancelled' WHERE status='open'")
+            db.execute("UPDATE santa SET status='lost', done=? WHERE status IN ('in','packed')", (t,))   # мешок Тайного Санты (newyear.py)
         if CFG["loans"]:
             db.execute("DELETE FROM loans")   # и долги, и история: рейтинг тоже с нуля
             db.execute("DELETE FROM credit")

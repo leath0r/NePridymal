@@ -173,3 +173,12 @@ nav.tabs button{overflow:hidden;text-overflow:ellipsis;padding-left:2px;padding-
 @keyframes fldn{from{background-color:color-mix(in srgb,var(--red) 22%,transparent)}}
 .cxrow.fl-up .cx-px b{animation:flpx 1.2s}.cxrow.fl-dn .cx-px b{animation:flpx2 1.2s}
 @keyframes flpx{from{color:var(--green)}}@keyframes flpx2{from{color:var(--red)}}
+
+/* --- вклады с фиксацией срока --- */
+.st-plans{margin:10px 0 6px}
+.st-plans button{display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 2px;line-height:1.1}
+.st-plans button b{font-size:12.5px}
+.st-plans button span{font-size:10.5px;opacity:.7}
+.st-plans button[disabled]{opacity:.35}
+.st-plan-hint{font-size:12px;text-align:center;margin:0 0 8px;line-height:1.35}
+.apy.lk{background:linear-gradient(135deg,#ffe17a,#ffab2e);color:#3a2800}

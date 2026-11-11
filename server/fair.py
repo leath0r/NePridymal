@@ -400,7 +400,7 @@ GAMES = [
     _G("hilo", "Больше/меньше", "seed", lambda: edge(tuned("games.hilo_edge", 0.96)), "Каждая карта — отдельный бросок. Икс = возврат ÷ шанс угадать."),
     _G("dogs", "Пёсики", "seed", _dogs, "Каждая клетка и вайлд — следующий бросок потока ставки, веса фиксированы в коде."),
     _G("scratch", "Скретч-карты", "seed", lambda: edge(tuned("games.scratch_rtp", 0.94), 0.96), "Приз определяется по таблице шансов первым броском ставки."),
-    _G("case", "Кейсы", "seed", lambda: conf("economy.case_rtp", 0.88), "Коллекция — по весам кейса, вид подарка — по редкости. Шансы по коллекциям открыты ниже."),
+    _G("case", "Кейсы", "seed", lambda: conf("economy.case_rtp", 0.88), "Коллекция — по весам кейса, вид подарка — по редкости. Шансы по коллекциям открыты ниже. Шкала гарантии: после серии открытий без редкого подарка следующий точно редкий; обычный шанс редкого чуть ниже, поэтому вместе с гарантией доля редких и возврат кейса те же, что в таблице."),
     _G("safe", "Сейф", "seed", lambda: tuned("games.safe_rtp", 0.94), "Код — 3 броска ставки. Открыть за k попыток можно с шансом не выше (k/10)³, множители рассчитаны под возврат."),
     _G("carousel", "Карусель", "chain", lambda: tuned("games.carousel_rtp", 0.94), "Сектор — бросок из сида раунда, сиды идут отдельной цепочкой хэшей. Шанс сектора = возврат ÷ его множитель, в бонусах любой выбор даёт тот же средний возврат."),
     _G("ladder", "Лестница", "seed", lambda: tuned("games.ladder_rtp", 0.94), "Верная дверь на каждой ступени — бросок ставки, шанс 50/50. Икс = возврат × 2 в степени ступени."),
@@ -857,7 +857,7 @@ def _owner(o):
 # ---------------- отчёт банка за неделю ----------------
 REPORT_GROUPS = [("Игры и кейсы", None), ("Комиссии и налоги", ("fee", "frcut", "loan")), ("Бизнесы и покупки", ("bizbuy", "bizsell", "bizgoods", "style", "mkbank", "share", "crypto", "futures", "bizmgr", "auction")),
                  ("Доходы игроков", ("income", "stake", "depint", "depfee", "div", "clanbiz", "clandiv", "clanshare", "clanprize", "clan", "clanspend")),
-                 ("Бонусы и награды", ("daily", "quest", "level", "ref", "ref_lvl", "ref_ms", "ref_buy", "ref_top", "sparks", "set", "album", "onboard", "comeback", "franchise", "stack", "lucky", "flash", "cashback", "season", "tourn", "league", "jackpot", "ticket", "thanks", "bankgift", "gift")),
+                 ("Бонусы и награды", ("daily", "quest", "level", "ref", "ref_lvl", "ref_ms", "ref_buy", "ref_top", "sparks", "set", "album", "onboard", "comeback", "advent", "franchise", "stack", "lucky", "flash", "cashback", "season", "tourn", "league", "jackpot", "ticket", "thanks", "bankgift", "gift")),
                  ("Выдано администрацией", ("admin", "admgift", "comp")), ("Обеспечение от покупок", ("backing",))]
 
 
@@ -919,4 +919,6 @@ def fair_case(cid: str):
         out.append({"col": col, "p": round((x - prev) / tot * 100, 3), "ev": round(E.expected_value(col))})
         prev = x
     out.sort(key=lambda r: -r["p"])
-    return {"id": cid, "title": c.get("title"), "items": out}
+    pt = E.PITY.get(cid)
+    pity = {"need": pt["n"], "top": pt["top"], "p": round(pt["p"] * 100, 2), "natural": round(pt["pn"] * 100, 2)} if pt else None
+    return {"id": cid, "title": c.get("title"), "items": out, "pity": pity}

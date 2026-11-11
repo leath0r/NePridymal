@@ -77,7 +77,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["comp", "Компенсации"], ["games", "Игры"], ["cnames", "Кейсы"], ["odds", "Шансы"], ["claw", "Кран"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["wipe", "Вайп"], ["polls", "Опросы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["funnel", "Воронка"], ["users", "Игроки"], ["comp", "Компенсации"], ["games", "Игры"], ["cnames", "Кейсы"], ["odds", "Шансы"], ["claw", "Кран"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["wipe", "Вайп"], ["polls", "Опросы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -125,6 +125,8 @@ async function admRender(el = topSheet()) {
         ${sw("vip", "VIP", "Бонус дня ×2, кейс чаще, комиссия маркета −50%, рамка")}
         ${sw("chest", "Звёздный сундук", "Дорогой подарок за Stars — его можно продать за игровые звёзды")}</div>
       <div class="adm-sales">${card("Сегодня", s.today)}${card("7 дней", s.week)}${card("Всего", s.all)}</div>
+      ${s.sub ? `<div class="sec-t">${ic("crown")}VIP-подписка</div><div class="box">${admKv("Активных подписок", `<b>${fmt(s.sub.active)}</b>`)}${admKv("Автопродление отключено", `<b>${fmt(s.sub.cancelled)}</b>`)}
+        ${admKv("Ожидается в месяц", `<b>${fmt(s.sub.xtr)} <i class="adm-tg">${ic("tgplane")}</i></b>`)}${admKv("Продлений всего", `<b>${fmt(s.sub.renewals)}</b>`)}</div>` : ""}
       <div class="sec-t">${ic("trend")}По дням (14 дней), Telegram Stars</div>
       <div class="adm-bars">${s.days.length ? s.days.map(d => `<div title="${d.xtr}"><i style="height:${Math.max(4, d.xtr / mx * 100)}%"></i><span>${new Date(d.day * 1000).getDate()}</span></div>`).join("") : `<div class="hint" style="padding:14px">Покупок пока нет</div>`}</div>
       <div class="sec-t">${ic("crown")}Топ покупателей</div>
@@ -447,7 +449,7 @@ async function admRender(el = topSheet()) {
 
 async function openAdmUser(id) {
   const el = openSheet(emptyHTML("hourglass", "Загружаем…"));
-  const draw = async () => {
+  const draw = el._admDraw = async () => {
     const [u, cs, fr, tr, ins] = await Promise.all([api("admin/user/" + id), api(`admin/user/${id}/cosm`), api(`admin/user/${id}/friends`),
       api(`admin/user/${id}/transfers`).catch(() => ({ sent: 0, got: 0, list: [] })), api(`admin/user/${id}/insight`).catch(() => null)]);
     const [wa, fzz] = await Promise.all([api(`admin/user/${id}/addr`).catch(() => null), api(`admin/user/${id}/freeze`).catch(() => null)]);
@@ -457,7 +459,10 @@ async function openAdmUser(id) {
       ${fzz && fzz.frozen ? `<div class="adm-frz">${ic("lock")}<div><b>Кошелёк заморожен</b><span>с ${admDate(fzz.ts)}${fzz.by ? " · " + esc(fzz.by.name) : ""}${fzz.reason ? " · " + esc(fzz.reason) : ""}</span></div></div>` : ""}
       <div class="box">${admKv("Баланс", `<b>⭐ ${fmt(u.stars)}</b>`)}${admKv("Подарков", `<b>${fmt(u.gifts)} · ⭐ ${fmt(u.giftsValue)}</b>`)}
         ${admKv("Итог в играх 24 ч / всего", `<span>${admSgn(u.pnl24)} / ${admSgn(u.pnlAll)}</span>`)}${admKv("Кейсов открыто", `<b>${fmt(u.opened)}</b>`)}
-        ${admKv("Рефералов", `<b>${fmt(u.refs)}</b>`)}${admKv("Регистрация / был", `<b>${admDate(u.created)} / ${admDate(u.seen)}</b>`)}</div>
+        ${admKv("Рефералов", `<b>${fmt(u.refs)}</b>`)}${admKv("Регистрация / был", `<b>${admDate(u.created)} / ${admDate(u.seen)}</b>`)}
+        ${admKv("VIP", `<b>${u.vipUntil > Date.now() / 1000 ? "до " + admDate(u.vipUntil) : "нет"}</b>`)}
+        ${u.sub && u.sub.active ? admKv(`Подписка · продлений ${u.sub.renewals}`, `<b>${u.sub.cancelled ? "отключена, до " : "до "}${admDate(u.sub.expires)}</b>`) : ""}
+        ${admKv(u.bday ? `День рождения · указан ${admDate(u.bday.set)}${u.bday.year ? " · подарок за " + u.bday.year : ""}` : "День рождения", u.bday ? `<b>${esc(u.bday.date)}</b><button class="btn sm ghost" style="margin-left:8px" data-act="adm-bday-reset" data-id="${u.id}">Сбросить</button>` : "<b>не указан</b>")}</div>
       ${wa ? `<div class="sec-t">${ic("wallet")}Кошелёк</div><div class="box adm-wal">
         ${[["main", "Адрес", wa.addr, "по нему игроку переводят звёзды"], ["anon", "Анонимный", wa.anon, "секретный: отправитель не видит, кому ушло"]].map(([k, t, a, s]) => `<div class="row"><div class="grow">
           <div class="s">${t} · ${s}</div><div class="t adm-addr">${esc(a)}</div></div></div>

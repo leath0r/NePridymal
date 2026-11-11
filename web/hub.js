@@ -115,6 +115,7 @@ async function openHistory() {
 }
 const P_MENU = () => [
   ["quests", "checks", "Задания", ME.quests ? ME.quests : ""],
+  ["loyal", "coin", "Очки", ME.loy && ME.loy.pts ? short(ME.loy.pts) : ""],
   ["titles", "medal", "Титулы", ""],
   ["album", "layers", "Альбом", ""],
   ["history", "receipt", "История", ""],
@@ -135,7 +136,7 @@ profileHTML = function (p, tab) {
 
 // ---------------- 4–5. главная: листалка вместо стопки плашек, без ленты дропов ----------------
 let SSB = null, SSB_T = 0, TRB_T = 0, SHB_T = 0;
-const ST_ORDER = ["st-poll", "st-wipe", "st-spark", "ob", "st-shop", "st-offer", "prib", "evrib", "incbar", "st-season", "tr-bar", "jpbar", "homecard"];
+const ST_ORDER = ["st-poll", "st-wipe", "st-bday", "st-spark", "st-adv", "st-santa", "st-recap", "ob", "st-shop", "st-offer", "prib", "evrib", "incbar", "st-season", "tr-bar", "jpbar", "homecard"];
 loadFeed = async function () {};
 const _rcHub = renderCases;
 renderCases = async function () {
@@ -194,7 +195,9 @@ function casesTidyNow() {
   }
   const track = st.querySelector(".st-track");
   // свои карточки (сезон, турниры) — перерисовываем
-  [["st-poll", pollCard()], ["st-wipe", wipeCard()], ["st-season", seasonCard()], ["tr-bar", tournCard()], ["st-shop", shopCard()], ["st-spark", sparkCard()], ["st-offer", offerCard()]].forEach(([k, html]) => {
+  [["st-poll", pollCard()], ["st-wipe", wipeCard()], ["st-season", seasonCard()], ["tr-bar", tournCard()], ["st-shop", shopCard()], ["st-spark", sparkCard()], ["st-offer", offerCard()],
+   ["st-adv", typeof nyAdvCard === "function" ? nyAdvCard() : ""], ["st-santa", typeof nySantaCard === "function" ? nySantaCard() : ""],
+   ["st-recap", typeof recapCard === "function" ? recapCard() : ""], ["st-bday", typeof bdayCard === "function" ? bdayCard() : ""]].forEach(([k, html]) => {
     const old = track.querySelector(`.st-sl[data-k="${k}"]`);
     if (old) old.remove();
     if (html) v.insertAdjacentHTML("beforeend", html);

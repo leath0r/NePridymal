@@ -375,7 +375,73 @@ def open_case(cid, rng=random):
     return _draw(c, c["floor"], rng)
 
 
+# ---------------- шкала гарантии: редкий подарок не позже чем через N открытий ----------------
+# Редкие — коллекции, которые в среднем дороже самого кейса. Каждое открытие без редкого двигает шкалу; на последнем
+# делении редкий выпадает гарантированно. Чтобы возврат кейса не изменился, обычный шанс редкого чуть ниже заявленного:
+# вместе с гарантией доля редких на дистанции ровно та же, что в таблице шансов, и каждая коллекция выпадает так же часто,
+# как без гарантии (внутри редких и внутри обычных соотношения не меняются). Цены кейсов те же.
+# Битвы кейсов идут по таблице без гарантии: у каждого игрока своя шкала, в битве это было бы нечестно.
+PITY = {}
+PITY_K = conf("economy.pity_k", 2.0)   # длина шкалы ≈ PITY_K / шанс редкого: до гарантии доходит ≈ e^-2 ≈ 14% серий
+PITY_MIN, PITY_MAX = 5, 60             # короче — гарантия почти каждый раз, длиннее — до неё никто не дойдёт (охоты)
+
+
+def _pity_natural(p, n):
+    """Обычный шанс редкого, при котором с гарантией на n-м открытии средняя доля редких равна p."""
+    lo, hi = 0.0, p
+    for _ in range(100):
+        m = (lo + hi) / 2
+        if m / (1 - (1 - m) ** n) > p:
+            hi = m
+        else:
+            lo = m
+    return (lo + hi) / 2
+
+
+def _sub(c, w):
+    """Кейс с другими весами коллекций (для гарантии): та же планка ценности и шуточные подарки."""
+    cols = [x for x in c["cols"] if w.get(x, 0) > 0]
+    acc, cum = 0.0, []
+    for x in cols:
+        acc += w[x]
+        cum.append(acc)
+    return {"cols": cols, "cum": cum, "joke": c.get("joke", ())}
+
+
+def build_pity():
+    PITY.clear()
+    for cid, c in CASES.items():
+        if not c["price"]:
+            continue
+        odds = c["odds"]
+        fair = sum(p * ev(x) for x, p in odds.items()) / RTP   # цена без выборки: состав редких не меняется от перезапуска
+        top = [x for x in odds if ev(x) > fair]
+        p = sum(odds[x] for x in top)
+        if not top or not 0 < p <= 0.45:
+            continue
+        n = max(PITY_MIN, round(PITY_K / p))
+        if n > PITY_MAX or p * n <= 1.2:
+            continue
+        pn = _pity_natural(p, n)
+        k_top, k_low = pn / p, (1 - pn) / (1 - p)
+        PITY[cid] = {"n": n, "top": sorted(top, key=lambda x: -ev(x)), "p": p, "pn": pn,
+                     "nat": _sub(c, {x: q * (k_top if x in top else k_low) for x, q in odds.items()}),
+                     "force": _sub(c, {x: q for x, q in odds.items() if x in top})}
+
+
+def open_case_pity(cid, streak, rng=random):
+    """Открытие по шкале гарантии. streak — сколько открытий подряд без редкого.
+    → (подарок, сработала ли гарантия, редкий ли подарок)."""
+    c, pt = CASES[cid], PITY.get(cid)
+    if not pt:
+        return _draw(c, c["floor"], rng), False, False
+    forced = streak >= pt["n"] - 1
+    d = _draw(pt["force"] if forced else pt["nat"], c["floor"], rng)
+    return d, forced, d["col"] in pt["top"]
+
+
 build_cases()
+build_pity()
 
 if __name__ == "__main__":
     for c in CASES.values():

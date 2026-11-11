@@ -23,10 +23,28 @@ function premHTML() {
       <span>Только за Telegram Stars. Подарок из топ-коллекций с редкой моделью — в среднем ⭐ ${short(c.ev)}</span></div></div>
       <div class="pr-c-cols">${c.cols.map(x => `<div><img src="${A.orig(x.col, 64)}" alt=""><b>${Math.round(x.p * 100)}%</b><span>~${short(x.ev)}</span></div>`).join("")}</div>
       <button class="btn pr-c-btn" data-act="prem-buy" data-k="chest">Открыть за ${tgPrice(c.xtr)}</button></div>
-    <div class="pr-vip${v.until ? " on" : ""}"><span class="pr-v-badge">VIP</span><div class="grow"><b>${v.until ? `VIP активен ещё ${vipLeft(v.until)}` : `VIP на ${v.days} дней`}</b>
-      <span>Бонус дня ×2 · бесплатный кейс вдвое чаще · комиссия маркета −50% · золотая рамка и значок</span></div>
-      <button class="btn sm ${v.until ? "ghost" : "gold"}" data-act="prem-buy" data-k="vip">${v.until ? "Продлить " : ""}${tgPrice(v.xtr)}</button></div>
+    ${vipCardHTML(v)}
   </div>`;
+}
+const vipDate = ts => new Date(ts * 1000).toLocaleDateString(LANG === "en" ? "en-GB" : "ru-RU", { day: "numeric", month: "long" });
+function vipCardHTML(v) {
+  const s = v.sub || {}, perks = `<span>Бонус дня ×2 · бесплатный кейс вдвое чаще · комиссия маркета −50% · золотая рамка и значок</span>`;
+  if (s.active) return `<div class="pr-vip on sub"><span class="pr-v-badge">VIP</span><div class="grow"><b>${s.cancelled ? `VIP до ${vipDate(v.until)}` : `VIP-подписка · списание ${vipDate(s.expires)}`}</b>
+      <span>${s.cancelled ? "Автопродление отключено — после этой даты VIP закончится" : `${fmt(v.subXtr)} Telegram Stars в месяц, отключить можно в любой момент`}</span></div>
+      <button class="btn sm ${s.cancelled ? "gold" : "ghost"}" data-act="prem-sub" data-v="${s.cancelled ? 0 : 1}">${s.cancelled ? "Включить снова" : "Отключить"}</button></div>`;
+  return `<div class="pr-vip${v.until ? " on" : ""}"><span class="pr-v-badge">VIP</span><div class="grow"><b>${v.until ? `VIP активен ещё ${vipLeft(v.until)}` : "VIP"}</b>${perks}</div>
+      <div class="pr-v-btns"><button class="btn sm gold" data-act="prem-buy" data-k="vipsub">Подписка · ${tgPrice(v.subXtr)}<small>в месяц, продлевается сама</small></button>
+      <button class="btn sm ghost" data-act="prem-buy" data-k="vip">${v.until ? "Продлить" : "На"} ${v.days} ${plural(v.days, ["день", "дня", "дней"])} · ${tgPrice(v.xtr)}</button></div></div>`;
+}
+async function premSub(el) {
+  const cancel = el.dataset.v === "1";
+  if (cancel && !await confirmM("Отключить автопродление?", "Оплаченный VIP останется до конца периода, дальше списаний не будет. Включить снова можно в любой момент.", "Отключить")) return;
+  el.disabled = true;
+  try {
+    await post("premium/sub", { cancel });
+    H.ok(); toast(cancel ? "Автопродление отключено" : "Автопродление включено", "ok");
+    await loadPrem(true); premRefresh();
+  } catch (e) { el.disabled = false; }
 }
 // выключенное в админке («Продажи») не показываем
 const _premHTML0 = premHTML;
@@ -59,8 +77,8 @@ async function premBuy(k, el) {
       if (status !== "paid") return;
       H.ok();
       if (k === "chest") return chestReveal(lastChest);
-      toast(k === "vip" ? "VIP активирован!" : "Набор дня зачислен!", "ok");
-      for (let i = 0; i < 8; i++) { await sleep(1200); await loadMe(); if (k !== "vip" || ME.vip) break; }
+      toast(k === "vipsub" ? "VIP-подписка оформлена!" : k === "vip" ? "VIP активирован!" : "Набор дня зачислен!", "ok");
+      for (let i = 0; i < 8; i++) { await sleep(1200); await loadMe(); if (!k.startsWith("vip") || ME.vip) break; }
       coinShower($("#bal"), 50); burst(innerWidth / 2, innerHeight / 3, ["#ffd76a", "#ffab2e", "#fff"]);
       await loadPrem(true); premRefresh();
     });
@@ -102,4 +120,12 @@ profileHTML = function (p, tab) {
   const h = _phPrem(p, tab);
   return p.vip ? h.replace('<span class="plv">', '<span class="vipb">VIP</span><span class="plv">') : h;   // теги справа от аватара
 };
-Object.assign(ACT, { "prem-buy": el => premBuy(el.dataset.k, el) });
+Object.assign(ACT, { "prem-buy": el => premBuy(el.dataset.k, el), "prem-sub": el => premSub(el) });
+if (LANG === "en") i18nAdd({
+  "Подписка": "Subscription", "в месяц, продлевается сама": "per month, renews automatically", "Продлить": "Extend", "На": "For",
+  "Отключить": "Turn off", "Включить снова": "Turn on again", "Автопродление отключено": "Auto-renewal is off", "Автопродление включено": "Auto-renewal is on",
+  "Отключить автопродление?": "Turn off auto-renewal?", "Telegram Stars в месяц, отключить можно в любой момент": "Telegram Stars a month, cancel any time",
+  "Автопродление отключено — после этой даты VIP закончится": "Auto-renewal is off, VIP ends on that date",
+  "Оплаченный VIP останется до конца периода, дальше списаний не будет. Включить снова можно в любой момент.": "Your paid VIP stays until the end of the period, then no more charges. You can turn it on again any time.",
+  "VIP-подписка оформлена!": "VIP subscription is on!", "VIP-подписка уже оформлена": "VIP subscription is already active", "VIP-подписка · списание": "VIP subscription · next charge", "VIP до": "VIP until",
+});

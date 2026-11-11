@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS crypto_pos(id INTEGER PRIMARY KEY, user INTEGER, asse
   entry REAL, qty REAL, ts INTEGER, status TEXT DEFAULT 'open', close REAL, pnl INTEGER, closed INTEGER);
 CREATE INDEX IF NOT EXISTS crypto_pos_open ON crypto_pos(status, user);
 """)
+for _c in ("lock INTEGER DEFAULT 0", "lock_until INTEGER DEFAULT 0", "mult REAL DEFAULT 1"):   # вклады с фиксацией срока
+    try:
+        db.execute("ALTER TABLE crypto_stake ADD COLUMN " + _c)
+    except Exception:
+        pass
 STAR_USD = 0.015        # курс игровой звезды к доллару (примерно как Telegram Stars)
 FEE = conf("economy.crypto_fee", 0.004)        # комиссия биржи с каждой сделки (настройка [economy] crypto_fee)
 MIN_TRADE = 10
@@ -174,10 +179,10 @@ async def crypto(uid=Depends(auth)):
             total += b["value"]
             cost += h["cost"]
         if sk and b["price"]:
-            earned = _earned(sk, t)
-            b["staked"], b["earned"], b["stakeCost"], b["stakeTotal"] = sk["qty"], earned, sk["cost"], sk["total"] + earned
-            b["stakeValue"] = (sk["qty"] + earned) * b["price"]
-            b["stakeLeft"] = max(0, STAKE_CAP - (t - sk["ts"]))   # через сколько секунд копилка заполнится
+            so = _stake_out(sk, t)
+            b.update(so)
+            b["stakeCost"], b["stakeTotal"] = sk["cost"], sk["total"] + so["earned"]
+            b["stakeValue"] = (sk["qty"] + so["earned"]) * b["price"]
             total += b["stakeValue"]
             cost += sk["cost"]
         out.append(b)
@@ -192,7 +197,7 @@ async def crypto(uid=Depends(auth)):
         ur = q1("SELECT * FROM users WHERE id=?", u)
         if ur:
             top.append({**user_brief(ur), "value": int(v)})
-    return {"assets": out, "total": total, "cost": cost, "fee": FEE, "min": MIN_TRADE, "starUsd": STAR_USD, "top": top}
+    return {"assets": out, "total": total, "cost": cost, "fee": FEE, "min": MIN_TRADE, "starUsd": STAR_USD, "top": top, "plans": PLAN_LIST}
 
 
 @app.get(R + "/crypto/{aid}")
@@ -207,9 +212,7 @@ async def crypto_asset(aid: str, r: str = "1d", uid=Depends(auth)):
     txs = [dict(x) for x in q("SELECT side, qty, price, stars, ts FROM crypto_tx WHERE user=? AND asset=? ORDER BY id DESC LIMIT 15", uid, aid)]
     sk = q1("SELECT * FROM crypto_stake WHERE user=? AND asset=?", uid, aid)
     return {**_brief(aid), "range": rng, "chart": pts, "qty": h["qty"] if h else 0, "cost": h["cost"] if h else 0,
-            "tx": txs, "fee": FEE, "min": MIN_TRADE, "stars": bal(uid), "apy": APY[aid], "swapFee": SWAP_FEE,
-            "staked": sk["qty"] if sk else 0, "earned": _earned(sk, now()) if sk else 0, "stakeTotal": sk["total"] if sk else 0,
-            "stakeLeft": max(0, STAKE_CAP - (now() - sk["ts"])) if sk else STAKE_CAP}
+            "tx": txs, "fee": FEE, "min": MIN_TRADE, "stars": bal(uid), "apy": APY[aid], "swapFee": SWAP_FEE, "plans": PLAN_LIST, **_stake_out(sk, now())}
 
 
 @app.post(R + "/crypto/{aid}/buy")
@@ -258,17 +261,54 @@ async def crypto_sell(aid: str, req: Request, uid=Depends(auth)):
 # ============================================================ стейкинг
 # доходность в сутки — на уровне дохода с подарков (2%/сут): стабильные монеты меньше, волатильные больше.
 # APY (годовая, без сложного процента) отдаём фронту как раньше: в день = APY / 365
-STAKE_SCALE = conf("economy.stake_scale", 0.35)   # множитель доходности стейкинга
+STAKE_SCALE = conf("economy.stake_scale", 0.3)   # множитель доходности стейкинга
 DAILY = {"USDT": 0.007,   # USDT не меняет курс — доход без риска и без лимита суммы, поэтому ставка ниже
           "BTC": 0.03, "ETH": 0.035, "SOL": 0.04, "DOGE": 0.045, "GRAM": 0.05, "NOT": 0.06}
 DAILY = {k: v * STAKE_SCALE for k, v in DAILY.items()}
-STAKE_CAP = 86400   # награда копится максимум сутки с последнего сбора — потом надо забрать (как доход с подарков)
+STAKE_CAP = conf("economy.stake_cap_days", 0) * 86400   # 0 — награда копится без ограничения; N — не дольше N суток с последнего сбора
 APY = {k: v * 365 for k, v in DAILY.items()}
 YEAR = 365 * 86400
+# Вклады с фиксацией: монеты запираются на срок, ставка выше в mult раз. Награда капает каждую секунду пропорционально
+# вкладу и забирается в любой момент; досрочный вывод возвращает монеты, незабранная награда сгорает.
+PLANS = {"flex": (0, 1.0),
+         "3d": (3 * 86400, conf("economy.stake_mult_3d", 2.0)),
+         "7d": (7 * 86400, conf("economy.stake_mult_7d", 3.0)),
+         "30d": (30 * 86400, conf("economy.stake_mult_30d", 4.0))}
+PLAN_LIST = [{"id": k, "days": v[0] // 86400, "mult": v[1]} for k, v in PLANS.items()]
+
+
+def _locked(sk, t):
+    return bool(sk) and (sk["lock_until"] or 0) > t
+
+
+def _plan_of(sk):
+    for k, (sec, _) in PLANS.items():
+        if sec == (sk["lock"] or 0):
+            return k
+    return "flex"
 
 
 def _earned(sk, t):
-    return sk["earned"] + sk["qty"] * APY[sk["asset"]] * min(STAKE_CAP, max(0, t - sk["ts"])) / YEAR
+    """Накоплено к моменту t: период фиксации — по повышенной ставке; после него — по обычной (с лимитом, если он задан)."""
+    e, ts, a = sk["earned"], sk["ts"], sk["asset"]
+    lu = sk["lock_until"] or 0
+    if lu > ts:
+        e += sk["qty"] * APY[a] * (sk["mult"] or 1) * (min(t, lu) - ts) / YEAR
+        ts = lu
+    if t > ts:
+        e += sk["qty"] * APY[a] * (min(STAKE_CAP, t - ts) if STAKE_CAP else t - ts) / YEAR
+    return e
+
+
+def _stake_out(sk, t):
+    """Поля стейка для клиента."""
+    cap = lambda since: max(0, STAKE_CAP - (t - since)) if STAKE_CAP else -1   # -1: лимита нет, копится всегда
+    if not sk:
+        return {"staked": 0, "earned": 0, "stakeTotal": 0, "stakeLeft": cap(t), "plan": "flex", "mult": 1, "lockUntil": 0, "locked": False}
+    locked = _locked(sk, t)
+    return {"staked": sk["qty"], "earned": _earned(sk, t), "stakeTotal": sk["total"], "plan": _plan_of(sk) if locked else "flex",
+            "mult": (sk["mult"] or 1) if locked else 1, "lockUntil": sk["lock_until"] or 0, "locked": locked,
+            "stakeLeft": (sk["lock_until"] - t) if locked else cap(max(sk["ts"], sk["lock_until"] or 0))}
 
 
 def _accrue(uid, aid, t):
@@ -287,33 +327,62 @@ def _to_wallet(uid, aid, qty, cost):
 
 @app.post(R + "/crypto/{aid}/stake")
 async def crypto_stake(aid: str, req: Request, uid=Depends(auth)):
+    """plan: flex (как раньше) или 3d/7d/30d — вклад с фиксацией. Пока вклад идёт, добавить монеты можно только в него же
+    (срок при этом отсчитывается заново); перевести гибкий стейк во вклад можно целиком."""
     aid = _asset(aid)[0]
-    pct = float((await req.json()).get("pct", 100))
+    b = await req.json()
+    pct = float(b.get("pct", 100))
+    plan = str(b.get("plan") or "flex")
     if not 0 < pct <= 100:
         err("Неверная доля")
+    if plan not in PLANS:
+        err("Нет такого вклада")
+    sec, mult = PLANS[plan]
     with tx():
         h = q1("SELECT * FROM crypto WHERE user=? AND asset=?", uid, aid)
         if not h or h["qty"] <= 0:
             err("Сначала купи эту монету")
         qty, cost = h["qty"] * pct / 100, h["cost"] * pct / 100
         t = now()
-        _accrue(uid, aid, t)
+        sk = _accrue(uid, aid, t)
+        if _locked(sk, t) and _plan_of(sk) != plan:
+            err(f"{aid} уже на вкладе до {_dt(sk['lock_until'])} — добавить можно только в этот же вклад или дождаться окончания")
         db.execute("UPDATE crypto SET qty=?, cost=? WHERE user=? AND asset=?", (max(0, h["qty"] - qty) if pct < 100 else 0, h["cost"] - cost if pct < 100 else 0, uid, aid))
         db.execute("INSERT INTO crypto_stake(user,asset,qty,cost,earned,total,ts) VALUES(?,?,?,?,0,0,?) ON CONFLICT(user,asset) DO UPDATE SET qty=qty+?, cost=cost+?",
                    (uid, aid, qty, cost, t, qty, cost))
-    return {"ok": True, "qty": qty}
+        if sec:   # вклад: срок отсчитывается с этого момента на всю сумму
+            db.execute("UPDATE crypto_stake SET lock=?, lock_until=?, mult=?, ts=? WHERE user=? AND asset=?", (sec, t + sec, mult, t, uid, aid))
+        elif sk and not _locked(sk, t):
+            db.execute("UPDATE crypto_stake SET lock=0, lock_until=0, mult=1 WHERE user=? AND asset=?", (uid, aid))
+    return {"ok": True, "qty": qty, "plan": plan, "lockUntil": t + sec if sec else 0}
+
+
+def _dt(ts):
+    g = time.gmtime(ts + 3 * 3600)
+    return f"{g.tm_mday:02d}.{g.tm_mon:02d} {g.tm_hour:02d}:{g.tm_min:02d}"
 
 
 @app.post(R + "/crypto/{aid}/unstake")
-def crypto_unstake(aid: str, uid=Depends(auth)):
+async def crypto_unstake(aid: str, req: Request, uid=Depends(auth)):
+    """Вывести всё в кошелёк. На действующем вкладе — только с early=true: монеты возвращаются, незабранная награда сгорает."""
     aid = _asset(aid)[0]
+    try:
+        early = bool((await req.json()).get("early"))
+    except Exception:
+        early = False
     with tx():
-        sk = _accrue(uid, aid, now())
+        t = now()
+        sk = _accrue(uid, aid, t)
         if not sk or (sk["qty"] <= 0 and sk["earned"] <= 0):
             err("В стейкинге пусто")
+        lost = 0.0
+        if _locked(sk, t):
+            if not early:
+                err(f"Вклад до {_dt(sk['lock_until'])}: досрочный вывод — без незабранной награды")
+            lost, sk = sk["earned"], {**dict(sk), "earned": 0.0}
         _to_wallet(uid, aid, sk["qty"] + sk["earned"], sk["cost"])
-        db.execute("UPDATE crypto_stake SET qty=0, cost=0, earned=0, total=total+? WHERE user=? AND asset=?", (sk["earned"], uid, aid))
-    return {"ok": True, "qty": sk["qty"] + sk["earned"]}
+        db.execute("UPDATE crypto_stake SET qty=0, cost=0, earned=0, lock=0, lock_until=0, mult=1, total=total+? WHERE user=? AND asset=?", (sk["earned"], uid, aid))
+    return {"ok": True, "qty": sk["qty"] + sk["earned"], "lost": lost}
 
 
 @app.post(R + "/crypto/stake/claim")

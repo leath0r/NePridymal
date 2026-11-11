@@ -451,6 +451,7 @@ function openCase(id) {
     ${c.price ? `<div class="ocount">${[1, 2, 3, 5, 10].map(n => `<button data-act="open-n" data-v="${n}" class="${OPEN.n === n ? "on" : ""}">x${n}</button>`).join("")}
       <button class="ofast${OPEN.fast ? " on" : ""}" data-act="open-fast">${ic("trend")}Быстро</button></div>` : ""}
     <div class="btns" id="obtns">${openBtn(c)}</div>
+    <div id="pity">${pityHTML(c)}</div>
     <div class="sec-t">Что внутри</div>
     <div class="ggrid">${c.items.map(it => { const t = valTier({ value: it.ev }, ref);
       return `<div class="gcell item r-${t}">${giftHTML({ col: it.col, symbol: it.symbol, c: it.c, mp: 99 }, { img: A.orig(it.col), plain: true })}
@@ -458,6 +459,16 @@ function openCase(id) {
       <div class="cap">${esc(it.col)}<br><small>~⭐ ${short(it.ev)}</small></div></div>`; }).join("")}</div>
     <div class="disc">Шансы честные и считаются на сервере. Из платного кейса не выпадает подарок дешевле ~40% его цены. ${esc(ME.disclaimer)}</div>`);
   el._case = c; el._ref = ref;
+}
+// шкала гарантии (economy.PITY): после серии открытий без редкого следующий подарок точно редкий
+function pityHTML(c) {
+  const p = c && c.pity; if (!p) return "";
+  const left = p.need - p.have, pct = Math.min(100, Math.round(p.have / Math.max(1, p.need - 1) * 100));
+  return `<div class="pity${left <= 1 ? " full" : ""}">
+    <div class="pity-h">${ic("shield")}<b>Гарантия редкого</b><span class="pity-n">${p.have} / ${p.need - 1}</span></div>
+    <div class="pity-bar"><i style="width:${pct}%"></i></div>
+    <div class="pity-s"><span class="pity-tops">${p.top.slice(0, 4).map(x => `<img src="${A.orig(x, 64)}" alt="" loading="lazy">`).join("")}</span>
+      <span>${left <= 1 ? "Следующее открытие — точно редкий подарок" : `Редкий подарок — не позже чем через ${left} ${plural(left, ["открытие", "открытия", "открытий"])}`}</span></div></div>`;
 }
 const openBtn = (c, again) => c.keys ? `<button class="btn cta gold" data-act="open-case" data-id="${c.id}">${ic("lock")}Открыть ключом · ${c.keys} шт.</button>` : `<button class="btn cta gold" data-act="open-case" data-id="${c.id}">${!c.price ? "Открыть бесплатно" : again ? `Ещё${OPEN.n > 1 ? " x" + OPEN.n : ""} · ⭐ ${short(c.price * OPEN.n)}` : `Открыть${OPEN.n > 1 ? " x" + OPEN.n : ""} за ⭐ ${fmt(c.price * OPEN.n)}`}</button>`;
 
@@ -478,7 +489,7 @@ async function doOpenInner(sheet, id, c, n) {
   won.innerHTML = "";
   let r;
   // после бесплатного кейса обновляем ME — иначе на главной таймер ещё «можно открыть!»
-  try { r = await post(`case/${id}/open?n=${n}`); c.keys = r.keys || 0; if (id === "free") loadMe().catch(() => {}); } catch (e) { btns.querySelectorAll("button").forEach(b => b.disabled = false); sheet.querySelectorAll(".ocount button").forEach(b => b.disabled = false); return; }
+  try { r = await post(`case/${id}/open?n=${n}`); c.keys = r.keys || 0; if (r.pity) c.pity = { ...c.pity, have: r.pity.have, need: r.pity.need, top: r.pity.top }; if (id === "free") loadMe().catch(() => {}); } catch (e) { btns.querySelectorAll("button").forEach(b => b.disabled = false); sheet.querySelectorAll(".ocount button").forEach(b => b.disabled = false); return; }
   setStars(r.stars);
   if (!OPEN.fast) {
     const small = n > 1, W = small ? 76 : 104, step = W + 8;
@@ -515,7 +526,7 @@ async function doOpenInner(sheet, id, c, n) {
     const g = gifts[0];
     const vt = valTier(g, sheet._ref), RAR = { gold: "Легендарный", pink: "Эпический", purple: "Редкий", blue: "Хороший", gray: "Обычный" };
     won.innerHTML = `<div class="won wt-${vt}" style="margin-top:16px"><div class="won-g"><i class="won-rays"></i>${giftHTML(g, { big: true })}</div>
-      <span class="won-rar">${RAR[vt]}</span>
+      <span class="won-rar">${RAR[vt]}</span>${r.pity && r.pity.forced && r.pity.forced.includes(0) ? `<span class="won-pity">${ic("shield")}Сработала гарантия</span>` : ""}
       <h2 style="margin:10px 0 0;font-size:22px">${esc(g.col)}</h2><div class="hint">#${fmt(g.num)} · ${esc(g.model)} · ${esc(g.backdrop)}</div>
       <div class="won-v star">≈ ⭐ <b id="won-v">0</b></div></div>`;
     startLottie(won);
@@ -525,9 +536,10 @@ async function doOpenInner(sheet, id, c, n) {
   } else {
     const best = gifts.reduce((a, b) => b.value > a.value ? b : a);
     won.innerHTML = `<div class="multi"><div class="mt"><b>Выпало на ⭐ ${fmt(total)}</b><span class="${total >= c.price * n ? "win" : "lose"}">${total >= c.price * n ? "+" : "−"}⭐ ${fmt(Math.abs(total - c.price * n))}</span></div>
-      <div class="ggrid">${gifts.map((g, i) => `<div class="gcell mw${g === best ? " best" : ""}" style="animation-delay:${i * 60}ms" data-act="gift" data-k="${reg({ g, mine: true })}">${giftHTML(g, { lite: true, tag: "⭐ " + short(g.value) })}<div class="cap">${giftName(g)}</div></div>`).join("")}</div></div>`;
+      <div class="ggrid">${gifts.map((g, i) => `<div class="gcell mw${g === best ? " best" : ""}${r.pity && r.pity.forced && r.pity.forced.includes(i) ? " pz" : ""}" style="animation-delay:${i * 60}ms" data-act="gift" data-k="${reg({ g, mine: true })}">${giftHTML(g, { lite: true, tag: "⭐ " + short(g.value) })}<div class="cap">${giftName(g)}</div></div>`).join("")}</div></div>`;
   }
   btns.innerHTML = `<button class="btn ghost" data-act="sell-won" data-ids="${gifts.map(g => g.id).join(",")}">${ic("coins")}⭐ ${short(sellAll)}</button>${openBtn(c, true)}`;
+  const pb = sheet.querySelector("#pity"); if (pb && r.pity) pb.innerHTML = pityHTML(c);
   if (!c.price) btns.lastElementChild.disabled = true;
   sheet.querySelectorAll(".ocount button").forEach(b => b.disabled = false);
   won.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1037,6 +1049,8 @@ document.addEventListener("click", e => {
   if (gq && typeof openPresentClaim === "function") setTimeout(() => openPresentClaim(gq), 500);
   const cq = new URLSearchParams(location.search).get("clan");   // приглашение в клан из бота
   if (cq && typeof openClan === "function") setTimeout(() => openClan(+cq), 500);
+  const bq = new URLSearchParams(location.search).get("bday");   // «у друга день рождения» из бота
+  if (bq && typeof openProfile === "function") setTimeout(() => openProfile(+bq), 500);
   const tq = new URLSearchParams(location.search).get("ticket");   // ответ поддержки из бота
   if (tq && typeof tkOpen === "function") setTimeout(() => tkOpen(+tq), 500);
   const aq = new URLSearchParams(location.search).get("aticket");  // админу: новый тикет из бота

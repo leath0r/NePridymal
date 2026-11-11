@@ -249,7 +249,19 @@ EVENTS = [
      "quests": [("hw_cases", "gift", "Открой 5 кейсов", "case", 5, 3000),
                 ("hw_dogs", "paw", "Сыграй 15 раз в Пёсиков", "dogs", 15, 4000),
                 ("hw_chicken", "flame", "Сыграй 5 раз в Курицу", "chicken", 5, 3000)]},
+    # через Новый год: from > to — ивент идёт с 1 декабря по 7 января
+    {"id": "newyear", "title": "Новый год", "from": (12, 1), "to": (1, 7), "case": "winter", "sale": 0.15,
+     "perks": ["Кейс «Новогодний» −15%", "Адвент-календарь: дверца каждый день декабря, за все 31 — рамка «2027»",
+               "Тайный Санта: обмен подарками 31 декабря", "Ивент-задания с повышенными наградами", "Снег и новогоднее оформление игры"],
+     "quests": [("ny_cases", "gift", "Открой 5 кейсов", "case", 5, 3000),
+                ("ny_avia", "rocket", "Сыграй 10 раз в Самолётик", "avia", 10, 3500),
+                ("ny_plinko", "target", "Сыграй 10 раз в Плинко", "plinko", 10, 3500)]},
 ]
+
+
+def _in_window(e, md):
+    """(месяц, день) внутри дат ивента; ивент через Новый год (from > to) — два куска: до 31.12 и с 1.01."""
+    return e["from"] <= md <= e["to"] if e["from"] <= e["to"] else (md >= e["from"] or md <= e["to"])
 
 
 _EV = {"ts": 0, "v": None}
@@ -269,18 +281,22 @@ def _event_now():
         return None
     if force != "auto":
         return next((e for e in EVENTS if e["id"] == force), None)
-    g = time.gmtime()
+    g = time.gmtime(now())
     md = (g.tm_mon, g.tm_mday)
-    return next((e for e in EVENTS if e["from"] <= md <= e["to"]), None)
+    return next((e for e in EVENTS if _in_window(e, md)), None)
 
 
 def event_public():
     e = event_active()
     if not e:
         return None
-    g = time.gmtime()
+    t = now()
+    g = time.gmtime(t)
     import calendar
-    until = calendar.timegm((g.tm_year, e["to"][0], e["to"][1], 23, 59, 59)) + 1   # конец последнего дня (UTC)
+    y = g.tm_year + (1 if e["from"] > e["to"] and (g.tm_mon, g.tm_mday) >= e["from"] else 0)   # декабрь → конец в январе следующего года
+    until = calendar.timegm((y, e["to"][0], e["to"][1], 23, 59, 59)) + 1   # конец последнего дня (UTC)
+    if until <= t:   # админ включил ивент вне его дат — показываем ближайший конец, а не прошедший
+        until = calendar.timegm((y + 1, e["to"][0], e["to"][1], 23, 59, 59)) + 1
     return {"id": e["id"], "title": e["title"], "case": e["case"], "sale": e["sale"], "perks": e["perks"], "until": until}
 
 
@@ -433,6 +449,8 @@ def event(uid, kind, delta, stake=None, pf=None, res=None):
         FAIR_DONE(uid, kind, stake, delta + stake, pf, res)
     if stake and delta > 0 and REC_WIN:   # личные рекорды (records.py)
         REC_WIN(uid, kind, delta, stake)
+    if stake and LOY_ADD:   # очки лояльности за оборот (loyal.py)
+        LOY_ADD(uid, kind, stake)
     if stake and delta > 0:
         RECENT_WINS.setdefault(uid, []).append((kind, stake, delta, now()))
         del RECENT_WINS[uid][:-5]
@@ -911,6 +929,23 @@ def counters(uid):
     }
 
 
+LOY_ADD = None   # loyal.py: очки лояльности за ставку (uid, kind, stake)
+LOY_ME = None    # loyal.py: очки и уровень для /me
+BDAY_ME = None   # bday.py: день рождения для /me
+BDAY_PROFILE = None   # bday.py: добавка к профилю (у кого сегодня день рождения, поздравлял ли)
+NY_ME = None   # newyear.py: адвент, Тайный Санта, итоги года — коротко для главной (вне сезона None)
+
+
+def _ny_me(uid):
+    if not NY_ME:
+        return None
+    try:
+        return NY_ME(uid)
+    except Exception as e:   # праздничный модуль не должен ронять загрузку игры
+        print("ny_me:", repr(e), flush=True)
+        return None
+
+
 @app.get(R + "/me")
 def me(uid=Depends(auth)):
     u = q1("SELECT * FROM users WHERE id=?", uid)
@@ -920,9 +955,10 @@ def me(uid=Depends(auth)):
             "streakNext": u["streak"] + 1 if t - u["last_daily"] < 48 * 3600 else 1,   # какой день серии будет при следующем заборе
             "streak": u["streak"], "streakBest": u["best_streak"] if "best_streak" in u.keys() else 0, "streakMs": _next_ms(uid),
             "refLink": f"https://t.me/{bot_name()}?start=ref_{uid}", "refBonus": refs.cfg("new_bonus") if refs.cfg("on") else 0, "ref": refs.summary(uid),
-            "disclaimer": disclaimer(), "build": build_v(), "shopOn": shop.shop_on(), "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "stealth": uid in STEALTH, "promo": promo(), "event": event_public(), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
+            "disclaimer": disclaimer(), "build": build_v(), "shopOn": shop.shop_on(), "notif": bool(u["notif"]) if "notif" in u.keys() else True, "admin": uid in ADMINS, "stealth": uid in STEALTH, "promo": promo(), "event": event_public(), "ny": _ny_me(uid), "surprise": u["surprise"] if "surprise" in u.keys() else 0,
             "keys": q1("SELECT COALESCE(SUM(n),0) n FROM case_keys WHERE user=?", uid)["n"],
             "sparks": __import__("sparks").sparks_waiting(uid),
+            "loy": LOY_ME(uid) if LOY_ME else None, "bday": BDAY_ME(uid) if BDAY_ME else None,
             "gamesOff": __import__("gates").games_state(),
             "franchise": franchise.offer(uid),
             "flash": flash.public(uid),
@@ -954,9 +990,19 @@ def _case_limit(cid):
     return {"limit": E.LIMITED[cid], "left": q1("SELECT n FROM case_limit WHERE cid=?", cid)["n"]}
 
 
+db.execute("CREATE TABLE IF NOT EXISTS case_pity(user INTEGER, cid TEXT, n INTEGER DEFAULT 0, PRIMARY KEY(user, cid))")
+
+
+def pity_out(cid, have):
+    """Шкала гарантии кейса для клиента (economy.PITY)."""
+    pt = E.PITY.get(cid)
+    return {"pity": {"have": min(have, pt["n"] - 1), "need": pt["n"], "top": pt["top"]}} if pt else {}
+
+
 @app.get(R + "/cases")
 def cases(uid=Depends(auth)):
     keys = {r["cid"]: r["n"] for r in q("SELECT cid, n FROM case_keys WHERE user=? AND n>0", uid)}
+    streaks = {r["cid"]: r["n"] for r in q("SELECT cid, n FROM case_pity WHERE user=?", uid)}
     out = []
     for c in E.CASES.values():
         top = max(c["odds"], key=lambda x: E.base(x))
@@ -965,7 +1011,7 @@ def cases(uid=Depends(auth)):
             items.append({"col": k, "p": round(v * 100, 3), "base": E.base(k), "ev": round(c["evs"][k]), **look_of(k, "shop")})
         items.sort(key=lambda x: -x["ev"])
         out.append({"id": c["id"], "title": E.case_title(c["id"], uid), "price": case_price(c), "full": c["price"], "keys": keys.get(c["id"], 0),
-                    "level": c["level"], "cover": E.case_cover(c["id"], uid), **_case_limit(c["id"]),
+                    "level": c["level"], "cover": E.case_cover(c["id"], uid), **_case_limit(c["id"]), **pity_out(c["id"], streaks.get(c["id"], 0)),
                     "top": top, "pat": look_of(E.case_cover(c["id"], uid), c["id"])["symbol"],
                     "previews": [x["col"] for x in items[:3]], "items": items})
     return out
@@ -1001,8 +1047,14 @@ def open_case(cid: str, n: int = 1, uid=Depends(auth)):
         ids = []
         rng = fair.stream(uid, "case", cid)
         drops = []
+        pt = E.PITY.get(cid)   # шкала гарантии: ключи тоже двигают её, бесплатного кейса в ней нет
+        streak = s0 = (q1("SELECT n FROM case_pity WHERE user=? AND cid=?", uid, cid) or {"n": 0})["n"] if pt else 0
+        forced = []
         for i in range(n):
-            d = E.open_case(cid, rng)
+            d, fz, hit = E.open_case_pity(cid, streak, rng)
+            streak = 0 if hit else streak + 1
+            if fz:
+                forced.append(i)
             drops.append(d["value"])
             cur = db.execute("INSERT INTO gifts(owner,col,model,backdrop,symbol,num,value,created) VALUES(?,?,?,?,?,?,?,?)",
                              (uid, d["col"], d["model"], d["backdrop"], d["symbol"], d["num"], d["value"], t))
@@ -1011,7 +1063,10 @@ def open_case(cid: str, n: int = 1, uid=Depends(auth)):
                 event(uid, "gift", d["value"])
             else:
                 event(uid, "case", d["value"] - price, stake=price)
-        fair.record(uid, "case", price * (n - keys), sum(drops), {"case": cid, "drops": drops}, fair.close_stream(rng))
+        if pt:
+            db.execute("INSERT INTO case_pity(user,cid,n) VALUES(?,?,?) ON CONFLICT(user,cid) DO UPDATE SET n=excluded.n", (uid, cid, streak))
+        fair.record(uid, "case", price * (n - keys), sum(drops),
+                    {"case": cid, "drops": drops, **({"pity": {"before": s0, "need": pt["n"], "forced": forced}} if pt else {})}, fair.close_stream(rng))
         if keys:
             refs.on_key_open(uid, cid, q1("SELECT col FROM gifts WHERE id=?", ids[0])["col"])
         best = max(ids, key=lambda i: q1("SELECT value FROM gifts WHERE id=?", i)["value"])
@@ -1029,8 +1084,11 @@ def open_case(cid: str, n: int = 1, uid=Depends(auth)):
         strip[WIN] = g
         gifts.append(g)
         strips.append(strip)
-    return {"gifts": gifts, "strips": strips, "gift": gifts[0], "strip": strips[0], "win": WIN, "stars": stars, "levelup": lvl,
-            "keysUsed": keys, "keys": (kr["n"] - keys) if kr else 0}
+    out = {"gifts": gifts, "strips": strips, "gift": gifts[0], "strip": strips[0], "win": WIN, "stars": stars, "levelup": lvl,
+           "keysUsed": keys, "keys": (kr["n"] - keys) if kr else 0, **pity_out(cid, streak)}
+    if pt:
+        out["pity"]["forced"] = forced
+    return out
 
 
 @app.post(R + "/daily")
@@ -1118,7 +1176,7 @@ def profile(tid: int, uid=Depends(auth)):
             "badges": json.loads(u["p_badges"] or "[]") if "p_badges" in u.keys() else [], "cover": u["p_cover"] if "p_cover" in u.keys() else 0,
             "bestCrash": u["best_crash"], "friends": fr, "refs": u["refs"], "since": u["created"],
             "seen": u["seen"] or 0, "now": now(),   # последний онлайн (seen обновляется при входе, не чаще раза в минуту)
-            "rel": friend_status(uid, tid)}
+            "rel": friend_status(uid, tid), **(BDAY_PROFILE(uid, tid) if BDAY_PROFILE else {})}
 
 
 def achievements(u, gifts, friends, worth):
@@ -2812,6 +2870,11 @@ import achrare  # noqa: E402,F401 — редкость достижений
 import idletax  # noqa: E402,F401 — сбор с брошенных больших балансов
 import legacy  # noqa: E402,F401 — наследие: итоги прошлых сезонов в профиле
 import share  # noqa: E402,F401 — карточка большого выигрыша
+import newyear  # noqa: E402,F401 — Новый год: адвент-календарь и Тайный Санта
+import recap  # noqa: E402,F401 — итоги года: карточки и сторис (25 декабря — 15 января)
+import loyal  # noqa: E402,F401 — программа лояльности: очки за оборот и магазин очков
+import bday  # noqa: E402,F401 — день рождения: подарок раз в год и поздравления друзей
+import funnel  # noqa: E402,F401 — воронка новичков в админке: источники, удержание, покупки, где уходят
 
 
 # ---------------- картинки подарков (api.changes.tg); на проде перед этим стоит кэш nginx ----------------

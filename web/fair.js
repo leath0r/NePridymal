@@ -433,7 +433,8 @@ Object.assign(ACT, {
   "pf-case": async el => {
     try {
       const d = await api("fair/case/" + encodeURIComponent(el.dataset.v));
-      PF.caseOdds.html = `<div class="box fcase">${d.items.map(r => `<div class="fsrc"><span>${esc(r.col)}</span><em>≈ ${short(r.ev)}</em><b>${r.p}%</b></div>`).join("")}</div>`;
+      PF.caseOdds.html = `<div class="box fcase">${d.items.map(r => `<div class="fsrc"><span>${esc(r.col)}</span><em>≈ ${short(r.ev)}</em><b>${r.p}%</b></div>`).join("")}</div>`
+        + (d.pity ? `<div class="disc">Шкала гарантии: если ${d.pity.need - 1} ${plural(d.pity.need - 1, ["открытие", "открытия", "открытий"])} подряд без редкого (${d.pity.top.map(esc).join(", ")}), следующий подарок точно редкий. Обычный шанс редкого ${String(d.pity.natural).replace(".", ",")}%, вместе с гарантией в среднем ${String(d.pity.p).replace(".", ",")}%. Шансы в таблице — уже с гарантией, возврат кейса тот же.</div>` : "");
       const b = $("#pf-case"); if (b) b.innerHTML = PF.caseOdds.html;
     } catch (e) {}
   },

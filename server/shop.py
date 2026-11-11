@@ -42,9 +42,10 @@ def is_first(uid):
     return not q1("SELECT 1 FROM payments WHERE user=? AND COALESCE(kind,'pack')='pack'", uid)
 
 
-async def make_invoice(title, desc, payload, xtr):
+async def make_invoice(title, desc, payload, xtr, **extra):
+    """extra — дополнительные параметры createInvoiceLink (например, subscription_period для подписки)."""
     r = await tg_call("createInvoiceLink", _token=__import__("franchise").pay_token(), title=title, description=desc, payload=json.dumps(payload), currency="XTR",
-                      prices=[{"label": title, "amount": xtr}])
+                      prices=[{"label": title, "amount": xtr}], **extra)
     if not r.get("ok"):
         err("не удалось создать счёт, попробуй позже")
     return r["result"]
@@ -124,7 +125,7 @@ def on_paid(m):
         uid = m["from"]["id"]
     if p.get("k"):
         import premium
-        return premium.fulfill(uid, p["k"], xtr, charge, p)
+        return premium.fulfill(uid, p["k"], xtr, charge, p, sp)
     if p.get("to"):
         return gift_paid(uid, int(p["to"]), xtr, charge)
     with tx():

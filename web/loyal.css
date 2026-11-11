@@ -1,0 +1,51 @@
+/* ================= VIP-подписка, программа лояльности, день рождения ================= */
+
+/* --- VIP-карточка: две кнопки (подписка / разово) --- */
+.pr-vip{flex-wrap:wrap}
+.pr-vip .pr-v-btns{display:flex;flex-direction:column;gap:6px;width:100%;margin-top:4px}
+.pr-vip .pr-v-btns .btn{width:100%;justify-content:center;flex-direction:column;gap:0;line-height:1.15;padding-top:8px;padding-bottom:8px}
+.pr-vip .pr-v-btns .btn small{font-size:10.5px;font-weight:600;opacity:.75}
+.pr-vip.sub{border-color:color-mix(in srgb,var(--gold) 60%,transparent)}
+
+/* --- рамки-награды --- */
+.ava.fr-loyal{--frw:calc(2px + max(2px,var(--s)*.07));box-shadow:0 0 0 2px var(--bg),0 0 0 var(--frw) #c98b5a,0 0 12px 2px #e0a86a99;animation:frLoyal 2.4s ease-in-out infinite}
+@keyframes frLoyal{0%,100%{box-shadow:0 0 0 2px var(--bg),0 0 0 var(--frw) #c98b5a,0 0 12px 2px #e0a86a99}50%{box-shadow:0 0 0 2px var(--bg),0 0 0 var(--frw) #ffd9a0,0 0 18px 4px #ffc46bbb}}
+.ava.fr-bday{--frw:calc(2px + max(2px,var(--s)*.07));box-shadow:0 0 0 2px var(--bg),0 0 0 var(--frw) #ff6fb5,0 0 12px 2px #ff6fb599;animation:frBday 1.6s linear infinite}
+@keyframes frBday{0%{box-shadow:0 0 0 2px var(--bg),0 0 0 var(--frw) #ff6fb5,0 0 12px 2px #ff6fb599}33%{box-shadow:0 0 0 2px var(--bg),0 0 0 var(--frw) #7cc2ff,0 0 12px 2px #7cc2ff99}66%{box-shadow:0 0 0 2px var(--bg),0 0 0 var(--frw) #ffd76a,0 0 12px 2px #ffd76a99}100%{box-shadow:0 0 0 2px var(--bg),0 0 0 var(--frw) #ff6fb5,0 0 12px 2px #ff6fb599}}
+html.lite .ava.fr-loyal,html.lite .ava.fr-bday{animation:none}
+
+/* --- окно лояльности --- */
+.loy-hero{display:flex;align-items:center;gap:14px;padding:16px;border-radius:var(--r);background:linear-gradient(135deg,color-mix(in srgb,var(--tc) 22%,var(--card)),var(--card));--tc:#c98b5a;margin:4px 0 12px}
+.loy-hero.t-silver{--tc:#b9c3d3}.loy-hero.t-gold{--tc:#ffc53d}
+.loy-pts{flex:1;min-width:0}
+.loy-pts b{display:block;font-size:30px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.loy-pts span{font-size:12px;color:var(--hint)}
+.loy-tier{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:14px;background:color-mix(in srgb,var(--tc) 28%,transparent)}
+.loy-tier .ic{width:22px;height:22px;color:var(--tc);flex:none}
+.loy-tier b{display:block;font-size:14px}.loy-tier span{font-size:11px;color:var(--hint);white-space:nowrap}
+.loy-bar{height:8px;border-radius:6px;background:var(--card2);overflow:hidden}
+.loy-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#c98b5a,#ffc53d);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.loy-sub{font-size:12px;color:var(--hint);margin:8px 0 4px;text-align:center}
+.loy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.loy-it{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 10px;border-radius:16px;background:var(--card);text-align:center}
+.loy-it.no{opacity:.75}
+.loy-it b{font-size:13px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.loy-it span{font-size:11px;color:var(--hint)}
+.loy-it .btn{margin-top:6px;width:100%;justify-content:center;font-variant-numeric:tabular-nums}
+.loy-pic{position:relative;width:56px;height:56px;display:grid;place-items:center}
+.loy-pic img{width:52px;height:52px;object-fit:contain}
+.loy-pic i{position:absolute;right:-2px;bottom:-2px;width:20px;height:20px;border-radius:7px;display:grid;place-items:center;background:var(--bg);color:var(--gold)}
+.loy-pic i .ic{width:12px;height:12px}
+
+/* --- день рождения --- */
+.bd-pick{display:grid;grid-template-columns:1fr 1.6fr;gap:8px}
+.bd-pick select{width:100%}
+.bd-disc{margin-top:8px}
+.st-bday .stc-i{background:linear-gradient(145deg,#ff6fb5,#7d6cff);color:#fff;box-shadow:0 6px 16px -8px #ff6fb5}
+.st-bday.hot .stc-i{animation:advPulse 1.8s ease-in-out infinite}
+.bd-prof{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;margin:0 0 10px;background:linear-gradient(120deg,color-mix(in srgb,#ff6fb5 16%,var(--card)),var(--card))}
+.bd-prof>.ic{width:22px;height:22px;color:#ff6fb5;flex:none}
+.bd-prof b{display:block;font-size:13.5px}.bd-prof span{font-size:11.5px;color:var(--hint);line-height:1.3}
+.bd-prof .btn{flex:none}
+.bd-prof.done>.ic{color:var(--hint)}
+.sheet.loy-s>.gtitle{font-size:20px;white-space:normal;line-height:1.15}

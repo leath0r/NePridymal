@@ -32,7 +32,7 @@ LOCK = 86400            # продать можно через сутки пос
 if not kv_get("bank_v2_from"):
     db.execute("INSERT OR REPLACE INTO kv(k,v) VALUES('bank_v2_from',?)", (str(now()),))
 BANK_V2 = int(kv_get("bank_v2_from"))
-BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','gameday','clanspend','lucky','season','cashback','frcut','flash','thanks','bankgift','clanshare','clandiv','league','admgift','admin','gift','comp','depint','depfee','bankyield','vaultbuy','vaultcost','giveaway','idletax','clanrecruit') OR (kind IN ('daily','quest','income','stake','bizbuy','bizsell','style','ref','ref_lvl','ref_ms','ref_buy','ref_top','ref_duo','sparks','set','album','onboard','comeback','franchise','stack','level','backing','clanbiz','auction','bizmgr','bizgoods') AND ts>={BANK_V2})"
+BANK_KINDS = f"kind IN {GAME_KINDS} OR kind IN ('jackpot','ticket','share','div','crypto','futures','fee','loan','clan','clanprize','mkbank','tourn','gameday','clanspend','lucky','season','cashback','frcut','flash','thanks','bankgift','clanshare','clandiv','league','admgift','admin','gift','comp','depint','depfee','bankyield','vaultbuy','vaultcost','giveaway','idletax','clanrecruit') OR (kind IN ('daily','quest','income','stake','bizbuy','bizsell','style','ref','ref_lvl','ref_ms','ref_buy','ref_top','ref_duo','sparks','set','album','onboard','comeback','advent','franchise','stack','level','backing','clanbiz','auction','bizmgr','bizgoods') AND ts>={BANK_V2})"
 
 
 _BV = {"ts": 0, "v": 0}

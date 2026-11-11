@@ -34,7 +34,7 @@ bannerHTML = function (p) {
 };
 
 // ---------------- окно оформления ----------------
-const FRAME_NM = { neon: "Неон", ice: "Лёд", fire: "Пламя", toxic: "Токсик", rainbow: "Радуга", diamond: "Бриллиант" };
+const FRAME_NM = { neon: "Неон", ice: "Лёд", fire: "Пламя", toxic: "Токсик", rainbow: "Радуга", diamond: "Бриллиант", loyal: "Постоянный клиент", bday: "Именинник" };
 async function openStyle() {
   H.imp("light");
   const el = openSheet(emptyHTML("hourglass", "Загружаем…"), "sty-s");
@@ -57,7 +57,8 @@ function styDraw(el) {
     return `<div class="sty-it${on ? " on" : ""}${has ? " has" : ""}"><div class="sty-pv ${it.kind}">${prev}</div><b>${esc(it.name)}</b>
       ${has ? `<small>ещё ${has} ${plural(has, ["день", "дня", "дней"])}</small>
         <div class="sty-bt"><button class="btn sm ${on ? "ghost" : ""}" data-act="sty-wear" data-id="${it.id}">${on ? "Снять" : "Надеть"}</button>
-        <button class="btn sm ghost" data-act="sty-buy" data-id="${it.id}" title="Продлить">+${d.days} дн.</button></div>`
+        ${it.award ? "" : `<button class="btn sm ghost" data-act="sty-buy" data-id="${it.id}" title="Продлить">+${d.days} дн.</button>`}</div>`
+      : it.award ? `<small>${esc(it.award)}</small>`   // награда (рамка «2027» за адвент) не продаётся
       : `${it.full > it.price ? `<s class="sty-full">⭐ ${short(it.full)}</s>` : ""}<button class="btn sm gold" data-act="sty-buy" data-id="${it.id}">⭐ ${short(it.price)}</button>`}</div>`;
   };
   replaceSheet(el, `<h2 class="gtitle">Оформление</h2>
@@ -112,7 +113,7 @@ Object.assign(ACT, {
     s._sty[k] = s._sty[k] === id ? "" : id; H.sel(); styDraw(s);
   },
   "sty-buy": async el => {
-    const it = STY.items.find(x => x.id === el.dataset.id); if (!it) return;
+    const it = STY.items.find(x => x.id === el.dataset.id); if (!it || it.award) return;
     const has = STY.owned[it.id];
     if (!await confirmM(`${has ? "Продлить" : "Купить"} «${it.name}»?`, `⭐ ${fmt(it.price)} за ${STY.days} дней.${has ? " Срок добавится к оставшемуся." : " Сразу наденется."}`, has ? "Продлить" : "Купить")) return;
     el.disabled = true;
