@@ -285,5 +285,50 @@
  },
  "Мегаящик": {
   "Мегаящик": "cover__megabox"
+ },
+ "Деревянные инструменты": {
+  "Мотыга": "mc_wooden_hoe",
+  "Лопата": "mc_wooden_shovel",
+  "Топор": "mc_wooden_axe",
+  "Кирка": "mc_wooden_pickaxe",
+  "Меч": "mc_wooden_sword"
+ },
+ "Каменные инструменты": {
+  "Мотыга": "mc_stone_hoe",
+  "Лопата": "mc_stone_shovel",
+  "Топор": "mc_stone_axe",
+  "Кирка": "mc_stone_pickaxe",
+  "Меч": "mc_stone_sword"
+ },
+ "Золотые инструменты": {
+  "Мотыга": "mc_golden_hoe",
+  "Лопата": "mc_golden_shovel",
+  "Топор": "mc_golden_axe",
+  "Кирка": "mc_golden_pickaxe",
+  "Меч": "mc_golden_sword"
+ },
+ "Железные инструменты": {
+  "Мотыга": "mc_iron_hoe",
+  "Лопата": "mc_iron_shovel",
+  "Топор": "mc_iron_axe",
+  "Кирка": "mc_iron_pickaxe",
+  "Меч": "mc_iron_sword"
+ },
+ "Алмазные инструменты": {
+  "Мотыга": "mc_diamond_hoe",
+  "Лопата": "mc_diamond_shovel",
+  "Топор": "mc_diamond_axe",
+  "Кирка": "mc_diamond_pickaxe",
+  "Меч": "mc_diamond_sword"
+ },
+ "Незеритовые инструменты": {
+  "Мотыга": "mc_netherite_hoe",
+  "Лопата": "mc_netherite_shovel",
+  "Топор": "mc_netherite_axe",
+  "Кирка": "mc_netherite_pickaxe",
+  "Меч": "mc_netherite_sword"
+ },
+ "Сундук": {
+  "Сундук": "cover__chest"
  }
 }

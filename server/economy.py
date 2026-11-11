@@ -47,8 +47,15 @@ CUSTOM = {
     "Бравлеры эпические": [["Bo", 20], ["Piper", 20], ["Pam", 20], ["Frank", 20], ["Bibi", 15], ["Bea", 15], ["Emz", 15], ["Gale", 12], ["Nani", 12], ["Colette", 12], ["Edgar", 10], ["Stu", 10], ["Belle", 10], ["Grom", 10], ["Griff", 8], ["Ash", 8], ["Lola", 8], ["Bonnie", 6], ["Sam", 6], ["Mandy", 6], ["Maisie", 5], ["Hank", 5], ["Pearl", 5], ["Larry & Lawrie", 5], ["Angelo", 4], ["Berry", 4], ["Shade", 4], ["Meeple", 3], ["Trunk", 3], ["Bolt", 3]],
     "Бравлеры мифические": [["Mortis", 20], ["Tara", 20], ["Gene", 20], ["Mr. P", 20], ["Max", 20], ["Sprout", 15], ["Lou", 15], ["Byron", 15], ["Ruffs", 15], ["Squeak", 15], ["Buzz", 12], ["Fang", 12], ["Eve", 12], ["Janet", 12], ["Otis", 12], ["Buster", 10], ["Gray", 10], ["R-T", 10], ["Willow", 10], ["Doug", 10], ["Chuck", 8], ["Charlie", 8], ["Mico", 8], ["Melodie", 8], ["Lily", 6], ["Clancy", 6], ["Moe", 6], ["Juju", 6], ["Ollie", 6], ["Lumi", 5], ["Finx", 5], ["Jae-Yong", 5], ["Alli", 5], ["Mina", 5], ["Ziggy", 4], ["Gigi", 4], ["Glowy", 4], ["Najia", 4], ["Damian", 4], ["Starr Nova", 3], ["Wendy", 3], ["Cosmo", 3], ["Vince", 3]],
     "Бравлеры легендарные": [["Spike", 20], ["Crow", 20], ["Leon", 15], ["Sandy", 15], ["Surge", 12], ["Amber", 12], ["Meg", 10], ["Chester", 10], ["Cordelius", 8], ["Kit", 6], ["Draco", 6], ["Kenji", 5], ["Kaze", 5], ["Pierce", 4], ["Sirius", 4], ["Nori", 3]],
+    # кейс «Minecraft» (2026-11-11): инструменты шести материалов, текстуры — PrismarineJS/minecraft-assets, обложка — minecraft.wiki
+    "Деревянные инструменты": [["Мотыга", 20], ["Лопата", 15], ["Топор", 10], ["Кирка", 7], ["Меч", 4]],
+    "Каменные инструменты": [["Мотыга", 20], ["Лопата", 15], ["Топор", 10], ["Кирка", 7], ["Меч", 4]],
+    "Золотые инструменты": [["Мотыга", 20], ["Лопата", 15], ["Топор", 10], ["Кирка", 7], ["Меч", 4]],
+    "Железные инструменты": [["Мотыга", 20], ["Лопата", 15], ["Топор", 10], ["Кирка", 7], ["Меч", 4]],
+    "Алмазные инструменты": [["Мотыга", 20], ["Лопата", 15], ["Топор", 10], ["Кирка", 7], ["Меч", 4]],
+    "Незеритовые инструменты": [["Мотыга", 20], ["Лопата", 15], ["Топор", 10], ["Кирка", 7], ["Меч", 4]],
 }
-CUSTOM_COVERS = {"CS Case": "_cover", "CS Case 2": "CS Case 2", "Мегаящик": "Мегаящик"}   # обложки своих кейсов → ключ в map.json (не коллекции)
+CUSTOM_COVERS = {"CS Case": "_cover", "CS Case 2": "CS Case 2", "Мегаящик": "Мегаящик", "Сундук": "Сундук"}   # обложки своих кейсов → ключ в map.json (не коллекции)
 for _c, _m in CUSTOM.items():
     CATALOG[_c] = {"released": 1794355200, "models": [list(x) for x in _m],
                    "backdrops": CATALOG[CUSTOM_DONOR]["backdrops"], "symbols": CATALOG[CUSTOM_DONOR]["symbols"]}
@@ -96,6 +103,7 @@ DEFAULT_BASE = 600
 BASE.update({"P90 Asiimov": 3660, "AK-47 Asiimov": 9150, "CS Gloves": 29280, "Karambit": 73200})   # кейс CS:GO: при цене 11 111 возврат ≈ 90% (проверено симуляцией)
 BASE.update({"AK-47 Redline": 5230, "Desert Eagle Code Red": 6540, "AWP Hyper Beast": 7850, "M4A4 Neo-Noir": 9160, "AWP Neo-Noir": 10470, "AK-47 Vulcan": 15700,
              "M4A1-S Printstream": 19630, "Driver Gloves": 39260, "M9 Bayonet": 78520})   # добавка в кейс CS:GO (13 коллекций): возврат ≈ 90% при 11 111 (симуляция 200к, 2026-11-11)
+BASE.update({"Деревянные инструменты": 1400, "Каменные инструменты": 2100, "Золотые инструменты": 3040, "Железные инструменты": 4090, "Алмазные инструменты": 9340, "Незеритовые инструменты": 29200})   # Minecraft: возврат ≈ 90% при 3 333 (симуляция 200к, 2026-11-11)
 BASE.update({"Бравлеры редкие": 2320, "Бравлеры супер редкие": 3710, "Бравлеры эпические": 6490, "Бравлеры мифические": 13910, "Бравлеры легендарные": 37100})   # Brawl Stars: возврат ≈ 90% при 5 555 (симуляция 200к, 2026-11-11)
 BASE.update({"AWP Asiimov": 11500, "Desert Eagle Blaze": 18450, "Glock-18 Fade": 27700, "USP-S Kill Confirmed": 13850, "AK-47 Fire Serpent": 57700,
              "M4A4 Howl": 138400, "Sport Gloves": 115300, "Butterfly Knife": 207600, "AWP Dragon Lore": 461300})   # кейс «CS:GO Легенды»: при цене 33 333 возврат ≈ 90% (симуляция 200к открытий, 2026-11-11)
@@ -242,12 +250,13 @@ CASES_DEF = [
     ("royal", "Королевский", "Heart Locket", 18, ["Plush Pepe", "Heart Locket"]),
     ("csgo", "CS:GO", "CS Case", 3, ["P90 Asiimov", "AK-47 Asiimov", "AK-47 Redline", "Desert Eagle Code Red", "AWP Hyper Beast", "M4A4 Neo-Noir", "AWP Neo-Noir",
                                      "AK-47 Vulcan", "M4A1-S Printstream", "CS Gloves", "Driver Gloves", "Karambit", "M9 Bayonet"]),
+    ("mc", "Minecraft", "Сундук", 1, ["Деревянные инструменты", "Каменные инструменты", "Золотые инструменты", "Железные инструменты", "Алмазные инструменты", "Незеритовые инструменты"]),
     ("brawl", "Brawl Stars", "Мегаящик", 2, ["Бравлеры редкие", "Бравлеры супер редкие", "Бравлеры эпические", "Бравлеры мифические", "Бравлеры легендарные"]),
     ("csgo2", "CS:GO Легенды", "CS Case 2", 5, ["AWP Asiimov", "Desert Eagle Blaze", "Glock-18 Fade", "USP-S Kill Confirmed", "AK-47 Fire Serpent", "M4A4 Howl", "Sport Gloves", "Butterfly Knife", "AWP Dragon Lore"]),
     ("mega", "МЕГА", "Plush Pepe", 15, ["Plush Pepe", "Heart Locket", "Durov's Cap", "Precious Peach", "Mighty Arm", "Ion Gem", "Loot Bag"]),
 ]
 RTP = conf("economy.case_rtp", 0.9)  # возврат игроку
-FIXED_PRICE = {"csgo": 11111, "csgo2": 33333, "brawl": 5555}   # цена ровно такая (базовые цены коллекций подобраны под RTP)
+FIXED_PRICE = {"csgo": 11111, "csgo2": 33333, "brawl": 5555, "mc": 3333}   # цена ровно такая (базовые цены коллекций подобраны под RTP)
 CASES = {}
 
 
