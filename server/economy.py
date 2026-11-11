@@ -31,6 +31,16 @@ CUSTOM = {
     "AWP Dragon Lore": _WEAR,
     "Butterfly Knife": [["Fade", 3], ["Doppler", 5], ["Gamma Doppler", 4], ["Marble Fade", 4], ["Tiger Tooth", 6], ["Lore", 5], ["Slaughter", 7], ["Crimson Web", 10]],
     "Sport Gloves": [["Omega", 3], ["Amphibious", 3], ["Hedge Maze", 4], ["Nocts", 5], ["Slingshot", 5], ["Scarlet Shamagh", 6], ["Bronze Morph", 7], ["Superconductor", 8]],
+    # ещё скины в кейс «CS:GO» (2026-11-11)
+    "AK-47 Redline": [["Minimal Wear", 8], ["Field-Tested", 20], ["Well-Worn", 10], ["Battle-Scarred", 9]],
+    "AK-47 Vulcan": _WEAR,
+    "M4A1-S Printstream": _WEAR,
+    "M4A4 Neo-Noir": _WEAR,
+    "AWP Neo-Noir": _WEAR,
+    "AWP Hyper Beast": _WEAR,
+    "Desert Eagle Code Red": _WEAR,
+    "M9 Bayonet": [["Fade", 3], ["Doppler", 5], ["Gamma Doppler", 4], ["Marble Fade", 4], ["Tiger Tooth", 6], ["Lore", 5], ["Slaughter", 7], ["Crimson Web", 10]],
+    "Driver Gloves": [["Crimson Weave", 3], ["Imperial Plaid", 4], ["Overtake", 5], ["Racing Green", 7], ["Lunar Weave", 6], ["Diamondback", 6], ["Black Tie", 5], ["Snow Leopard", 8]],
 }
 CUSTOM_COVERS = {"CS Case": "_cover", "CS Case 2": "CS Case 2"}   # обложки своих кейсов → ключ в map.json (не коллекции)
 for _c, _m in CUSTOM.items():
@@ -78,6 +88,8 @@ BASE = {
 }
 DEFAULT_BASE = 600
 BASE.update({"P90 Asiimov": 3660, "AK-47 Asiimov": 9150, "CS Gloves": 29280, "Karambit": 73200})   # кейс CS:GO: при цене 11 111 возврат ≈ 90% (проверено симуляцией)
+BASE.update({"AK-47 Redline": 5230, "Desert Eagle Code Red": 6540, "AWP Hyper Beast": 7850, "M4A4 Neo-Noir": 9160, "AWP Neo-Noir": 10470, "AK-47 Vulcan": 15700,
+             "M4A1-S Printstream": 19630, "Driver Gloves": 39260, "M9 Bayonet": 78520})   # добавка в кейс CS:GO (13 коллекций): возврат ≈ 90% при 11 111 (симуляция 200к, 2026-11-11)
 BASE.update({"AWP Asiimov": 11500, "Desert Eagle Blaze": 18450, "Glock-18 Fade": 27700, "USP-S Kill Confirmed": 13850, "AK-47 Fire Serpent": 57700,
              "M4A4 Howl": 138400, "Sport Gloves": 115300, "Butterfly Knife": 207600, "AWP Dragon Lore": 461300})   # кейс «CS:GO Легенды»: при цене 33 333 возврат ≈ 90% (симуляция 200к открытий, 2026-11-11)
 
@@ -221,7 +233,8 @@ CASES_DEF = [
     ("caphunt", "Охота на Кепку", "Durov's Cap", 3, ["Lol Pop", "Desk Calendar", "B-Day Candle", "Homemade Cake", "Durov's Cap"]),
     ("sport", "Спорт", "UFC Strike", 4, ["UFC Strike", "Khabib's Papakha", "Victory Medal", "Surge Board", "Heroic Helmet", "Bling Binky"]),
     ("royal", "Королевский", "Heart Locket", 18, ["Plush Pepe", "Heart Locket"]),
-    ("csgo", "CS:GO", "CS Case", 3, ["P90 Asiimov", "AK-47 Asiimov", "CS Gloves", "Karambit"]),
+    ("csgo", "CS:GO", "CS Case", 3, ["P90 Asiimov", "AK-47 Asiimov", "AK-47 Redline", "Desert Eagle Code Red", "AWP Hyper Beast", "M4A4 Neo-Noir", "AWP Neo-Noir",
+                                     "AK-47 Vulcan", "M4A1-S Printstream", "CS Gloves", "Driver Gloves", "Karambit", "M9 Bayonet"]),
     ("csgo2", "CS:GO Легенды", "CS Case 2", 5, ["AWP Asiimov", "Desert Eagle Blaze", "Glock-18 Fade", "USP-S Kill Confirmed", "AK-47 Fire Serpent", "M4A4 Howl", "Sport Gloves", "Butterfly Knife", "AWP Dragon Lore"]),
     ("mega", "МЕГА", "Plush Pepe", 15, ["Plush Pepe", "Heart Locket", "Durov's Cap", "Precious Peach", "Mighty Arm", "Ion Gem", "Loot Bag"]),
 ]

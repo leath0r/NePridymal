@@ -96,5 +96,73 @@
  },
  "CS Case 2": {
   "CS Case 2": "cover__cs_case_2"
+ },
+ "AK-47 Redline": {
+  "Minimal Wear": "ak_47_redline__minimal_wear",
+  "Field-Tested": "ak_47_redline__field_tested",
+  "Well-Worn": "ak_47_redline__well_worn",
+  "Battle-Scarred": "ak_47_redline__battle_scarred"
+ },
+ "AK-47 Vulcan": {
+  "Factory New": "ak_47_vulcan__factory_new",
+  "Minimal Wear": "ak_47_vulcan__minimal_wear",
+  "Field-Tested": "ak_47_vulcan__field_tested",
+  "Well-Worn": "ak_47_vulcan__well_worn",
+  "Battle-Scarred": "ak_47_vulcan__battle_scarred"
+ },
+ "M4A1-S Printstream": {
+  "Factory New": "m4a1_s_printstream__factory_new",
+  "Minimal Wear": "m4a1_s_printstream__minimal_wear",
+  "Field-Tested": "m4a1_s_printstream__field_tested",
+  "Well-Worn": "m4a1_s_printstream__well_worn",
+  "Battle-Scarred": "m4a1_s_printstream__battle_scarred"
+ },
+ "M4A4 Neo-Noir": {
+  "Factory New": "m4a4_neo_noir__factory_new",
+  "Minimal Wear": "m4a4_neo_noir__minimal_wear",
+  "Field-Tested": "m4a4_neo_noir__field_tested",
+  "Well-Worn": "m4a4_neo_noir__well_worn",
+  "Battle-Scarred": "m4a4_neo_noir__battle_scarred"
+ },
+ "AWP Neo-Noir": {
+  "Factory New": "awp_neo_noir__factory_new",
+  "Minimal Wear": "awp_neo_noir__minimal_wear",
+  "Field-Tested": "awp_neo_noir__field_tested",
+  "Well-Worn": "awp_neo_noir__well_worn",
+  "Battle-Scarred": "awp_neo_noir__battle_scarred"
+ },
+ "AWP Hyper Beast": {
+  "Factory New": "awp_hyper_beast__factory_new",
+  "Minimal Wear": "awp_hyper_beast__minimal_wear",
+  "Field-Tested": "awp_hyper_beast__field_tested",
+  "Well-Worn": "awp_hyper_beast__well_worn",
+  "Battle-Scarred": "awp_hyper_beast__battle_scarred"
+ },
+ "Desert Eagle Code Red": {
+  "Factory New": "desert_eagle_code_red__factory_new",
+  "Minimal Wear": "desert_eagle_code_red__minimal_wear",
+  "Field-Tested": "desert_eagle_code_red__field_tested",
+  "Well-Worn": "desert_eagle_code_red__well_worn",
+  "Battle-Scarred": "desert_eagle_code_red__battle_scarred"
+ },
+ "M9 Bayonet": {
+  "Fade": "m9_bayonet__fade",
+  "Doppler": "m9_bayonet__doppler",
+  "Gamma Doppler": "m9_bayonet__gamma_doppler",
+  "Marble Fade": "m9_bayonet__marble_fade",
+  "Tiger Tooth": "m9_bayonet__tiger_tooth",
+  "Lore": "m9_bayonet__lore",
+  "Slaughter": "m9_bayonet__slaughter",
+  "Crimson Web": "m9_bayonet__crimson_web"
+ },
+ "Driver Gloves": {
+  "Crimson Weave": "driver_gloves__crimson_weave",
+  "Imperial Plaid": "driver_gloves__imperial_plaid",
+  "Overtake": "driver_gloves__overtake",
+  "Racing Green": "driver_gloves__racing_green",
+  "Lunar Weave": "driver_gloves__lunar_weave",
+  "Diamondback": "driver_gloves__diamondback",
+  "Black Tie": "driver_gloves__black_tie",
+  "Snow Leopard": "driver_gloves__snow_leopard"
  }
 }
