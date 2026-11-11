@@ -81,7 +81,7 @@ def premium(uid=Depends(auth)):
     last = q1("SELECT id FROM gifts WHERE owner=? AND id IN (SELECT gift FROM feed WHERE user=? AND cs='chest') ORDER BY id DESC LIMIT 1", uid, uid)
     import shop
     return {"vip": {"until": vip_until(uid), "xtr": VIP_XTR, "days": VIP_DAYS, "on": shop.sale_on("vip")},
-            "offer": {**o, "bought": offer_bought(uid) or not _shop_on(), "off": not _shop_on(), "case": {"id": c["id"], "title": c["title"], "cover": c["cover"], "price": c["price"]}},
+            "offer": {**o, "bought": offer_bought(uid) or not _shop_on(), "off": not _shop_on(), "case": {"id": c["id"], "title": E.case_title(c["id"], uid), "cover": E.case_cover(c["id"], uid), "price": c["price"]}},
             "chest": {"on": shop.sale_on("chest"), "xtr": CHEST_XTR, "cols": cols, "ev": int(sum(x["p"] * x["ev"] for x in cols)), "last": last["id"] if last else 0},
             "now": now()}
 
@@ -110,7 +110,7 @@ async def premium_invoice(req: Request, uid=Depends(auth)):
     o = offer_today()
     title, desc = {
         "vip": (f"VIP на {VIP_DAYS} дней", "Бонус дня ×2, бесплатный кейс вдвое чаще, комиссия маркета −50%, золотая рамка и значок VIP."),
-        "offer": ("Набор дня", f"{o['stars']:,} игровых звёзд + ключ от кейса «{E.CASES[o['cid']]['title']}». Только сегодня.".replace(",", " ")),
+        "offer": ("Набор дня", f"{o['stars']:,} игровых звёзд + ключ от кейса «{E.case_title(o['cid'], uid)}». Только сегодня.".replace(",", " ")),
         "chest": ("Звёздный сундук", "Подарок из топ-коллекций с редкой моделью: Plush Pepe, Heart Locket, Durov's Cap, Precious Peach."),
     }[k]
     link = await shop.make_invoice(title, desc, {"u": uid, "x": amount(k), "k": k, "d": o["id"]}, amount(k))
@@ -146,7 +146,7 @@ def fulfill(uid, k, xtr, charge, p):
             event(uid, "buy", stars)
             __import__("bank").back(stars)
             db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (uid, o[2]))
-            msg = (f"🎁 Набор дня: +{stars:,} ⭐ и ключ от кейса «{esc(E.CASES[o[2]]['title'])}». Спасибо!").replace(",", " ")
+            msg = (f"🎁 Набор дня: +{stars:,} ⭐ и ключ от кейса «{esc(E.case_title(o[2], uid))}». Спасибо!").replace(",", " ")
         elif k == "chest":
             import fair
             rng = fair.stream(uid, "chest", "chest")

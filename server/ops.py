@@ -288,6 +288,26 @@ def undo(lid: int, aid=Depends(admin)):
             db.execute("INSERT INTO kv(k,v) VALUES('odds',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur),))
             settings._LIVE.clear(); settings._LIVE.update(cur)
             what = f"шансы {u['key']} → {'по умолчанию' if u['prev'] is None else u['prev']}"
+        elif k == "case_name":
+            import admin as _adm
+            cur = json.loads(kv_get("case_names", "{}") or "{}")
+            if u["prev"] is None:
+                cur.pop(u["cid"], None)
+            else:
+                cur[u["cid"]] = u["prev"]
+            db.execute("INSERT INTO kv(k,v) VALUES('case_names',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur, ensure_ascii=False),))
+            _adm._load_case_names()
+            what = f"название кейса {u['cid']} → {'настоящее' if u['prev'] is None else u['prev'].get('title')}"
+        elif k == "case_cover":
+            import admin as _adm
+            cur = json.loads(kv_get("case_covers", "{}") or "{}")
+            if u["prev"] is None:
+                cur.pop(u["cid"], None)
+            else:
+                cur[u["cid"]] = u["prev"]
+            db.execute("INSERT INTO kv(k,v) VALUES('case_covers',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (json.dumps(cur, ensure_ascii=False),))
+            _adm._load_case_covers()
+            what = f"обложка кейса {u['cid']} → {'оригинал' if u['prev'] is None else u['prev'].get('cover')}"
         elif k == "freeze":
             import sanctions
             sanctions.set_frozen(tid, bool(u["on"]), aid, "отмена")

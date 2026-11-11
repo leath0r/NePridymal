@@ -43,7 +43,7 @@ def _pl(uid):
 
 def _out(b, uid=None):
     c = E.CASES[b["cid"]]
-    o = {"id": b["id"], "host": b["host"], "cid": b["cid"], "case": {"id": c["id"], "title": c["title"], "cover": c["cover"]},
+    o = {"id": b["id"], "host": b["host"], "cid": b["cid"], "case": {"id": c["id"], "title": E.case_title(c["id"], uid), "cover": E.case_cover(c["id"], uid)},
          "rounds": b["rounds"], "slots": b["slots"], "price": b["price"], "cost": b["price"] * b["rounds"],
          "players": [_pl(p) if p is not None else None for p in b["players"]], "status": b["status"], "ts": b["ts"],
          "mine": uid in b["players"] if uid else False}
@@ -104,7 +104,7 @@ def battles(uid=Depends(auth)):
     opn = [_out(_b(r["id"]), uid) for r in q("SELECT id FROM battles WHERE status='waiting' ORDER BY id DESC LIMIT 30")]
     mine = [_out(_b(r["id"]), uid) for r in q("SELECT id FROM battles WHERE status='done' AND players LIKE ? ORDER BY id DESC LIMIT 8", f"%{uid}%")]
     mine = [m for m in mine if m["mine"]][:5]
-    cases = [{"id": c["id"], "title": c["title"], "cover": c["cover"], "price": case_price(c), "level": c["level"]}
+    cases = [{"id": c["id"], "title": E.case_title(c["id"], uid), "cover": E.case_cover(c["id"], uid), "price": case_price(c), "level": c["level"]}
              for c in E.CASES.values() if c["price"] and c["id"] not in E.LIMITED]
     cases.sort(key=lambda c: c["price"])
     return {"open": opn, "mine": mine, "cases": cases, "rounds": ROUNDS, "slots": SLOTS, "stars": bal(uid)}
@@ -160,7 +160,7 @@ def _notify_done(b, res):
     wname = _pl(winner)["name"]
     for p in set(b["players"]):
         if p and p != b.get("_actor"):
-            notify(p, f"⚔️ Битва кейсов «{esc(E.CASES[b['cid']]['title'])}» завершена — "
+            notify(p, f"⚔️ Битва кейсов «{esc(E.case_title(b['cid'], p))}» завершена — "
                       + ("ты победил и забрал всё! " if p == winner else f"победил <b>{esc(wname)}</b>. ")
                       + f"Банк битвы ⭐ {total}")
 

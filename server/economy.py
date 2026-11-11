@@ -1,6 +1,7 @@
 """Экономика: цены коллекций, ценность конкретного подарка, кейсы."""
 from settings import conf
 import json
+import re
 import math
 import os
 import random
@@ -13,6 +14,7 @@ CATALOG = json.load(open(os.path.join(os.path.dirname(__file__), "catalog.json")
 CUSTOM_DIR = os.path.join(os.path.dirname(__file__), "csgo_assets")
 CUSTOM_MAP = json.load(open(os.path.join(CUSTOM_DIR, "map.json"), encoding="utf-8"))   # коллекция → модель → имя файла
 CUSTOM_DONOR = "Light Sword"
+COVER_DIR = os.path.join(os.path.dirname(__file__), "covers")   # свои обложки кейсов из админки
 _WEAR = [["Factory New", 3], ["Minimal Wear", 8], ["Field-Tested", 20], ["Well-Worn", 10], ["Battle-Scarred", 9]]
 CUSTOM = {
     "P90 Asiimov": _WEAR,
@@ -27,6 +29,9 @@ for _c, _m in CUSTOM.items():
 
 def custom_file(col, model=None):
     """Путь к своей картинке без суффикса размера (model или обложка коллекции) или None — это подарок Telegram."""
+    if col.startswith("~"):   # загруженная в админке обложка кейса (admin.py → «Кейсы»): covers/<имя>_<размер>.png
+        name = col[1:]
+        return os.path.join(COVER_DIR, name) if re.fullmatch(r"[A-Za-z0-9_]{1,80}", name) else None
     m = CUSTOM_MAP.get("_cover" if col == "CS Case" else col)
     if not m:
         return None
@@ -282,6 +287,43 @@ def build_cases():
                 cum.append(acc)
             c.update(cols=names, cum=cum, odds=odds, evs=evs, joke=set(extra), price=_nice(sum(odds[x] * evs[x] for x in names) / RTP))
         CASES[cid] = c
+
+
+# Переименования кейсов из админки (admin.py → «Кейсы», kv case_names): cid → {"title", "who": all|only|except, "ids": set}.
+# who=all — новое имя видят все; only — только игроки из ids; except — все, кроме ids (они видят настоящее).
+CASE_NAMES = {}
+
+
+def case_title(cid, uid=None):
+    """Название кейса для конкретного игрока (uid=None — настоящее, без переименования)."""
+    c = CASES.get(cid)
+    if not c:
+        return cid
+    o = CASE_NAMES.get(cid)
+    if not o or uid is None:
+        return c["title"]
+    who, ids = o.get("who", "all"), o.get("ids", ())
+    if who == "all" or (who == "only" and uid in ids) or (who == "except" and uid not in ids):
+        return o["title"]
+    return c["title"]
+
+
+# Свои обложки кейсов (admin.py → «Кейсы», kv case_covers): cid → {"cover": коллекция или "~файл", "who", "ids"} — как у названий.
+CASE_COVERS = {}
+
+
+def case_cover(cid, uid=None):
+    """Обложка кейса для конкретного игрока: имя коллекции или "~имя" загруженной картинки."""
+    c = CASES.get(cid)
+    if not c:
+        return CUSTOM_DONOR
+    o = CASE_COVERS.get(cid)
+    if not o or uid is None:
+        return c["cover"]
+    who, ids = o.get("who", "all"), o.get("ids", ())
+    if who == "all" or (who == "only" and uid in ids) or (who == "except" and uid not in ids):
+        return o["cover"]
+    return c["cover"]
 
 
 def open_case(cid, rng=random):

@@ -77,7 +77,7 @@ async function admDbImport(f) {
 function openAdmin() {
   if (admShown()) fpsMeter();   // открыл админку — счётчик снова виден
   const el = openSheet(`<h2 class="gtitle">Админка</h2>
-    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["comp", "Компенсации"], ["games", "Игры"], ["odds", "Шансы"], ["claw", "Кран"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["wipe", "Вайп"], ["polls", "Опросы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
+    <div class="seg adm-tabs" id="adm-seg">${[["stats", "Обзор"], ["sales", "Продажи"], ["users", "Игроки"], ["comp", "Компенсации"], ["games", "Игры"], ["cnames", "Кейсы"], ["odds", "Шансы"], ["claw", "Кран"], ["tickets", `Тикеты${ME.tickets && ME.tickets.open ? ` · ${ME.tickets.open}` : ""}`], ["fees", "Комиссии"], ["wipe", "Вайп"], ["polls", "Опросы"], ["pay", "Переводы"], ["bc", "Рассылка"], ["ev", "Ивенты"], ["ref", "Рефералы"], ["fr", "Боты"], ["db", "База"], ["log", "Журнал"]]
       .map(([k, t]) => `<button data-act="adm-tab" data-v="${k}" class="${ADM.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
     <div id="adm-body">${emptyHTML("hourglass", "Загружаем…")}</div>`);
   el._adm = true;
@@ -169,6 +169,32 @@ async function admRender(el = topSheet()) {
     starify(body);
     const rg = body.querySelector("#adm-oall"), nb = body.querySelector("#adm-oall-n");
     if (rg) { rg.oninput = () => { nb.value = rg.value; }; nb.oninput = () => { const v = parseFloat(nb.value.replace(",", ".")); if (v > 0) rg.value = v; }; }
+  } else if (ADM.tab === "cnames") {   // названия и обложки кейсов (admin.py → /admin/cases)
+    const d = await api("admin/cases"), whoT = { all: "всем", only: "только этим id", except: "всем, кроме этих id" };
+    const whoSel = (cls, cur) => `<select class="adm-sel ${cls}" data-k="who">${Object.entries(whoT).map(([k, t]) => `<option value="${k}"${cur === k ? " selected" : ""}>${t}</option>`).join("")}</select>`;
+    body.innerHTML = `<p class="hint" style="margin:0 0 10px;font-size:12.5px">Новое название или обложку видят игроки, которых выберешь; остальные видят оригинал. Пустое название или «Оригинал» — вернуть как было. Действует сразу.</p>
+      <div class="box">${d.list.map(c => `<div class="adm-odd" data-cid="${esc(c.id)}">
+        <div class="adm-oh"><img src="${A.orig(c.ncover || c.cover, 64)}" alt="" style="width:36px;height:36px;margin-right:8px;flex:none" class="adm-cvp"><b>${esc(c.real)}</b>${c.title ? `<span class="adm-tag">→ ${esc(c.title)} · ${whoT[c.who]}${c.who !== "all" ? ` (${c.ids.length})` : ""}</span>` : ""}</div>
+        <div class="adm-os">${esc(c.id)} · ур. ${c.level}${c.price ? ` · ⭐ ${fmt(c.price)}` : " · бесплатный"}${c.ncover ? ` · обложка: ${c.ncover.startsWith("~") ? "своя картинка" : esc(c.ncover)} · ${whoT[c.cwho]}${c.cwho !== "all" ? ` (${c.cids.length})` : ""}` : ""}</div>
+        <div class="adm-os"><b>Название</b></div>
+        <div class="adm-oc"><input class="adm-oi adm-cn" style="width:46%" maxlength="40" placeholder="Новое название" data-k="title" value="${esc(c.title)}">${whoSel("adm-cn", c.who)}</div>
+        <div class="adm-oc"><input class="adm-oi adm-cn" style="width:100%" data-k="ids" placeholder="id игроков через запятую (для «только» и «кроме»)" value="${esc(c.ids.join(", "))}"></div>
+        <div class="adm-oc"><button class="btn sm gold" data-act="adm-cname" data-cid="${esc(c.id)}">${ic("check")}Сохранить название</button>
+          ${c.title ? `<button class="btn sm ghost" data-act="adm-cname-rs" data-cid="${esc(c.id)}">${ic("refresh")}Настоящее</button>` : ""}</div>
+        <div class="adm-os"><b>Обложка</b></div>
+        <div class="adm-oc"><select class="adm-sel adm-cc" data-k="cover" style="width:46%"><option value="">Оригинал (${esc(c.cover)})</option>${c.ncover && c.ncover.startsWith("~") ? `<option value="${esc(c.ncover)}" selected>Своя картинка</option>` : ""}${d.cols.map(x => `<option value="${esc(x)}"${c.ncover === x ? " selected" : ""}>${esc(x)}</option>`).join("")}</select>
+          <label class="btn sm ghost">${ic("upload")}Файл<input type="file" accept="image/*" class="adm-cc-file" hidden></label>${whoSel("adm-cc", c.cwho)}</div>
+        <div class="adm-oc"><input class="adm-oi adm-cc" style="width:100%" data-k="ids" placeholder="id игроков через запятую (для «только» и «кроме»)" value="${esc(c.cids.join(", "))}"></div>
+        <div class="adm-oc"><button class="btn sm gold" data-act="adm-ccover" data-cid="${esc(c.id)}">${ic("check")}Сохранить обложку</button>
+          ${c.ncover ? `<button class="btn sm ghost" data-act="adm-ccover-rs" data-cid="${esc(c.id)}">${ic("refresh")}Оригинал</button>` : ""}</div></div>`).join("")}</div>`;
+    starify(body);
+    ADM_CIMG = {};
+    body.querySelectorAll(".adm-cc-file").forEach(inp => inp.onchange = async e => {
+      const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+      const row = inp.closest(".adm-odd"), url = await admCoverData(f).catch(() => null);
+      if (!url) return toast("Не удалось прочитать картинку");
+      ADM_CIMG[row.dataset.cid] = url; row.querySelector(".adm-cvp").src = url; toast("Картинка выбрана — нажми «Сохранить обложку»", "ok");
+    });
   } else if (ADM.tab === "pay") {
     const d = await api("admin/pay"), c = d.cfg, ed = d.canEdit, w = d.week;
     const pair = x => `<div class="row tap" data-act="adm-user" data-id="${x.a.id}">${avaHTML(x.a, 28)}<span class="adm-arr">${ic("chev")}</span>${avaHTML(x.b, 28)}
@@ -475,6 +501,20 @@ async function openAdmUser(id) {
 }
 
 let ADM_CAT = null;
+let ADM_CIMG = {};   // выбранные, но ещё не сохранённые картинки обложек: cid → data URL
+function admCoverData(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), u = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(u);
+      const S = 512, k = Math.min(1, S / Math.max(img.width, img.height)), w = Math.round(img.width * k), h = Math.round(img.height * k);
+      const cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+      cv.getContext("2d").drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+      res(cv.toDataURL("image/png"));
+    };
+    img.onerror = rej; img.src = u;
+  });
+}
 const admSel = (id, opts, first) => `<select id="${id}" class="adm-sel">${first ? `<option value="">${first}</option>` : ""}${opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("")}</select>`;
 async function openAdmGift(uid) {
   if (!ADM_CAT || !ADM_CAT.bases) ADM_CAT = await api("admin/catalog");
@@ -563,6 +603,16 @@ Object.assign(ACT, {
     if (v > 100 && !await confirmM("Больше 100%?", `При ${v}% игроки на дистанции выигрывают больше, чем ставят: банк будет терять звёзды на каждой ставке, а самые хитрые смогут фармить звёзды без риска. Точно ставим?`, "Да, ставим")) return;
     await post("admin/odds", { key: el.dataset.k, value: v / 100 }); H.ok(); toast("Сохранено", "ok"); await loadMe(); admRender();
   },
+  "adm-cname": async el => {
+    const row = topSheet().querySelector(`.adm-odd[data-cid="${el.dataset.cid}"]`), v = k => row.querySelector(`.adm-cn[data-k="${k}"]`).value;
+    await post("admin/cases/name", { cid: el.dataset.cid, title: v("title"), who: v("who"), ids: v("ids") }); H.ok(); toast("Сохранено", "ok"); CASES = []; admRender();
+  },
+  "adm-ccover": async el => {
+    const cid = el.dataset.cid, row = topSheet().querySelector(`.adm-odd[data-cid="${cid}"]`), v = k => row.querySelector(`.adm-cc[data-k="${k}"]`).value;
+    await post("admin/cases/cover", { cid, cover: v("cover"), img: ADM_CIMG[cid] || "", who: v("who"), ids: v("ids") }); H.ok(); toast("Обложка сохранена", "ok"); CASES = []; admRender();
+  },
+  "adm-ccover-rs": async el => { await post("admin/cases/cover", { cid: el.dataset.cid, cover: "" }); H.ok(); toast("Оригинальная обложка", "ok"); CASES = []; admRender(); },
+  "adm-cname-rs": async el => { await post("admin/cases/name", { cid: el.dataset.cid, title: "" }); H.ok(); toast("Настоящее название", "ok"); CASES = []; admRender(); },
   "adm-pay": async el => {
     const k = el.dataset.k, inp = topSheet().querySelector(`.adm-oi[data-k="${k}"]`), v = parseFloat(inp.value.replace(",", ".").replace(/\s/g, ""));
     if (!(v >= 0)) return toast("Введи число");

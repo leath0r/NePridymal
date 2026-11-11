@@ -950,9 +950,9 @@ def cases(uid=Depends(auth)):
         for k, v in c["odds"].items():
             items.append({"col": k, "p": round(v * 100, 3), "base": E.base(k), "ev": round(c["evs"][k]), **look_of(k, "shop")})
         items.sort(key=lambda x: -x["ev"])
-        out.append({"id": c["id"], "title": c["title"], "price": case_price(c), "full": c["price"], "keys": keys.get(c["id"], 0),
-                    "level": c["level"], "cover": c["cover"], **_case_limit(c["id"]),
-                    "top": top, "pat": look_of(c["cover"], c["id"])["symbol"],
+        out.append({"id": c["id"], "title": E.case_title(c["id"], uid), "price": case_price(c), "full": c["price"], "keys": keys.get(c["id"], 0),
+                    "level": c["level"], "cover": E.case_cover(c["id"], uid), **_case_limit(c["id"]),
+                    "top": top, "pat": look_of(E.case_cover(c["id"], uid), c["id"])["symbol"],
                     "previews": [x["col"] for x in items[:3]], "items": items})
     return out
 
@@ -1040,10 +1040,10 @@ def daily(uid=Depends(auth)):
             db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (uid, mcid))
             db.execute("INSERT INTO streak_ms(user,day,ts) VALUES(?,?,?)", (uid, streak, t))
             event(uid, "daily", amt)
-            ms = {"day": streak, "stars": amt, "key": E.CASES[mcid]["title"]}
-    return {"bonus": bonus, "streak": streak, "key": E.CASES[key]["title"] if key else None, "milestone": ms, "nextMs": _next_ms(uid),
-            "nextKey": next(({"day": d, "title": E.CASES[c]["title"]} for d, c in sorted(STREAK_KEYS.items()) if d > streak),
-                            {"day": (streak // 7 + 1) * 7, "title": E.CASES[STREAK_KEYS[7]]["title"]})}
+            ms = {"day": streak, "stars": amt, "key": E.case_title(mcid, uid)}
+    return {"bonus": bonus, "streak": streak, "key": E.case_title(key, uid) if key else None, "milestone": ms, "nextMs": _next_ms(uid),
+            "nextKey": next(({"day": d, "title": E.case_title(c, uid)} for d, c in sorted(STREAK_KEYS.items()) if d > streak),
+                            {"day": (streak // 7 + 1) * 7, "title": E.case_title(STREAK_KEYS[7], uid)})}
 
 
 STREAK_KEYS = {2: "pepehunt", 3: "luck", 5: "hearthunt", 7: "lux"}   # день серии → ключ от кейса (далее каждые 7 дней — «Роскошь»)
@@ -1062,7 +1062,7 @@ def _next_ms(uid):
     for d in sorted(STREAK_MS):
         if d not in done:
             amt, cid = STREAK_MS[d]
-            return {"day": d, "stars": amt, "key": E.CASES[cid]["title"]}
+            return {"day": d, "stars": amt, "key": E.case_title(cid, uid)}
     return None
 
 
@@ -2828,7 +2828,7 @@ def _custom_asset(raw, request):
     """Картинка своего подарка → Response; узор своего подарка → путь у донора; обычный подарок → None."""
     parts = [urllib.parse.unquote(x) for x in raw.split("/")]
     kind, col = parts[0], parts[1].removesuffix(".png").removesuffix(".json") if len(parts) > 1 else ""
-    if col not in E.CUSTOM and col != "CS Case":
+    if col not in E.CUSTOM and col != "CS Case" and not col.startswith("~"):
         return None
     if kind == "pattern":
         return "pattern/" + urllib.parse.quote(E.CUSTOM_DONOR) + "/" + "/".join(raw.split("/")[2:])

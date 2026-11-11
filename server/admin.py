@@ -2,16 +2,18 @@
 import asyncio
 import base64
 import os
+import secrets
 import shutil
 import time
 
 from fastapi import Depends, Request
 
 import random
+import re
 
 import economy as E
 from app import (ADMINS, BANNED, DB_PATH, GAME_KINDS, R, STEALTH, _PROMO, app, auth, bal, cancel_trades_with, db, err, esc, event, gift_out,
-                 notify, now, promo, q, q1, tg_call, tx, unpin, user_brief, APP_URL)
+                 kv_get, notify, now, promo, q, q1, tg_call, tx, unpin, user_brief, APP_URL)
 
 db.executescript("""
 CREATE TABLE IF NOT EXISTS admin_log(id INTEGER PRIMARY KEY, ts INTEGER, admin INTEGER, action TEXT, target INTEGER, detail TEXT);
@@ -438,6 +440,146 @@ def admin_log_clear(aid=Depends(admin)):
     with tx():
         db.execute("DELETE FROM admin_log")
         log(aid, "adminlog_clear", detail="админский журнал очищен")   # сам факт очистки остаётся в журнале
+    return {"ok": True}
+
+
+# ---------------- переименование кейсов ----------------
+# kv case_names: {cid: {"title": "...", "who": "all"|"only"|"except", "ids": [...]}}. Применяется на лету (E.CASE_NAMES),
+# настоящие названия (из economy.CASES_DEF) не меняются: E.case_title(cid, uid) решает, что видит конкретный игрок.
+import json as _json
+
+CASE_WHO = ("all", "only", "except")
+
+
+def _load_case_names():
+    try:
+        raw = _json.loads(kv_get("case_names", "{}") or "{}")
+    except ValueError:
+        raw = {}
+    E.CASE_NAMES.clear()
+    for cid, o in raw.items():
+        if cid in E.CASES and isinstance(o, dict) and o.get("title"):
+            E.CASE_NAMES[cid] = {"title": str(o["title"]), "who": o.get("who") if o.get("who") in CASE_WHO else "all",
+                                 "ids": {int(x) for x in o.get("ids", []) if str(x).lstrip("-").isdigit()}}
+
+
+_load_case_names()
+
+
+def _load_case_covers():
+    try:
+        raw = _json.loads(kv_get("case_covers", "{}") or "{}")
+    except ValueError:
+        raw = {}
+    E.CASE_COVERS.clear()
+    for cid, o in raw.items():
+        if cid in E.CASES and isinstance(o, dict) and o.get("cover"):
+            E.CASE_COVERS[cid] = {"cover": str(o["cover"]), "who": o.get("who") if o.get("who") in CASE_WHO else "all",
+                                  "ids": {int(x) for x in o.get("ids", []) if str(x).lstrip("-").isdigit()}}
+
+
+_load_case_covers()
+os.makedirs(E.COVER_DIR, exist_ok=True)
+COVER_MAX = 2 * 1024 * 1024
+
+
+def _save_cover(cid, img):
+    """data URL картинки (png/jpeg/webp) → covers/c_<cid>_<hex>_{64,128,256,512}.{png,webp}; вернуть "~имя"."""
+    from io import BytesIO
+    from PIL import Image
+    try:
+        raw = base64.b64decode(img.split(",", 1)[1], validate=True)
+    except Exception:
+        err("картинка повреждена")
+    if len(raw) > COVER_MAX:
+        err("картинка больше 2 МБ")
+    try:
+        im = Image.open(BytesIO(raw))
+        im.load()
+        im = im.convert("RGBA")
+    except Exception:
+        err("не удалось прочитать картинку (нужен PNG, JPEG или WebP)")
+    im.thumbnail((512, 512), Image.LANCZOS)
+    sq = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
+    sq.paste(im, ((512 - im.width) // 2, (512 - im.height) // 2))
+    name = f"c_{cid}_{secrets.token_hex(4)}"
+    for sz in (64, 128, 256, 512):
+        v = sq if sz == 512 else sq.resize((sz, sz), Image.LANCZOS)
+        v.save(os.path.join(E.COVER_DIR, f"{name}_{sz}.png"), optimize=True)
+        v.save(os.path.join(E.COVER_DIR, f"{name}_{sz}.webp"), quality=85, method=4)
+    return "~" + name
+
+
+@app.get(R + "/admin/cases")
+def adm_cases(aid=Depends(admin)):
+    out = []
+    for c in E.CASES.values():
+        o, v = E.CASE_NAMES.get(c["id"]), E.CASE_COVERS.get(c["id"])
+        out.append({"id": c["id"], "real": c["title"], "price": c["price"], "level": c["level"], "cover": c["cover"],
+                    "title": o["title"] if o else "", "who": o["who"] if o else "all", "ids": sorted(o["ids"]) if o else [],
+                    "ncover": v["cover"] if v else "", "cwho": v["who"] if v else "all", "cids": sorted(v["ids"]) if v else []})
+    return {"list": out, "cols": sorted(c for c in E.CATALOG if c not in E.CUSTOM) + sorted(E.CUSTOM)}
+
+
+@app.post(R + "/admin/cases/cover")
+async def adm_case_cover(req: Request, aid=Depends(admin)):
+    """Обложка кейса: cover — имя коллекции (картинка подарка), img — своя картинка (data URL), пусто — вернуть оригинал."""
+    b = await req.json()
+    cid = str(b.get("cid", ""))
+    c = E.CASES.get(cid) or err("нет такого кейса")
+    who = b.get("who") if b.get("who") in CASE_WHO else "all"
+    ids = sorted({int(x) for x in re.findall(r"-?\d+", str(b.get("ids", "")))})[:500]
+    try:
+        cur = _json.loads(kv_get("case_covers", "{}") or "{}")
+    except ValueError:
+        cur = {}
+    prev = cur.get(cid)
+    img, cover = str(b.get("img", "")), str(b.get("cover", ""))
+    if img:
+        cover = _save_cover(cid, img)
+    elif cover and cover not in E.CATALOG and not (cover.startswith("~") and E.custom_file(cover)):
+        err("нет такой коллекции")
+    if cover and who != "all" and not ids:
+        err("Укажи id игроков или выбери «всем»")
+    if cover:
+        cur[cid] = {"cover": cover, "who": who, "ids": ids}
+        detail = f"{c['title']}: обложка → {'своя картинка' if cover.startswith('~') else cover} (" + {"all": "всем", "only": f"только {len(ids)} игрокам", "except": f"всем, кроме {len(ids)}"}[who] + ")"
+    else:
+        cur.pop(cid, None)
+        detail = f"{c['title']}: оригинальная обложка"
+    with tx():
+        db.execute("INSERT INTO kv(k,v) VALUES('case_covers',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (_json.dumps(cur, ensure_ascii=False),))
+        log(aid, "case_cover", None, detail, undo={"t": "case_cover", "cid": cid, "prev": prev})
+    _load_case_covers()
+    # файлы прежней загруженной обложки не удаляем: «Отменить» в журнале может вернуть её (4 размера × 2 формата ≈ 100 КБ на обложку).
+    return {"ok": True, "cover": cover}
+
+
+@app.post(R + "/admin/cases/name")
+async def adm_case_name(req: Request, aid=Depends(admin)):
+    b = await req.json()
+    cid = str(b.get("cid", ""))
+    c = E.CASES.get(cid) or err("нет такого кейса")
+    title = " ".join(str(b.get("title", "")).split())[:40]
+    who = b.get("who") if b.get("who") in CASE_WHO else "all"
+    ids = sorted({int(x) for x in re.findall(r"-?\d+", str(b.get("ids", "")))})[:500]
+    if who != "all" and not ids:
+        err("Укажи id игроков или выбери «всем»")
+    try:
+        cur = _json.loads(kv_get("case_names", "{}") or "{}")
+    except ValueError:
+        cur = {}
+    prev = cur.get(cid)
+    if title:
+        cur[cid] = {"title": title, "who": who, "ids": ids}
+        detail = f"{c['title']} → «{title}» (" + {"all": "всем", "only": f"только {len(ids)} игрокам", "except": f"всем, кроме {len(ids)}"}[who] + ")"
+    else:
+        cur.pop(cid, None)
+        detail = f"{c['title']}: настоящее название"
+    with tx():
+        db.execute("INSERT INTO kv(k,v) VALUES('case_names',?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (_json.dumps(cur, ensure_ascii=False),))
+        log(aid, "case_name", None, detail, undo={"t": "case_name", "cid": cid, "prev": prev})
+    _load_case_names()
     return {"ok": True}
 
 

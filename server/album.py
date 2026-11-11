@@ -24,7 +24,7 @@ def album(uid=Depends(auth)):
     cols = sorted(E.CATALOG, key=lambda c: -E.base(c))
     return {"cols": [{"col": c, "base": E.base(c), "models": len(E.CATALOG[c]["models"]), "have": have.get(c, 0), "aged": c in aged} for c in cols],
             "total": len(cols), "count": len(have), "eligible": len(aged),
-            "tiers": [{"need": n, "stars": s, "key": E.CASES[k]["title"] if k else None, "claimed": n in claimed} for n, s, k in TIERS]}
+            "tiers": [{"need": n, "stars": s, "key": E.case_title(k, uid) if k else None, "claimed": n in claimed} for n, s, k in TIERS]}
 
 
 @app.post(R + "/album/claim")
@@ -44,4 +44,4 @@ async def album_claim(req: Request, uid=Depends(auth)):
             event(uid, "album", stars)
         if key:
             db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (uid, key))
-    return {"ok": True, "stars": bal(uid), "reward": stars, "key": E.CASES[key]["title"] if key else None}
+    return {"ok": True, "stars": bal(uid), "reward": stars, "key": E.case_title(key, uid) if key else None}

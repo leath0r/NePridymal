@@ -206,7 +206,7 @@ def clan(cid: int, uid=Depends(auth)):
     members.sort(key=lambda x: (x["role"] != "owner", -x["score"]))
     role = my_role(uid, cid)
     br = clan_brief(c, ws)
-    goals = [{"need": need, "key": E.CASES[cid_]["title"], "done": bool(q1("SELECT 1 FROM clan_goals WHERE clan=? AND week=? AND tier=?", cid, ws, i))}
+    goals = [{"need": need, "key": E.case_title(cid_, uid), "done": bool(q1("SELECT 1 FROM clan_goals WHERE clan=? AND week=? AND tier=?", cid, ws, i))}
              for i, (need, cid_) in enumerate(GOALS)]
     fd = []
     for f in q("SELECT * FROM clan_feed WHERE clan=? ORDER BY id DESC LIMIT 25", cid):
@@ -225,7 +225,7 @@ def clan(cid: int, uid=Depends(auth)):
             "spend": {"boost": boost_price(len(members)), "boostPct": int(BOOST[0] * 100), "slots": slots_price(c["slots"] or MAX_MEMBERS)
                       if (c["slots"] or MAX_MEMBERS) < SLOTS_MAX else None, "slotsStep": SLOTS_STEP,
                       "keys": {k: E.CASES[k]["price"] * len(members) for k in ("luck", "lux", "cups")},
-                      "keyTitles": {k: E.CASES[k]["title"] for k in ("luck", "lux", "cups")}, "taxMax": TAX_MAX, "payTax": PAY_TAX, "donateTax": DONATE_TAX}}
+                      "keyTitles": {k: E.case_title(k, uid) for k in ("luck", "lux", "cups")}, "taxMax": TAX_MAX, "payTax": PAY_TAX, "donateTax": DONATE_TAX}}
 
 
 @app.post(R + "/clans")
@@ -512,7 +512,7 @@ def _goals():
                         continue
                     db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (m["user"], cid_))
                     msgs.append((m["user"], f"🎯 Клан [{esc(c['tag'])}] выполнил цель недели — оборот ⭐ {need:,}! ".replace(",", " ")
-                                            + f"Тебе ключ от кейса «{esc(E.CASES[cid_]['title'])}»."))
+                                            + f"Тебе ключ от кейса «{esc(E.case_title(cid_, m['user']))}»."))
     for u, t in msgs:
         notify(u, t)
 
@@ -586,7 +586,7 @@ async def clan_spend(req: Request, uid=Depends(auth)):
                 err(f"в казне не хватает: нужно ⭐ {need:,}".replace(",", " "))
             for m in mem:
                 db.execute("INSERT INTO case_keys(user,cid,n) VALUES(?,?,1) ON CONFLICT(user,cid) DO UPDATE SET n=n+1", (m["user"], k))
-                msgs.append((m["user"], f"🛡 Клан [{esc(c['tag'])}] купил всем ключ от кейса «{esc(E.CASES[k]['title'])}» — открывай!"))
+                msgs.append((m["user"], f"🛡 Клан [{esc(c['tag'])}] купил всем ключ от кейса «{esc(E.case_title(k, m['user']))}» — открывай!"))
             event(uid, "clanspend", -need)
             detail = E.CASES[k]["title"]
         elif kind == "boost":
