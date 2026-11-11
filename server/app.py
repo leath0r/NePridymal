@@ -292,6 +292,8 @@ def sell_rate():
 def case_price(c):
     if not c["price"]:
         return 0
+    if c["id"] in E.FIXED_PRICE:   # кейс CS:GO — всегда ровно своя цена, без курса банка и акций
+        return c["price"]
     # скидка/наценка от банка; вместе с акцией выходных — не дешевле −10%, чтобы кейсы не ушли в плюс игроку
     f = max(0.9, (0.9 if promo() else 1.0) * bank_k()["case"])
     price = int(round(c["price"] * f / 5) * 5)
@@ -921,7 +923,7 @@ def me(uid=Depends(auth)):
 def look_of(col, seed):
     """Стабильный «образ» коллекции для витрины: фон + узор (как у улучшенного подарка)."""
     rng = random.Random(f"{col}:{seed}")
-    d = E.CATALOG[col]
+    d = E.CATALOG.get(col) or E.CATALOG[E.CUSTOM_DONOR]   # обложка кейса CS:GO — не коллекция, образ берём у донора
     b = rng.choice(d["backdrops"])
     s = rng.choice(d["symbols"])
     return {"c": b[2:6], "symbol": s[0]}
@@ -2822,6 +2824,26 @@ def _cache_write(path, data):
         print("asset cache:", path, e, flush=True)
 
 
+def _custom_asset(raw, request):
+    """Картинка своего подарка → Response; узор своего подарка → путь у донора; обычный подарок → None."""
+    parts = [urllib.parse.unquote(x) for x in raw.split("/")]
+    kind, col = parts[0], parts[1].removesuffix(".png").removesuffix(".json") if len(parts) > 1 else ""
+    if col not in E.CUSTOM and col != "CS Case":
+        return None
+    if kind == "pattern":
+        return "pattern/" + urllib.parse.quote(E.CUSTOM_DONOR) + "/" + "/".join(raw.split("/")[2:])
+    if raw.endswith(".json"):   # lottie-анимаций у своих подарков нет — фронт покажет картинку
+        return Response(status_code=404)
+    f = E.custom_file(col, parts[2].removesuffix(".png") if kind == "model" and len(parts) > 2 else None)
+    size = request.query_params.get("size", "256")
+    size = size if size in ("64", "128", "256", "512") else "256"
+    webp = "image/webp" in request.headers.get("accept", "").lower() or request.headers.get("x-webp") == "1"
+    path = f and f"{f}_{size}.{'webp' if webp else 'png'}"
+    if not path or not os.path.exists(path):
+        return Response(status_code=404)
+    return FileResponse(path, media_type="image/webp" if webp else "image/png", headers={"Cache-Control": "public, max-age=2592000"})
+
+
 @app.get("/np/a/{path:path}")
 async def asset(path: str, request: Request):
     raw = request.scope["raw_path"].decode()[
@@ -2829,6 +2851,10 @@ async def asset(path: str, request: Request):
     ]  # без раскодирования: в именах бывает %2F (AC/DC)
     if not raw.startswith(("model/", "pattern/", "symbol/", "original/")):
         return Response(status_code=404)
+    custom = _custom_asset(raw, request)   # свои подарки (кейс CS:GO) — с диска; их узоры — у коллекции-донора
+    if isinstance(custom, Response):
+        return custom
+    raw = custom or raw
     url = (
         "https://api.changes.tg/"
         + raw

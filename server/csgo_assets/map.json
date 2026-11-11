@@ -1,0 +1,37 @@
+{
+ "AK-47 Asiimov": {
+  "Factory New": "ak_47_asiimov__factory_new",
+  "Minimal Wear": "ak_47_asiimov__minimal_wear",
+  "Field-Tested": "ak_47_asiimov__field_tested",
+  "Well-Worn": "ak_47_asiimov__well_worn",
+  "Battle-Scarred": "ak_47_asiimov__battle_scarred"
+ },
+ "P90 Asiimov": {
+  "Factory New": "p90_asiimov__factory_new",
+  "Minimal Wear": "p90_asiimov__minimal_wear",
+  "Field-Tested": "p90_asiimov__field_tested",
+  "Well-Worn": "p90_asiimov__well_worn",
+  "Battle-Scarred": "p90_asiimov__battle_scarred"
+ },
+ "Karambit": {
+  "Fade": "karambit__fade",
+  "Doppler": "karambit__doppler",
+  "Gamma Doppler": "karambit__gamma_doppler",
+  "Marble Fade": "karambit__marble_fade",
+  "Tiger Tooth": "karambit__tiger_tooth",
+  "Lore": "karambit__lore",
+  "Slaughter": "karambit__slaughter",
+  "Crimson Web": "karambit__crimson_web"
+ },
+ "CS Gloves": {
+  "Pandora's Box": "cs_gloves__pandora_s_box",
+  "Vice": "cs_gloves__vice",
+  "King Snake": "cs_gloves__king_snake",
+  "Crimson Kimono": "cs_gloves__crimson_kimono",
+  "Spearmint": "cs_gloves__spearmint",
+  "Cobalt Skulls": "cs_gloves__cobalt_skulls"
+ },
+ "_cover": {
+  "CS Case": "cover__cs_case"
+ }
+}

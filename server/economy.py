@@ -8,6 +8,31 @@ from statistics import median
 
 CATALOG = json.load(open(os.path.join(os.path.dirname(__file__), "catalog.json"), encoding="utf-8"))
 
+# ---------------- свои подарки (не из Telegram): кейс CS:GO. Картинки — server/csgo_assets (скачаны со Steam CDN),
+# фоны и узоры берём у коллекции-донора; отдаёт их app.asset, а не api.changes.tg
+CUSTOM_DIR = os.path.join(os.path.dirname(__file__), "csgo_assets")
+CUSTOM_MAP = json.load(open(os.path.join(CUSTOM_DIR, "map.json"), encoding="utf-8"))   # коллекция → модель → имя файла
+CUSTOM_DONOR = "Light Sword"
+_WEAR = [["Factory New", 3], ["Minimal Wear", 8], ["Field-Tested", 20], ["Well-Worn", 10], ["Battle-Scarred", 9]]
+CUSTOM = {
+    "P90 Asiimov": _WEAR,
+    "AK-47 Asiimov": _WEAR,
+    "CS Gloves": [["Pandora's Box", 2], ["Vice", 3], ["Crimson Kimono", 4], ["Spearmint", 5], ["King Snake", 6], ["Cobalt Skulls", 10]],
+    "Karambit": [["Fade", 3], ["Doppler", 5], ["Gamma Doppler", 4], ["Marble Fade", 4], ["Tiger Tooth", 6], ["Lore", 5], ["Slaughter", 7], ["Crimson Web", 10]],
+}
+for _c, _m in CUSTOM.items():
+    CATALOG[_c] = {"released": 1794355200, "models": [list(x) for x in _m],
+                   "backdrops": CATALOG[CUSTOM_DONOR]["backdrops"], "symbols": CATALOG[CUSTOM_DONOR]["symbols"]}
+
+
+def custom_file(col, model=None):
+    """Путь к своей картинке без суффикса размера (model или обложка коллекции) или None — это подарок Telegram."""
+    m = CUSTOM_MAP.get("_cover" if col == "CS Case" else col)
+    if not m:
+        return None
+    name = m.get(model) if model else next(iter(m.values()))
+    return os.path.join(CUSTOM_DIR, name) if name else None
+
 # базовая цена коллекции в игровых ⭐ — по мотивам реального рынка, но это игра
 BASE = {
     "Lucky Locket": 3500,
@@ -36,6 +61,7 @@ BASE = {
     "Lol Pop": 300, "B-Day Candle": 300, "Desk Calendar": 300, "Lunar Snake": 300,
 }
 DEFAULT_BASE = 600
+BASE.update({"P90 Asiimov": 3660, "AK-47 Asiimov": 9150, "CS Gloves": 29280, "Karambit": 73200})   # кейс CS:GO: при цене 11 111 возврат ≈ 90% (проверено симуляцией)
 
 
 def base(col):
@@ -177,9 +203,11 @@ CASES_DEF = [
     ("caphunt", "Охота на Кепку", "Durov's Cap", 3, ["Lol Pop", "Desk Calendar", "B-Day Candle", "Homemade Cake", "Durov's Cap"]),
     ("sport", "Спорт", "UFC Strike", 4, ["UFC Strike", "Khabib's Papakha", "Victory Medal", "Surge Board", "Heroic Helmet", "Bling Binky"]),
     ("royal", "Королевский", "Heart Locket", 18, ["Plush Pepe", "Heart Locket"]),
+    ("csgo", "CS:GO", "CS Case", 3, ["P90 Asiimov", "AK-47 Asiimov", "CS Gloves", "Karambit"]),
     ("mega", "МЕГА", "Plush Pepe", 15, ["Plush Pepe", "Heart Locket", "Durov's Cap", "Precious Peach", "Mighty Arm", "Ion Gem", "Loot Bag"]),
 ]
 RTP = conf("economy.case_rtp", 0.9)  # возврат игроку
+FIXED_PRICE = {"csgo": 11111}   # цена ровно такая (базовые цены коллекций подобраны под RTP)
 CASES = {}
 
 
@@ -219,7 +247,7 @@ def build_cases():
         while True:   # выкидываем коллекции, которые сильно дешевле кейса
             price = len(cols) / sum(1 / ev(x) for x in cols) / RTP
             low = [x for x in cols if ev(x) < 0.5 * price]
-            if cid == "free" or not low or len(cols) <= 3:
+            if cid in ("free", *FIXED_PRICE) or not low or len(cols) <= 3:
                 break
             cols.remove(min(low, key=ev))
         w = [1 / ev(x) for x in cols]            # вклад каждой коллекции в ожидание одинаковый → дорогие редкие
@@ -240,6 +268,8 @@ def build_cases():
                 price = _nice(sum(odds[x] * evs[x] for x in cols) / RTP)
                 floor = FLOOR * price
         c.update(evs=evs, floor=floor, price=0 if cid == "free" else price)
+        if cid in FIXED_PRICE:   # цена ровно заданная; базовые цены коллекций кейса подобраны так, что возврат ≈ RTP
+            c.update(price=FIXED_PRICE[cid], floor=FLOOR * FIXED_PRICE[cid])
         extra = {k: p for k, p in JOKE_DROPS.get(cid, {}).items() if k in CATALOG}
         if extra:   # точный шанс; цена пересчитывается, чтобы заявленный возврат кейса не изменился
             keep = 1 - sum(extra.values())

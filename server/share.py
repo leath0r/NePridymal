@@ -97,6 +97,12 @@ def _pill(im, x, y, text, font, fill=(255, 255, 255, 34), color=(255, 233, 168))
 
 def _gift_art(col, model, size=512):
     """Картинка модели подарка из того же источника, что и в игре. Нет сети — вернём None, будет фон с персонажем."""
+    own = A.E.custom_file(col, model) if hasattr(A, "E") else None   # свои подарки (CS:GO) — с диска
+    if own:
+        try:
+            return Image.open(f"{own}_512.png").convert("RGBA")
+        except Exception:
+            return None
     url = f"https://api.changes.tg/model/{urllib.parse.quote(col)}/{urllib.parse.quote(model)}.png?size={size}"
     os.makedirs(_ART_DIR, exist_ok=True)
     f = os.path.join(_ART_DIR, hashlib.md5(url.encode()).hexdigest() + ".png")
